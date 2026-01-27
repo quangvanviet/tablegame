@@ -1712,8 +1712,6 @@ class FirebaseTransport extends NetTransport {
    Firebase Room create/join
 ========================= */
 
-client.roomMeta = { roomNo: null, roomId: null };
-
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
@@ -1911,6 +1909,12 @@ const client = {
   selfId: uid(),
   selfName: "",
   roomCode: "",
+
+  roomMeta: {     
+    roomNo: null,
+    roomId: null
+  },
+  
   isHost: false,
   transport: null,
   host: null,               // HostController when we are host in local mode
