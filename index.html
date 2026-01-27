@@ -235,6 +235,7 @@
     }
     /* Right inspector */
     #inspector{
+      display:none;
       position:absolute;
       right:12px;
       bottom:12px;
@@ -452,37 +453,82 @@ const INS = {
 function updateInspector(){
   const st = getState();
   const sel = client.selected;
+
   if (!st || !sel){
     INS.badge.textContent = "—";
-    INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>`;
+    INS.preview.innerHTML =
+      `<div style="color:rgba(233,236,255,.55); font-size:12px">
+        Chọn 1 lá bài...
+      </div>`;
     return;
   }
 
+  // ===== DECK (SPECIAL CASE) =====
+  if (sel.type === "stack" && sel.id === "stack_deck"){
+    INS.badge.textContent = "DECK";
+    INS.preview.innerHTML = `
+      <div style="text-align:center;font-size:13px">
+        <div>${st.stacks.stack_deck.cardIds.length} cards</div>
+        <div style="opacity:.6;margin-top:6px">Press D to draw</div>
+        <div style="opacity:.4;margin-top:4px">Press S to shuffle</div>
+      </div>
+    `;
+    return;
+  }
+
+  // ===== CARD =====
   if (sel.type === "card"){
     const c = st.cards[sel.id];
     INS.badge.textContent = sel.id + (c?.lockedBy ? " (LOCK)" : "");
-    const frontUrl = st.assets?.frontBase ? (st.assets.frontBase + sel.id + ".png") : "";
+
+    const frontUrl = st.assets?.frontBase
+      ? (st.assets.frontBase + sel.id + ".png")
+      : "";
     const backUrl  = st.assets?.backUrl || "";
-    const url = (c?.faceUp && frontUrl) ? frontUrl : (backUrl || "");
+    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
+
     INS.preview.innerHTML = url
       ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set. Host hãy set Front/Base + Back URL.</div>`;
-  } else {
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">
+          No image set. Host hãy set Front/Base + Back URL.
+        </div>`;
+    return;
+  }
+
+  // ===== STACK (NORMAL) =====
+  if (sel.type === "stack"){
     const s = st.stacks[sel.id];
     const topId = s?.cardIds?.[0];
-    INS.badge.textContent = sel.id + ` (${s?.cardIds?.length||0})`;
-    if (topId){
-      const c = st.cards[topId];
-      const frontUrl = st.assets?.frontBase ? (st.assets.frontBase + topId + ".png") : "";
-      const backUrl  = st.assets?.backUrl || "";
-      const url = (c?.faceUp && frontUrl) ? frontUrl : (backUrl || "");
-      INS.preview.innerHTML = url
-        ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-        : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set.</div>`;
-    } else {
-      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Empty stack</div>`;
+    INS.badge.textContent = `${sel.id} (${s?.cardIds?.length || 0})`;
+
+    if (!topId){
+      INS.preview.innerHTML =
+        `<div style="color:rgba(233,236,255,.55); font-size:12px">
+          Empty stack
+        </div>`;
+      return;
     }
+
+    const c = st.cards[topId];
+    const frontUrl = st.assets?.frontBase
+      ? (st.assets.frontBase + topId + ".png")
+      : "";
+    const backUrl  = st.assets?.backUrl || "";
+    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
+
+    INS.preview.innerHTML = url
+      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">
+          No image set.
+        </div>`;
   }
+}
+  
+function showInspector(){
+  document.getElementById("inspector").style.display = "block";
+}
+function hideInspector(){
+  document.getElementById("inspector").style.display = "none";
 }
 
   
@@ -916,6 +962,12 @@ class HostController {
           const c = ensureCard(id);
           if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
           if (!canUse(c)) return {ok:false, reason:"Locked"};
+        
+          // ❗ chặn kéo card trực tiếp từ DECK
+          if (c.stackId === "stack_deck"){
+            return {ok:false, reason:"Use draw (D) to take from deck"};
+          }
+        
           detachFromStack(id);
           const z = normalizeCardZoneFromPos(x,y, fromId);
           c.x=x; c.y=y; c.zone=z.zone; c.owner=z.owner;
@@ -923,6 +975,7 @@ class HostController {
         } else if (targetType === "stack"){
           const s = ensureStack(id);
           if (!s) return {ok:false, reason:"Missing stack"};
+          if (s.id === "stack_deck") return {ok:false, reason:"Deck fixed"};
           if (!canUse(s)) return {ok:false, reason:"Locked"};
           // moving a hand stack is private to owner
           if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
@@ -1668,6 +1721,7 @@ canvas.addEventListener("mousedown", (ev)=>{
 
   if (hit){
     client.selected = hit;
+    showInspector();        
     updateInspector();
     sendIntent({type:"lock", targetType: hit.type, id: hit.id});
     // start drag
@@ -1679,6 +1733,7 @@ canvas.addEventListener("mousedown", (ev)=>{
     };
   } else {
     client.selected = null;
+    hideInspector();
     updateInspector();
   }
 });
@@ -1773,6 +1828,7 @@ addEventListener("keydown", (ev)=>{
   const key = ev.key.toLowerCase();
   if (key === "escape"){
     client.selected = null;
+    hideInspector();
     return;
   }
   if (key === "d"){
@@ -2008,7 +2064,11 @@ function draw(){
   drawZone(rects.handTop,    "HAND (Top)",    seatName(1));
   drawZone(rects.handLeft,   "HAND (Left)",   seatName(2));
   drawZone(rects.handRight,  "HAND (Right)",  seatName(3));
-  drawZone(rects.deck, "DECK");
+  drawZone(
+    rects.deck,
+    "DECK",
+    `${s?.stacks?.stack_deck?.cardIds?.length || 0} cards`
+  );
   drawZone(rects.discard, "DISCARD");
 
   const objs = listDrawableObjects(s);
