@@ -941,7 +941,7 @@ class HostController {
   addOrUpdatePlayer({id,name}){
     let p = this.state.players.find(x=>x.id===id);
     if (!p){
-      if (this.state.players.length >= 4) return {ok:false, reason:"Room full"};
+      if (this.state.players.length >= 6) return {ok:false, reason:"Room full"};
       // Assign first available color
       const used = new Set(this.state.players.map(x=>x.color));
       const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % 4];
@@ -1064,7 +1064,8 @@ class HostController {
         
           detachFromStack(id);
           const z = normalizeCardZoneFromPos(x,y, fromId);
-          c.x=x; c.y=y; c.zone=z.zone; c.owner=z.owner;
+          c.x=x; c.y=y; c.zone=z.zone;
+          c.owner = (z.zone === ZONES.hand) ? z.owner : null;
           c.stackId = null;
         } else if (targetType === "stack"){
           const s = ensureStack(id);
@@ -1122,29 +1123,31 @@ class HostController {
 
       case "draw": {
         const deck = st.stacks["stack_deck"];
-        if (!deck) return {ok:false, reason:"Missing deck"};
-        if (deck.cardIds.length === 0) return {ok:false, reason:"Deck empty"};
+        if (!deck || deck.cardIds.length === 0)
+          return { ok:false, reason:"Deck empty" };
+      
+        const player = st.players.find(p=>p.id===fromId);
+        if (!player) return { ok:false, reason:"No player" };
+      
+        const handKey = seatToHandKey(player.seat);
+        const handRect = rects[handKey];
+        if (!handRect) return { ok:false, reason:"No hand zone" };
       
         const cid = deck.cardIds.shift();
         const c = ensureCard(cid);
       
-        const player = st.players.find(p=>p.id===fromId);
-        if (!player) return {ok:false};
-      
-        const handKey = seatToHandKey(player.seat);
-        const handRect = rects[handKey];
-      
         c.zone = ZONES.hand;
         c.owner = fromId;
         c.faceUp = true;
+      
+        c.x = handRect.x + handRect.w/2 + randInt(-60,60);
+        c.y = handRect.y + handRect.h/2 + randInt(-20,20);
         c.stackId = null;
       
-        c.x = handRect.x + handRect.w/2 + randInt(-80,80);
-        c.y = handRect.y + handRect.h/2 + randInt(-25,25);
-      
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
+
 
 
       case "discard": {
