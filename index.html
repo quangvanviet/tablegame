@@ -1041,20 +1041,34 @@ function makeFreshTableState(roomCode, hostId){
 }
 
 function redactStateForViewer(state, viewerId){
-  const s = deepClone(state);
-  const viewer = s.players.find(p=>p.id===viewerId) || null;
+  // Firebase có thể gửi null lần đầu
+  if (!state || typeof state !== "object"){
+    return null;
+  }
 
-  // Cards redaction
-  for(const cardId in s.cards){
+  // đảm bảo các field cơ bản luôn tồn tại để không crash
+  const s = deepClone(state);
+  if (!Array.isArray(s.players)) s.players = [];
+  if (!s.cards || typeof s.cards !== "object") s.cards = {};
+  if (!s.stacks || typeof s.stacks !== "object") s.stacks = {};
+  if (!Array.isArray(s.chat)) s.chat = [];
+  if (!s.assets || typeof s.assets !== "object") s.assets = { frontBase:"", backUrl:"" };
+
+  const viewer = s.players.find(p => p && p.id === viewerId) || null;
+
+  // Ẩn bài trong hand của người khác
+  for (const cardId in s.cards){
     const c = s.cards[cardId];
+    if (!c) continue;
+
     if (c.zone === ZONES.hand && c.owner && c.owner !== viewerId){
-      // hide private hand card
       c.faceUp = false;
-      c.frontSeed = 0; // unknown to viewer
+      c.frontSeed = 0;
+      // nếu bạn có frontUrl thì cũng nên ẩn luôn để không lộ:
+      if (c.frontUrl) c.frontUrl = "";
     }
   }
 
-  // For UI, return viewerColor/name if known
   s._viewer = viewer ? {id: viewer.id, name: viewer.name, color: viewer.color} : null;
   return s;
 }
@@ -1640,7 +1654,7 @@ async function fbReleaseRoomNo(roomNo){
 class FirebaseTransport extends NetTransport {
   constructor(roomId){
     super();
-    this.roomId = roomId;
+    this.roomId = this.roomId;
     this.roomRef = FB.db.ref(`AllRoom/${roomId}`);
     this.intentsRef = this.roomRef.child("intents");
     this.stateRef = this.roomRef.child("state");
@@ -1789,7 +1803,7 @@ async function createRoomAsHost_Firebase(){
 
   // all clients (including host) listen state
   t.listenState((st)=>{
-    if (!st) return;
+    if (!st || typeof st !== "object") return;
     // host uses host.state live but also accept db state in case refresh
     if (client.isHost && client.host){
       client.host.state = st;
@@ -1844,7 +1858,7 @@ async function joinRoomAsClient_Firebase(){
 
   // listen state
   t.listenState((st)=>{
-    if (!st) return;
+    if (!st || typeof st !== "object") return;
     const red = redactStateForViewer(st, FB.uid);
     client.authoritative = red;
     client.lastVersion = red.version || client.lastVersion;
@@ -1857,14 +1871,14 @@ async function joinRoomAsClient_Firebase(){
 
 /* host cleanup room empty */
 function installFirebaseRoomCleanupAsHost(roomId, roomNo){
-  const presRef = FB.db.ref(`AllRoom/${roomId}/presence`);
+  const presRef = FB.db.ref(`AllRoom/${client.roomId}/presence`);
   presRef.on("value", async (snap)=>{
     if (!client.isHost) return;
     const v = snap.val() || {};
     const keys = Object.keys(v);
     if (keys.length === 0){
       // room empty => delete and release roomNo
-      try{ await FB.db.ref(`AllRoom/${roomId}`).remove(); }catch(e){}
+      try{ await FB.db.ref(`AllRoom/${client.roomId}`).remove(); }catch(e){}
       try{ await fbReleaseRoomNo(roomNo); }catch(e){}
     }
   });
@@ -3095,7 +3109,7 @@ async function hostLoadSetToRoom(){
   const urls = Object.values((data.cards||{})).map(x=>x.frontUrl).filter(Boolean);
   const backUrl = data.backUrl || "";
 
-  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   await roomRef.child("meta").update({
     deckSource: { uid: FB.uid, setId: id },
     deckBackUrl: backUrl
