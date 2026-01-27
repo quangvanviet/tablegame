@@ -1082,29 +1082,33 @@ class HostController {
         default: return null;
       }
     };
-
+    
+    const HAND_ZONES = [
+      { key: "handTopLeft", seat: 0 },
+      { key: "handBottomLeft", seat: 1 },
+      { key: "handTopRight", seat: 2 },
+      { key: "handBottomRight", seat: 3 },
+      { key: "handRightTop", seat: 4 },
+      { key: "handRightBottom", seat: 5 },
+    ];
     
     const normalizeCardZoneFromPos = (x, y) => {
-      const zones = [
-        { key:"handTopLeft",     seat:0 },
-        { key:"handBottomLeft",  seat:1 },
-        { key:"handTopRight",    seat:2 },
-        { key:"handBottomRight", seat:3 },
-        { key:"handRightTop",    seat:4 },
-        { key:"handRightBottom", seat:5 },
-      ];
+      for (const hz of HAND_ZONES){
+        const r = rects[hz.key];
+        if (!r) continue;
     
-      for (const z of zones){
-        const r = rects[z.key];
         const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
-        if (inRect){
-          const ownerPlayer = st.players.find(pp=>pp.seat===z.seat);
-          if (!ownerPlayer) return { zone: ZONES.table, owner: null };
-          return { zone: ZONES.hand, owner: ownerPlayer.id };
+        if (!inRect) continue;
+    
+        const ownerPlayer = st.players.find(pp => pp.seat === hz.seat);
+        if (!ownerPlayer){
+          // zone đang trống người, coi như table
+          return { zone: ZONES.table, owner: null, handKey: null };
         }
+        return { zone: ZONES.hand, owner: ownerPlayer.id, handKey: hz.key };
       }
     
-      return { zone: ZONES.table, owner: null };
+      return { zone: ZONES.table, owner: null, handKey: null };
     };
 
     // Validate action types:
