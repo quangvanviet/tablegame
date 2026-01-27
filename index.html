@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>2D Tabletop Card Sandbox</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="topbar">
+    <div class="row">
+      <div class="brand">2D Tabletop Sandbox</div>
+
+      <div class="room">
+        <span>Room:</span>
+        <input id="roomInput" placeholder="vd: AB12CD" maxlength="12" />
+        <button id="createBtn">Create</button>
+        <button id="joinBtn">Join</button>
+        <span id="status" class="muted">Disconnected</span>
+      </div>
+
+      <div class="me">
+        <span id="meTag" class="muted">me: -</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="controls">
+        <button id="btnDraw">Draw</button>
+        <button id="btnShuffle">Shuffle Deck</button>
+        <button id="btnFlip">Flip Selected</button>
+        <button id="btnStack">Stack (Selected+Hover)</button>
+        <button id="btnUnstack">Unstack Top</button>
+      </div>
+
+      <div class="legend" id="playersLegend"></div>
+    </div>
+  </div>
+
+  <canvas id="gameCanvas" width="1280" height="720"></canvas>
+
+  <div id="chat">
+    <div id="chatLog"></div>
+    <div id="chatInputRow">
+      <input id="chatInput" placeholder="Nhập chat rồi Enter..." />
+    </div>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>
