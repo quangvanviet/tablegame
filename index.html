@@ -1953,26 +1953,35 @@ function drawZone(rect, label, subtitle="", highlight=false){
   const x = s0.x, y = s0.y, w = (s1.x-s0.x), h = (s1.y-s0.y);
 
   ctx.save();
-  ctx.globalAlpha = highlight ? 0.85 : 0.35;
-  ctx.fillStyle = highlight ? "rgba(122,162,255,.22)" : "rgba(0,0,0,.10)";
-  ctx.fill();
+
+  // background
   rr(x,y,w,h,18);
+  ctx.globalAlpha = highlight ? 0.85 : 0.35;
+  ctx.fillStyle = highlight
+    ? "rgba(122,162,255,.22)"
+    : "rgba(0,0,0,.10)";
+  ctx.fill();
+
+  // border
   ctx.globalAlpha = 0.9;
   ctx.strokeStyle = "rgba(255,255,255,.10)";
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = "rgba(233,236,255,.7)";
+  // label
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = "rgba(233,236,255,.85)";
   ctx.font = "12px " + getComputedStyle(document.body).fontFamily;
   ctx.fillText(label, x+12, y+18);
+
   if (subtitle){
     ctx.globalAlpha = 0.6;
     ctx.fillText(subtitle, x+12, y+34);
-    ctx.globalAlpha = 1;
   }
+
   ctx.restore();
 }
+
 
 function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=false, isStackTop=false, stackCount=0){
   const w = CARD.w * camera.scale;
@@ -2077,7 +2086,7 @@ function draw(){
     return p ? p.name : "(empty)";
   };
   
-  drawZone(rects.table, "TABLE");
+  drawZone(rects.table, "TABLE", "", false);
   const me = s?.players.find(p=>p.id===client.selfId);
   const mySeat = me ? me.seat : -1;
   
@@ -2115,7 +2124,6 @@ function draw(){
       const stack = s.stacks[o.id];
       const topId = stack.cardIds[0];
       const top = topId ? s.cards[topId] : null;
-      const me = s.players.find(p=>p.id===client.selfId);
       const owner = s.players.find(p=>p.id===stack.owner);
       const accent = owner ? COLORS[owner.color] : null;
 
