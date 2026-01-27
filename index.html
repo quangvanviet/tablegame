@@ -576,7 +576,6 @@ function hideInspector(){
   document.getElementById("inspector").style.display = "none";
 }
 
-  
 function toast(text, ms=1600){
   const el = document.getElementById("toast");
   el.textContent = text;
@@ -2030,7 +2029,7 @@ addEventListener("keydown", (ev)=>{
   const key = ev.key.toLowerCase();
   if (key === "escape"){
     client.selected = null;
-    hideInspector();
+    hideInspectorPopup();
     return;
   }
   if (key === "d"){
