@@ -245,11 +245,31 @@
       pointer-events:auto;
     }
 
-    .panel header .toggle{
-      cursor:pointer;
-      font-size:14px;
-      opacity:.7;
+    .panel.collapsed .content {
+      display: none;
     }
+    
+    .panel.collapsed {
+      min-height: unset;
+    }
+    
+    .collapse-btn {
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.2);
+      background: rgba(0,0,0,.25);
+      color: #e9ecff;
+      line-height: 22px;
+    }
+    
+    .collapse-btn:hover {
+      background: rgba(122,162,255,.25);
+    }
+
 
     /* Make HUD smaller + collapsible */
     .hud{ gap:10px; }
@@ -266,105 +286,109 @@
   <div id="toast"></div>
 
   <div class="hud">
-    <div class="panel" style="min-width:320px">
-      <header>
-        <div class="title">PHÒNG CHƠI</div>
-        <div class="toggle">−</div>
-        <div class="row" style="gap:8px">
-          <div class="badge" id="netBadge">OFFLINE</div>
-        </div>
-      </header>
-      <div class="row">
-          <div class="col" style="flex:1; min-width:220px">
-            <label>Front folder (host)</label>
-            <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
+    <div class="panel collapsible" id="roomPanel">
+      <div class="panel" style="min-width:320px">
+        <header>
+          <div class="title">PHÒNG CHƠI</div>
+          <button class="collapse-btn" data-target="roomPanel">−</button>
+          <div class="row" style="gap:8px">
+            <div class="badge" id="netBadge">OFFLINE</div>
           </div>
-          <div class="col" style="flex:1; min-width:220px">
-            <label>Back image URL</label>
-            <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
-          </div>
-        </div>
-      <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
-      
-      <div class="content col">
+        </header>
         <div class="row">
-          <div class="col" style="flex:1; min-width:150px">
-            <label>Tên hiển thị</label>
-            <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
+            <div class="col" style="flex:1; min-width:220px">
+              <label>Front folder (host)</label>
+              <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
+            </div>
+            <div class="col" style="flex:1; min-width:220px">
+              <label>Back image URL</label>
+              <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
+            </div>
           </div>
-          <div class="col" style="min-width:120px">
-            <label>Chế độ</label>
-            <select id="modeSelect">
-              <option value="local">Local (4 tab)</option>
-              <option value="ws">WebSocket</option>
-            </select>
+        <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
+        
+        <div class="content col">
+          <div class="row">
+            <div class="col" style="flex:1; min-width:150px">
+              <label>Tên hiển thị</label>
+              <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
+            </div>
+            <div class="col" style="min-width:120px">
+              <label>Chế độ</label>
+              <select id="modeSelect">
+                <option value="local">Local (4 tab)</option>
+                <option value="ws">WebSocket</option>
+              </select>
+            </div>
           </div>
-        </div>
-
-        <div id="wsRow" class="row" style="display:none">
-          <div class="col" style="flex:1; min-width:200px">
-            <label>WebSocket URL</label>
-            <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
+  
+          <div id="wsRow" class="row" style="display:none">
+            <div class="col" style="flex:1; min-width:200px">
+              <label>WebSocket URL</label>
+              <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
+            </div>
           </div>
-        </div>
-
-        <div class="row">
-          <div class="col" style="flex:1; min-width:160px">
-            <label>Mã phòng</label>
-            <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
+  
+          <div class="row">
+            <div class="col" style="flex:1; min-width:160px">
+              <label>Mã phòng</label>
+              <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
+            </div>
+            <button id="createBtn">Tạo phòng (Host)</button>
+            <button id="joinBtn" class="secondary">Vào phòng</button>
           </div>
-          <button id="createBtn">Tạo phòng (Host)</button>
-          <button id="joinBtn" class="secondary">Vào phòng</button>
-        </div>
-
-        <div class="row">
-          <button id="copyLinkBtn" class="secondary">Copy link</button>
-          <button id="resetBtn" class="danger">Reset bàn (Host)</button>
-        </div>
-
-        <div class="hint">
-          - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
-          - Server authoritative: Host giữ state, client chỉ gửi intent.
+  
+          <div class="row">
+            <button id="copyLinkBtn" class="secondary">Copy link</button>
+            <button id="resetBtn" class="danger">Reset bàn (Host)</button>
+          </div>
+  
+          <div class="hint">
+            - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
+            - Server authoritative: Host giữ state, client chỉ gửi intent.
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="panel" style="min-width:320px">
-      <header>
-        <div class="title">TRẠNG THÁI</div>
-        <div class="toggle">−</div>
-        <div class="badge" id="roomBadge">—</div>
-      </header>
-      <div class="content col">
-        <div class="row" style="justify-content:space-between">
-          <div class="col" style="gap:4px">
-            <div style="font-size:12px; color:var(--muted)">Bạn là</div>
-            <div id="meLine" style="font-weight:700">—</div>
+    <div class="panel collapsible" id="sttPanel">
+      <div class="panel" style="min-width:320px">
+        <header>
+          <div class="title">TRẠNG THÁI</div>
+          <div class="panel collapsible" id="sttPanel">
+          <div class="badge" id="roomBadge">—</div>
+        </header>
+        <div class="content col">
+          <div class="row" style="justify-content:space-between">
+            <div class="col" style="gap:4px">
+              <div style="font-size:12px; color:var(--muted)">Bạn là</div>
+              <div id="meLine" style="font-weight:700">—</div>
+            </div>
+            <div class="col" style="gap:4px; align-items:flex-end">
+              <div style="font-size:12px; color:var(--muted)">Host</div>
+              <div id="hostLine" style="font-weight:700">—</div>
+            </div>
           </div>
-          <div class="col" style="gap:4px; align-items:flex-end">
-            <div style="font-size:12px; color:var(--muted)">Host</div>
-            <div id="hostLine" style="font-weight:700">—</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="col" style="gap:6px">
+              <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 4)</div>
+              <div id="playersLine" style="font-size:13px; line-height:1.4">—</div>
+            </div>
           </div>
-        </div>
-        <div class="row" style="justify-content:space-between">
-          <div class="col" style="gap:6px">
-            <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 4)</div>
-            <div id="playersLine" style="font-size:13px; line-height:1.4">—</div>
+  
+          <div class="hint">
+            Privacy: bài trong <b>hand</b> của người khác chỉ hiện mặt sau với bạn.
           </div>
-        </div>
-
-        <div class="hint">
-          Privacy: bài trong <b>hand</b> của người khác chỉ hiện mặt sau với bạn.
         </div>
       </div>
     </div>
   </div>
 
-  <div id="chatPanel">
+  <div class="panel collapsible" id="chatPanel">
     <div class="panel">
       <header>
         <div class="title">CHAT</div>
-        <div class="toggle">−</div>
+        <button class="collapse-btn" data-target="chatPanel">−</button>
         <div class="badge" id="chatBadge">—</div>
       </header>
       <div id="chatLog"></div>
@@ -406,11 +430,11 @@
     </div>
   </div>
 
-  <div id="help">
+  <div class="panel collapsible" id="help">
     <div class="panel">
       <header>
         <div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div>
-        <div class="toggle">−</div>
+        <button class="collapse-btn" data-target="help">−</button>
       </header>
       <div class="content hint">
         <div>
@@ -2055,12 +2079,14 @@ function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=fal
   ctx.restore();
 }
 
-const toggleHudBtn = document.getElementById("toggleHudBtn");
-let hudHidden = false;
-toggleHudBtn.addEventListener("click", ()=>{
-  hudHidden = !hudHidden;
-  document.querySelectorAll(".hud > .panel, #chatPanel, #help").forEach(el=>{
-    el.style.display = hudHidden ? "none" : "";
+document.querySelectorAll(".collapse-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const panelId = btn.dataset.target;
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    const collapsed = panel.classList.toggle("collapsed");
+    btn.textContent = collapsed ? "+" : "−";
   });
 });
 
