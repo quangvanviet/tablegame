@@ -869,8 +869,6 @@ function makeFreshTableState(roomCode, hostId){
     x: deckX,
     y: deckY,
     cardIds: [],
-    lockedBy: null,
-    lockedAt: 0,
   };
 
   for(let i=1;i<=40;i++){
@@ -885,8 +883,6 @@ function makeFreshTableState(roomCode, hostId){
       owner: null,
       stackId: deckStackId,
       order: i,
-      lockedBy: null,
-      lockedAt: 0,
     };
     st.stacks[deckStackId].cardIds.push(id);
   }
@@ -1055,7 +1051,9 @@ class HostController {
         if (targetType === "card"){
           const c = ensureCard(id);
           if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
-          if (!canUse(c)) return {ok:false, reason:"Locked"};
+          if (!canInteract(c, fromId))
+            return { ok:false, reason:"No permission" };
+
         
           // ❗ chặn kéo card trực tiếp từ DECK
           if (c.stackId === "stack_deck"){
@@ -1063,9 +1061,15 @@ class HostController {
           }
         
           detachFromStack(id);
-          const z = normalizeCardZoneFromPos(x,y, fromId);
-          c.x=x; c.y=y; c.zone=z.zone;
+          const z = normalizeCardZoneFromPos(x, y, fromId);
+          
+          c.x = x;
+          c.y = y;
+          c.zone = z.zone;
+          
+          // ✅ HAND thì có owner, TABLE thì public
           c.owner = (z.zone === ZONES.hand) ? z.owner : null;
+          
           c.stackId = null;
         } else if (targetType === "stack"){
           const s = ensureStack(id);
@@ -1294,28 +1298,6 @@ class HostController {
         this.bumpVersion();
         return {ok:true};
       }
-
-      case "lock": {
-        const {targetType, id} = action;
-        const obj = targetType==="card" ? ensureCard(id) : ensureStack(id);
-        if (!obj) return {ok:false, reason:"Missing"};
-        if (obj.lockedBy && obj.lockedBy !== fromId) return {ok:false, reason:"Locked"};
-        obj.lockedBy = fromId;
-        obj.lockedAt = now();
-        this.bumpVersion();
-        return {ok:true};
-      }
-      case "unlock": {
-        const {targetType, id} = action;
-        const obj = targetType==="card" ? ensureCard(id) : ensureStack(id);
-        if (!obj) return {ok:true};
-        if (obj.lockedBy === fromId){
-          obj.lockedBy = null;
-          obj.lockedAt = 0;
-          this.bumpVersion();
-        }
-        return {ok:true};
-      }
         
       case "setAssets": {
         if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
@@ -1330,7 +1312,24 @@ class HostController {
     }
   }
 }
+function canInteract(card, actorId){
+  if (card.zone === ZONES.hand)
+    return card.owner === actorId;
 
+  if (card.zone === ZONES.table)
+    return true;
+
+  if (card.zone === ZONES.discard)
+    return true;
+
+  return false;
+}
+
+function canInteractStack(stack, actorId){
+  if (stack.zone === ZONES.hand)
+    return stack.owner === actorId;
+  return true;
+}
 /* =========================
    Client Logic
 ========================= */
@@ -1827,7 +1826,6 @@ canvas.addEventListener("mousedown", (ev)=>{
     client.selected = hit;
     showInspector();        
     updateInspector();
-    sendIntent({type:"lock", targetType: hit.type, id: hit.id});
     // start drag
     client.dragging = {
       target: hit,
@@ -1874,7 +1872,6 @@ addEventListener("mouseup", (ev)=>{
       dropOnType: hit.type,
       dropOnId: hit.id
     });
-    sendIntent({type:"unlock", targetType: drag.target.type, id: drag.target.id});
     return;
   }
 
