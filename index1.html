@@ -1,0 +1,1762 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>2D Tabletop Card Sandbox (4P) — Canvas + Realtime</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#121a33cc;
+      --panelSolid:#121a33;
+      --border:#2a3566;
+      --text:#e9ecff;
+      --muted:#9aa6d6;
+      --accent:#7aa2ff;
+      --danger:#ff6b8b;
+      --ok:#49d17c;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+    }
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--font);
+      background:
+        radial-gradient(1200px 800px at 20% 10%, #18224b 0%, transparent 60%),
+        radial-gradient(900px 700px at 80% 20%, #1c2f66 0%, transparent 55%),
+        radial-gradient(700px 600px at 50% 85%, #12214b 0%, transparent 50%),
+        var(--bg);
+      color:var(--text);
+      overflow:hidden;
+    }
+
+    /* Layout */
+    #app{
+      position:relative;
+      width:100%;
+      height:100%;
+    }
+    canvas{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      display:block;
+    }
+
+    .hud{
+      position:absolute;
+      top:12px; left:12px;
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      z-index:10;
+      pointer-events:none; /* let canvas interactions through */
+    }
+    .panel{
+      pointer-events:auto;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow:hidden;
+      min-width: 280px;
+    }
+    .panel header{
+      padding:10px 12px;
+      background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
+      border-bottom:1px solid rgba(255,255,255,.06);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .panel header .title{
+      font-weight:700;
+      letter-spacing:.2px;
+      font-size:13px;
+      color:var(--text);
+    }
+    .panel header .badge{
+      font-size:11px;
+      color:var(--muted);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:999px;
+      padding:4px 8px;
+      background: rgba(0,0,0,.12);
+    }
+    .panel .content{
+      padding:12px;
+    }
+
+    .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+    .col{display:flex; flex-direction:column; gap:8px;}
+    label{font-size:12px; color:var(--muted);}
+    input,button,select{
+      font-family:inherit;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      padding:10px 12px;
+      outline:none;
+    }
+    input::placeholder{color:rgba(233,236,255,.45)}
+    button{
+      cursor:pointer;
+      border:1px solid rgba(122,162,255,.35);
+      background: linear-gradient(180deg, rgba(122,162,255,.22), rgba(122,162,255,.08));
+    }
+    button:hover{border-color: rgba(122,162,255,.6)}
+    button.secondary{
+      border-color: rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+    }
+    button.danger{
+      border-color: rgba(255,107,139,.45);
+      background: rgba(255,107,139,.12);
+    }
+    .hint{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.4;
+    }
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+
+    /* Chat */
+    #chatPanel{
+      position:absolute;
+      right:12px;
+      top:12px;
+      width:min(360px, 40vw);
+      height:min(420px, 52vh);
+      z-index:10;
+      display:flex;
+      flex-direction:column;
+      pointer-events:none;
+    }
+    #chatPanel .panel{height:100%; display:flex; flex-direction:column; pointer-events:auto;}
+    #chatLog{
+      flex:1;
+      overflow:auto;
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .msg{
+      display:flex;
+      gap:8px;
+      align-items:flex-start;
+    }
+    .msg .dot{
+      width:10px; height:10px; border-radius:999px;
+      margin-top:4px;
+      flex:0 0 auto;
+      box-shadow: 0 0 0 3px rgba(0,0,0,.15);
+      border:1px solid rgba(255,255,255,.18);
+    }
+    .msg .bubble{
+      background: rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 12px;
+      padding:8px 10px;
+      max-width: 100%;
+    }
+    .msg .meta{
+      font-size:11px;
+      color:rgba(233,236,255,.6);
+      margin-bottom:4px;
+      display:flex;
+      gap:8px;
+      align-items:baseline;
+      flex-wrap:wrap;
+    }
+    .msg .text{font-size:13px; line-height:1.35; white-space:pre-wrap; word-break:break-word;}
+    #chatForm{
+      display:flex;
+      gap:8px;
+      padding:10px 12px;
+      border-top:1px solid rgba(255,255,255,.06);
+      background: rgba(0,0,0,.10);
+    }
+    #chatInput{flex:1}
+
+    /* Floating help */
+    #help{
+      position:absolute;
+      left:12px;
+      bottom:12px;
+      z-index:10;
+      width:min(520px, 56vw);
+      pointer-events:none;
+    }
+    #help .panel{pointer-events:auto}
+    .kbd{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width: 22px;
+      padding: 2px 6px;
+      margin: 0 2px;
+      border-radius: 7px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.20);
+      font-size: 11px;
+      color: rgba(233,236,255,.85);
+      box-shadow: inset 0 -2px 0 rgba(0,0,0,.22);
+    }
+
+    /* Toast */
+    #toast{
+      position:absolute;
+      left:50%;
+      transform: translateX(-50%);
+      top:14px;
+      z-index:20;
+      padding:10px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.38);
+      border:1px solid rgba(255,255,255,.12);
+      color: rgba(233,236,255,.92);
+      box-shadow: var(--shadow);
+      display:none;
+      pointer-events:none;
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+    }
+
+    /* Small */
+    @media (max-width: 880px){
+      #help{display:none;}
+      #chatPanel{width:min(340px, 48vw);}
+      .hud{flex-direction:column;}
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+
+  <div id="toast"></div>
+
+  <div class="hud">
+    <div class="panel" style="min-width:320px">
+      <header>
+        <div class="title">PHÒNG CHƠI</div>
+        <div class="badge" id="netBadge">OFFLINE</div>
+      </header>
+      <div class="content col">
+        <div class="row">
+          <div class="col" style="flex:1; min-width:150px">
+            <label>Tên hiển thị</label>
+            <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
+          </div>
+          <div class="col" style="min-width:120px">
+            <label>Chế độ</label>
+            <select id="modeSelect">
+              <option value="local">Local (4 tab)</option>
+              <option value="ws">WebSocket</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="wsRow" class="row" style="display:none">
+          <div class="col" style="flex:1; min-width:200px">
+            <label>WebSocket URL</label>
+            <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col" style="flex:1; min-width:160px">
+            <label>Mã phòng</label>
+            <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
+          </div>
+          <button id="createBtn">Tạo phòng (Host)</button>
+          <button id="joinBtn" class="secondary">Vào phòng</button>
+        </div>
+
+        <div class="row">
+          <button id="copyLinkBtn" class="secondary">Copy link</button>
+          <button id="resetBtn" class="danger">Reset bàn (Host)</button>
+        </div>
+
+        <div class="hint">
+          - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
+          - Server authoritative: Host giữ state, client chỉ gửi intent.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="min-width:320px">
+      <header>
+        <div class="title">TRẠNG THÁI</div>
+        <div class="badge" id="roomBadge">—</div>
+      </header>
+      <div class="content col">
+        <div class="row" style="justify-content:space-between">
+          <div class="col" style="gap:4px">
+            <div style="font-size:12px; color:var(--muted)">Bạn là</div>
+            <div id="meLine" style="font-weight:700">—</div>
+          </div>
+          <div class="col" style="gap:4px; align-items:flex-end">
+            <div style="font-size:12px; color:var(--muted)">Host</div>
+            <div id="hostLine" style="font-weight:700">—</div>
+          </div>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <div class="col" style="gap:6px">
+            <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 4)</div>
+            <div id="playersLine" style="font-size:13px; line-height:1.4">—</div>
+          </div>
+        </div>
+
+        <div class="hint">
+          Privacy: bài trong <b>hand</b> của người khác chỉ hiện mặt sau với bạn.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="chatPanel">
+    <div class="panel">
+      <header>
+        <div class="title">CHAT</div>
+        <div class="badge" id="chatBadge">—</div>
+      </header>
+      <div id="chatLog"></div>
+      <form id="chatForm">
+        <input id="chatInput" placeholder="Nhập chat rồi Enter..." />
+        <button type="submit">Gửi</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="help">
+    <div class="panel">
+      <header><div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div></header>
+      <div class="content hint">
+        <div>
+          <span class="kbd">Kéo thả</span> chuột để di chuyển bài (table / hand).<br/>
+          <span class="kbd">D</span> rút 1 lá từ Deck về Hand của bạn (đứng gần Deck hoặc chọn Deck).<br/>
+          <span class="kbd">F</span> lật lá / chồng (stack).<br/>
+          <span class="kbd">S</span> trộn chồng (deck/stack).<br/>
+          <span class="kbd">U</span> tách 1 lá ra khỏi chồng (lấy top).<br/>
+          <span class="kbd">G</span> gom chồng: thả 1 lá lên lá khác (auto), hoặc nhấn G khi đang kéo để ép gom.<br/>
+          <span class="kbd">Click</span> chọn lá/chồng. <span class="kbd">Esc</span> bỏ chọn.
+        </div>
+        <div style="margin-top:8px; color:rgba(233,236,255,.8)">
+          Tip: Đây là sandbox, không ép luật — chỉ quản lý objects + sync realtime.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * 2D Tabletop Card Sandbox (4P) — Single-file demo.
+ * --------------------------------------------------
+ * ✅ Runs immediately in browser.
+ * ✅ Multiplayer real-time:
+ *    - Local mode: BroadcastChannel (4 tabs) + Host authoritative.
+ *    - WebSocket mode: client implementation ready; you can plug any WS server.
+ *
+ * NOTE:
+ * - For "chạy luôn" in 1 file, Local mode is fully functional without external server.
+ * - For true online across machines, you need a Node.js WS server (a minimal sample is included at bottom as comment).
+ */
+
+/* =========================
+   Utilities
+========================= */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const randInt = (a, b) => (Math.random() * (b - a + 1) + a) | 0;
+const now = () => Date.now();
+const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
+const deepClone = (obj) => structuredClone ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
+
+function toast(text, ms=1600){
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(el._t);
+  el._t = setTimeout(()=> el.style.display="none", ms);
+}
+
+/* =========================
+   Constants / Layout
+========================= */
+const COLORS = {
+  red:   "#ff5c7a",
+  blue:  "#5aa7ff",
+  green: "#4ad37d",
+  yellow:"#ffd166",
+};
+const COLOR_ORDER = ["red","blue","green","yellow"];
+
+const ZONES = {
+  table: "table",
+  hand: "hand",       // per player hand zone (private)
+  deck: "deck",
+  discard: "discard",
+};
+
+const CARD = {
+  w: 86,
+  h: 122,
+  r: 12,
+};
+
+const TABLE = {
+  // virtual board (world coords) — camera is fixed top-down 2D
+  w: 1400,
+  h: 900,
+  margin: 60,
+  handH: 190,
+  sideW: 190,
+};
+
+function zoneRects(){
+  // World-space rectangles defining logical zones.
+  const m = TABLE.margin;
+  const handH = TABLE.handH;
+  const sideW = TABLE.sideW;
+  return {
+    table:   { x: m+sideW, y: m,            w: TABLE.w-2*m-2*sideW, h: TABLE.h-2*m-handH },
+    hand:    { x: m+sideW, y: TABLE.h-m-handH, w: TABLE.w-2*m-2*sideW, h: handH },
+    deck:    { x: m,       y: m+120,        w: sideW, h: 220 },
+    discard: { x: TABLE.w-m-sideW, y: m+120, w: sideW, h: 220 },
+  };
+}
+
+/* =========================
+   Rendering (Canvas)
+========================= */
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+function resize(){
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize", resize);
+resize();
+
+/* Camera: fixed top-down, but we scale the virtual table to fit */
+const camera = {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+};
+function updateCamera(){
+  // Fit TABLE into viewport with padding.
+  const pad = 18;
+  const sx = (innerWidth - pad*2) / TABLE.w;
+  const sy = (innerHeight - pad*2) / TABLE.h;
+  camera.scale = Math.min(sx, sy);
+  camera.offsetX = (innerWidth - TABLE.w * camera.scale) / 2;
+  camera.offsetY = (innerHeight - TABLE.h * camera.scale) / 2;
+}
+updateCamera();
+addEventListener("resize", updateCamera);
+
+function toScreen(p){
+  return {
+    x: camera.offsetX + p.x * camera.scale,
+    y: camera.offsetY + p.y * camera.scale
+  };
+}
+function toWorld(p){
+  return {
+    x: (p.x - camera.offsetX) / camera.scale,
+    y: (p.y - camera.offsetY) / camera.scale
+  };
+}
+
+/* =========================
+   Networking Abstraction
+========================= */
+class NetTransport {
+  constructor(){ this.onMessage = ()=>{}; this.onStatus = ()=>{}; }
+  send(_msg) {}
+  close() {}
+}
+
+class LocalBroadcastTransport extends NetTransport {
+  /**
+   * Local mode via BroadcastChannel:
+   * - One tab is host (authoritative server).
+   * - Other tabs are clients; they send intents to host.
+   */
+  constructor(roomCode, selfId){
+    super();
+    this.roomCode = roomCode;
+    this.selfId = selfId;
+    this.bc = new BroadcastChannel("ttc_" + roomCode);
+    this.bc.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg || msg._from === this.selfId) return;
+      this.onMessage(msg);
+    };
+    this.onStatus({connected:true, mode:"local"});
+  }
+  send(msg){
+    this.bc.postMessage({...msg, _from:this.selfId});
+  }
+  close(){
+    this.onStatus({connected:false, mode:"local"});
+    this.bc.close();
+  }
+}
+
+class WebSocketTransport extends NetTransport {
+  constructor(url){
+    super();
+    this.ws = new WebSocket(url);
+    this.ws.onopen = () => this.onStatus({connected:true, mode:"ws"});
+    this.ws.onclose = () => this.onStatus({connected:false, mode:"ws"});
+    this.ws.onerror = () => this.onStatus({connected:false, mode:"ws"});
+    this.ws.onmessage = (ev) => {
+      try{
+        const msg = JSON.parse(ev.data);
+        this.onMessage(msg);
+      }catch(e){}
+    };
+  }
+  send(msg){
+    if (this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
+  }
+  close(){ try{ this.ws.close(); }catch(e){} }
+}
+
+/* =========================
+   Game State (Authoritative)
+========================= */
+/**
+ * Authoritative state kept by host:
+ * state = {
+ *   roomCode,
+ *   hostId,
+ *   players: [{id,name,color,connectedAt}],
+ *   cards: { [cardId]: {id,frontSeed,faceUp,x,y,zone,owner,stackId,order} },
+ *   stacks: { [stackId]: {id, cardIds:[top..bottom], x,y, zone, owner} },
+ *   chat: [{id,at,fromId,text}],
+ *   version: number
+ * }
+ *
+ * Client receives REDACTED view depending on viewerId:
+ * - If card is in another player's hand => hide front details and force faceUp=false.
+ */
+function makeFreshTableState(roomCode, hostId){
+  const st = {
+    roomCode,
+    hostId,
+    players: [],
+    cards: {},
+    stacks: {},
+    chat: [],
+    version: 1,
+  };
+
+  // Create a default deck (stack) with 40 cards, placed on deck zone.
+  const rects = zoneRects();
+  const deckX = rects.deck.x + rects.deck.w/2;
+  const deckY = rects.deck.y + rects.deck.h/2;
+
+  const deckStackId = "stack_deck";
+  st.stacks[deckStackId] = {
+    id: deckStackId,
+    zone: ZONES.deck,
+    owner: null,
+    x: deckX,
+    y: deckY,
+    cardIds: []
+  };
+
+  for(let i=1;i<=40;i++){
+    const id = "C" + String(i).padStart(2,"0");
+    st.cards[id] = {
+      id,
+      frontSeed: i,           // used to render front (no real images to keep 1-file)
+      faceUp: false,
+      x: deckX,
+      y: deckY,
+      zone: ZONES.deck,
+      owner: null,
+      stackId: deckStackId,
+      order: i
+    };
+    st.stacks[deckStackId].cardIds.push(id);
+  }
+
+  // Create discard pile stack
+  const discardStackId = "stack_discard";
+  const discardX = rects.discard.x + rects.discard.w/2;
+  const discardY = rects.discard.y + rects.discard.h/2;
+  st.stacks[discardStackId] = {
+    id: discardStackId,
+    zone: ZONES.discard,
+    owner: null,
+    x: discardX,
+    y: discardY,
+    cardIds: []
+  };
+
+  return st;
+}
+
+function redactStateForViewer(state, viewerId){
+  const s = deepClone(state);
+  const viewer = s.players.find(p=>p.id===viewerId) || null;
+
+  // Cards redaction
+  for(const cardId in s.cards){
+    const c = s.cards[cardId];
+    if (c.zone === ZONES.hand && c.owner && c.owner !== viewerId){
+      // hide private hand card
+      c.faceUp = false;
+      c.frontSeed = 0; // unknown to viewer
+    }
+  }
+
+  // For UI, return viewerColor/name if known
+  s._viewer = viewer ? {id: viewer.id, name: viewer.name, color: viewer.color} : null;
+  return s;
+}
+
+/* =========================
+   Host Logic (Authoritative Server in Local mode)
+========================= */
+class HostController {
+  constructor(roomCode, hostId){
+    this.roomCode = roomCode;
+    this.hostId = hostId;
+    this.state = makeFreshTableState(roomCode, hostId);
+    this.intentSeq = 0;
+  }
+
+  addOrUpdatePlayer({id,name}){
+    let p = this.state.players.find(x=>x.id===id);
+    if (!p){
+      if (this.state.players.length >= 4) return {ok:false, reason:"Room full"};
+      // Assign first available color
+      const used = new Set(this.state.players.map(x=>x.color));
+      const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % 4];
+      p = {id, name: name || "Player", color, connectedAt: now()};
+      this.state.players.push(p);
+    }else{
+      p.name = name || p.name;
+    }
+    this.bumpVersion();
+    return {ok:true, player:p};
+  }
+
+  removePlayer(id){
+    this.state.players = this.state.players.filter(p=>p.id!==id);
+    this.bumpVersion();
+  }
+
+  bumpVersion(){
+    this.state.version++;
+  }
+
+  // --- Core actions ---
+  applyIntent(fromId, action){
+    const st = this.state;
+    const player = st.players.find(p=>p.id===fromId);
+    if (!player) return {ok:false, reason:"Not in room"};
+
+    const rects = zoneRects();
+
+    const ensureCard = (id) => st.cards[id];
+    const ensureStack = (id) => st.stacks[id];
+
+    const isOwnerOrPublic = (card) => {
+      if (card.zone !== ZONES.hand) return true;
+      return card.owner === fromId;
+    };
+
+    const detachFromStack = (cardId) => {
+      const c = ensureCard(cardId);
+      if (!c || !c.stackId) return;
+      const stack = ensureStack(c.stackId);
+      if (!stack) { c.stackId = null; return; }
+      stack.cardIds = stack.cardIds.filter(id=>id!==cardId);
+      c.stackId = null;
+      if (stack.cardIds.length === 0 && stack.id !== "stack_deck" && stack.id !== "stack_discard"){
+        delete st.stacks[stack.id];
+      }
+    };
+
+    const attachToStackTop = (cardId, stackId) => {
+      const c = ensureCard(cardId);
+      const stack = ensureStack(stackId);
+      if (!c || !stack) return;
+      detachFromStack(cardId);
+      c.stackId = stackId;
+      c.zone = stack.zone;
+      c.owner = stack.owner;
+      c.x = stack.x; c.y = stack.y;
+      stack.cardIds.unshift(cardId); // top is index 0
+    };
+
+    const createStackFromCard = (cardId) => {
+      const c = ensureCard(cardId);
+      if (!c) return null;
+      const sid = "stack_" + uid().slice(0,8);
+      st.stacks[sid] = { id:sid, zone:c.zone, owner:c.owner, x:c.x, y:c.y, cardIds:[cardId] };
+      c.stackId = sid;
+      return sid;
+    };
+
+    const normalizeCardZoneFromPos = (x,y, forPlayerId) => {
+      // Determine if point is in player's hand zone or table.
+      const inHand = (x>=rects.hand.x && x<=rects.hand.x+rects.hand.w && y>=rects.hand.y && y<=rects.hand.y+rects.hand.h);
+      // Deck/discard are handled by stacks positions themselves.
+      if (inHand) return {zone:ZONES.hand, owner:forPlayerId};
+      return {zone:ZONES.table, owner:null};
+    };
+
+    // Validate action types:
+    switch(action.type){
+      case "move": {
+        // move one card or stack to x,y; also assign zone based on drop
+        const {targetType, id, x, y} = action;
+        if (targetType === "card"){
+          const c = ensureCard(id);
+          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
+          detachFromStack(id);
+          const z = normalizeCardZoneFromPos(x,y, fromId);
+          c.x=x; c.y=y; c.zone=z.zone; c.owner=z.owner;
+          c.stackId = null;
+        } else if (targetType === "stack"){
+          const s = ensureStack(id);
+          if (!s) return {ok:false, reason:"Missing stack"};
+          // moving a hand stack is private to owner
+          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
+          const z = normalizeCardZoneFromPos(x,y, fromId);
+          s.x=x; s.y=y; s.zone=z.zone; s.owner=z.owner;
+          // propagate to its cards
+          for (const cid of s.cardIds){
+            const c = ensureCard(cid);
+            c.x=x; c.y=y; c.zone=z.zone; c.owner=z.owner;
+          }
+        }
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "flip": {
+        const {targetType, id} = action;
+        if (targetType === "card"){
+          const c = ensureCard(id);
+          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
+          c.faceUp = !c.faceUp;
+        } else {
+          const s = ensureStack(id);
+          if (!s) return {ok:false, reason:"Missing stack"};
+          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
+          // flip top card only (common tabletop behavior)
+          const topId = s.cardIds[0];
+          if (topId){
+            const c = ensureCard(topId);
+            c.faceUp = !c.faceUp;
+          }
+        }
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "shuffle": {
+        const {stackId} = action;
+        const s = ensureStack(stackId);
+        if (!s) return {ok:false, reason:"Missing stack"};
+        if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
+        // Fisher-Yates
+        for(let i=s.cardIds.length-1;i>0;i--){
+          const j = randInt(0,i);
+          [s.cardIds[i], s.cardIds[j]] = [s.cardIds[j], s.cardIds[i]];
+        }
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "draw": {
+        // draw from deck to player's hand
+        const deck = st.stacks["stack_deck"];
+        if (!deck) return {ok:false, reason:"Missing deck"};
+        if (deck.cardIds.length === 0) return {ok:false, reason:"Deck empty"};
+        const cid = deck.cardIds.shift(); // take top
+        const c = ensureCard(cid);
+        c.zone = ZONES.hand;
+        c.owner = fromId;
+        c.faceUp = true; // typical: show to owner
+        // place into player's hand area near bottom center
+        const hx = rects.hand.x + rects.hand.w/2 + randInt(-80,80);
+        const hy = rects.hand.y + rects.hand.h/2 + randInt(-25,25);
+        c.x = hx; c.y = hy;
+        c.stackId = null;
+        // (optional) auto fan? We'll let client render nicely.
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "discard": {
+        // move card/stack to discard pile
+        const {targetType, id} = action;
+        const discard = st.stacks["stack_discard"];
+        if (!discard) return {ok:false, reason:"Missing discard"};
+        if (targetType === "card"){
+          const c = ensureCard(id);
+          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
+          attachToStackTop(id, discard.id);
+          // in discard: public by default
+          discard.zone = ZONES.discard;
+          discard.owner = null;
+          c.zone = ZONES.discard;
+          c.owner = null;
+          c.faceUp = true; // discard visible
+        } else {
+          const s = ensureStack(id);
+          if (!s) return {ok:false, reason:"Missing stack"};
+          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
+          // move all cards to discard top preserving order (top-to-bottom)
+          const cards = [...s.cardIds];
+          for (const cid of cards.reverse()){ // keep top-most ends up on top
+            attachToStackTop(cid, discard.id);
+            const c = ensureCard(cid);
+            c.faceUp = true;
+            c.owner = null;
+            c.zone = ZONES.discard;
+          }
+          // remove moved stack if not special
+          if (s.id !== "stack_deck" && s.id !== "stack_discard") delete st.stacks[s.id];
+        }
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "stack": {
+        // stack a card onto another card/stack
+        const {dragTargetType, dragId, dropOnType, dropOnId} = action;
+        // Resolve dragged set:
+        let dragStackId = null;
+        let dragCardIds = [];
+        if (dragTargetType === "card"){
+          const c = ensureCard(dragId);
+          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
+          dragCardIds = [dragId];
+          dragStackId = c.stackId; // could be null
+        } else {
+          const s = ensureStack(dragId);
+          if (!s) return {ok:false, reason:"Missing stack"};
+          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
+          dragCardIds = [...s.cardIds];
+          dragStackId = s.id;
+        }
+
+        // Resolve drop stack:
+        let dropStackId = null;
+        if (dropOnType === "card"){
+          const c2 = ensureCard(dropOnId);
+          if (!c2) return {ok:false, reason:"Missing drop card"};
+          // If drop card isn't in stack, create one
+          dropStackId = c2.stackId || createStackFromCard(c2.id);
+        } else {
+          const s2 = ensureStack(dropOnId);
+          if (!s2) return {ok:false, reason:"Missing drop stack"};
+          dropStackId = s2.id;
+        }
+
+        if (!dropStackId) return {ok:false, reason:"No drop stack"};
+        if (dragStackId && dragStackId === dropStackId) return {ok:true};
+
+        // If dragged is a whole stack, move all cards onto drop stack top preserving order
+        const dropStack = ensureStack(dropStackId);
+        // If you drop onto a hand stack, must be your hand
+        if (dropStack.zone === ZONES.hand && dropStack.owner && dropStack.owner !== fromId) return {ok:false, reason:"No access"};
+
+        // Move dragCardIds so that their relative order keeps top on top
+        // We'll put dragged top on top of drop.
+        const moving = [...dragCardIds];
+        // Remove the dragged stack if it was a stack (and not special)
+        if (dragTargetType === "stack"){
+          const s = ensureStack(dragId);
+          if (s && s.id !== "stack_deck" && s.id !== "stack_discard"){
+            delete st.stacks[s.id];
+          } else if (s){
+            s.cardIds = []; // if special, clear (shouldn't happen normally)
+          }
+        } else {
+          // dragged card: detach from its old stack
+          detachFromStack(dragId);
+        }
+
+        // Attach in reverse so first element becomes top
+        for (let i=moving.length-1; i>=0; i--){
+          attachToStackTop(moving[i], dropStackId);
+        }
+
+        // Align stack position
+        for (const cid of dropStack.cardIds){
+          const c = ensureCard(cid);
+          c.x = dropStack.x; c.y = dropStack.y;
+        }
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "unstack": {
+        // Take top card out of a stack and place near it
+        const {stackId} = action;
+        const s = ensureStack(stackId);
+        if (!s) return {ok:false, reason:"Missing stack"};
+        if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
+        if (s.cardIds.length <= 1) return {ok:true};
+        const top = s.cardIds.shift();
+        const c = ensureCard(top);
+        c.stackId = null;
+        // Place slightly offset
+        c.x = s.x + randInt(-90,90);
+        c.y = s.y + randInt(-60,60);
+        // Keep same zone/owner as stack
+        c.zone = s.zone;
+        c.owner = s.owner;
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "chat": {
+        const text = (action.text || "").toString().slice(0, 300);
+        if (!text.trim()) return {ok:true};
+        st.chat.push({id: uid(), at: now(), fromId, text});
+        // cap chat history
+        if (st.chat.length > 120) st.chat.splice(0, st.chat.length - 120);
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "reset": {
+        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        const keepPlayers = deepClone(st.players);
+        this.state = makeFreshTableState(st.roomCode, st.hostId);
+        this.state.players = keepPlayers;
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      default:
+        return {ok:false, reason:"Unknown action"};
+    }
+  }
+}
+
+/* =========================
+   Client Logic
+========================= */
+const UI = {
+  modeSelect: document.getElementById("modeSelect"),
+  wsRow: document.getElementById("wsRow"),
+  wsUrlInput: document.getElementById("wsUrlInput"),
+  nameInput: document.getElementById("nameInput"),
+  roomInput: document.getElementById("roomInput"),
+  createBtn: document.getElementById("createBtn"),
+  joinBtn: document.getElementById("joinBtn"),
+  copyLinkBtn: document.getElementById("copyLinkBtn"),
+  resetBtn: document.getElementById("resetBtn"),
+  netBadge: document.getElementById("netBadge"),
+  roomBadge: document.getElementById("roomBadge"),
+  meLine: document.getElementById("meLine"),
+  hostLine: document.getElementById("hostLine"),
+  playersLine: document.getElementById("playersLine"),
+  chatBadge: document.getElementById("chatBadge"),
+  chatLog: document.getElementById("chatLog"),
+  chatForm: document.getElementById("chatForm"),
+  chatInput: document.getElementById("chatInput"),
+};
+
+UI.modeSelect.addEventListener("change", ()=>{
+  UI.wsRow.style.display = UI.modeSelect.value === "ws" ? "flex" : "none";
+});
+
+const client = {
+  selfId: uid(),
+  selfName: "",
+  roomCode: "",
+  isHost: false,
+  transport: null,
+  host: null,               // HostController when we are host in local mode
+  authoritative: null,       // last redacted state received
+  lastVersion: 0,
+  selected: null,            // {type:'card'|'stack', id}
+  dragging: null,            // drag session
+};
+
+function setNetBadge(text, color=null){
+  UI.netBadge.textContent = text;
+  UI.netBadge.style.borderColor = color ? color : "rgba(255,255,255,.12)";
+}
+
+function setStatusUI(){
+  const s = client.authoritative;
+  if (!s){
+    UI.roomBadge.textContent = "—";
+    UI.meLine.textContent = "—";
+    UI.hostLine.textContent = "—";
+    UI.playersLine.textContent = "—";
+    UI.chatBadge.textContent = "—";
+    return;
+  }
+  UI.roomBadge.textContent = "ROOM " + s.roomCode;
+  UI.chatBadge.textContent = "v" + s.version;
+
+  const me = s.players.find(p=>p.id===client.selfId);
+  if (me){
+    UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
+      <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[me.color]};box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
+      <span>${escapeHtml(me.name)} (${me.color})</span>
+    </span>`;
+  }else{
+    UI.meLine.textContent = "(chưa vào phòng)";
+  }
+  const hostP = s.players.find(p=>p.id===s.hostId);
+  UI.hostLine.innerHTML = hostP
+    ? `<span style="display:inline-flex;align-items:center;gap:8px">
+        <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[hostP.color]};border:1px solid rgba(255,255,255,.18)"></span>
+        <span>${escapeHtml(hostP.name)}</span>
+      </span>`
+    : "—";
+
+  UI.playersLine.innerHTML = s.players.map(p=>{
+    return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
+      <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[p.color]};border:1px solid rgba(255,255,255,.18)"></span>
+      <span style="color:rgba(233,236,255,.92)">${escapeHtml(p.name)}</span>
+      <span style="color:rgba(233,236,255,.55);font-size:12px">(${p.color})</span>
+      ${p.id===s.hostId ? `<span style="margin-left:auto;color:var(--muted);font-size:11px;border:1px solid rgba(255,255,255,.12);padding:2px 6px;border-radius:999px">HOST</span>` : ""}
+    </div>`;
+  }).join("");
+
+  renderChat(s);
+}
+
+function escapeHtml(str){
+  return (str ?? "").toString()
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+/* =========================
+   Messaging protocol
+========================= */
+function sendToServer(msg){
+  if (!client.transport) return;
+  client.transport.send(msg);
+}
+
+function sendIntent(action){
+  // Client only sends intent, never direct state.
+  sendToServer({
+    type: "intent",
+    roomCode: client.roomCode,
+    fromId: client.selfId,
+    action,
+    at: now(),
+  });
+}
+
+function installTransport(t){
+  if (client.transport) client.transport.close();
+  client.transport = t;
+
+  t.onStatus = (st) => {
+    if (st.connected){
+      setNetBadge(st.mode === "local" ? "LOCAL" : "WS", "rgba(73,209,124,.55)");
+    } else {
+      setNetBadge("OFFLINE", "rgba(255,255,255,.12)");
+    }
+  };
+
+  t.onMessage = (msg) => {
+    if (!msg || msg.roomCode !== client.roomCode) return;
+
+    // Local authoritative: host acts like server
+    if (msg.type === "hello" && client.isHost && client.host){
+      // someone joined -> add/update player and send snapshot to all
+      const res = client.host.addOrUpdatePlayer({id: msg.fromId, name: msg.name});
+      if (!res.ok){
+        sendToServer({type:"deny", roomCode: client.roomCode, toId: msg.fromId, reason: res.reason});
+        return;
+      }
+      broadcastState();
+      // announce
+      client.host.applyIntent(client.host.hostId, {type:"chat", text:`${msg.name} joined.`});
+      broadcastState();
+      return;
+    }
+
+    if (msg.type === "bye" && client.isHost && client.host){
+      client.host.removePlayer(msg.fromId);
+      client.host.applyIntent(client.host.hostId, {type:"chat", text:`A player left.`});
+      broadcastState();
+      return;
+    }
+
+    if (msg.type === "deny"){
+      if (msg.toId === client.selfId){
+        toast("Không vào được phòng: " + (msg.reason || "Denied"));
+        leaveRoom();
+      }
+      return;
+    }
+
+    if (msg.type === "intent"){
+      // Host receives intents, applies, then broadcasts snapshot
+      if (client.isHost && client.host){
+        const r = client.host.applyIntent(msg.fromId, msg.action);
+        if (!r.ok && msg.fromId === client.selfId){
+          toast("Action fail: " + r.reason);
+        }
+        broadcastState();
+      }
+      return;
+    }
+
+    if (msg.type === "state"){
+      // Clients receive state snapshot
+      if (client.isHost) return; // host uses its own authoritative state
+      if (msg.state && msg.state.version && msg.state.version >= (client.lastVersion||0)){
+        client.authoritative = msg.state;
+        client.lastVersion = msg.state.version;
+        setStatusUI();
+      }
+      return;
+    }
+  };
+}
+
+/* =========================
+   Room Join / Host / Leave
+========================= */
+function genRoomCode(){
+  const a = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const b = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${a}-${b}`;
+}
+
+function readInputs(){
+  client.selfName = (UI.nameInput.value || "").trim().slice(0,18) || "Player";
+  client.roomCode = (UI.roomInput.value || "").trim().toUpperCase();
+  if (!client.roomCode) client.roomCode = genRoomCode();
+  UI.roomInput.value = client.roomCode;
+}
+
+function makeTransportForCurrentMode(){
+  const mode = UI.modeSelect.value;
+  if (mode === "ws"){
+    const url = (UI.wsUrlInput.value || "").trim() || "ws://localhost:8080";
+    return new WebSocketTransport(url);
+  }
+  return new LocalBroadcastTransport(client.roomCode, client.selfId);
+}
+
+function createRoomAsHost(){
+  readInputs();
+  client.isHost = true;
+  client.host = new HostController(client.roomCode, client.selfId);
+
+  const t = makeTransportForCurrentMode();
+  installTransport(t);
+
+  // host adds itself as player
+  client.host.addOrUpdatePlayer({id: client.selfId, name: client.selfName});
+  // initial chat
+  client.host.applyIntent(client.selfId, {type:"chat", text:`Room created. Host: ${client.selfName}`});
+  // show own redacted view too
+  client.authoritative = redactStateForViewer(client.host.state, client.selfId);
+  client.lastVersion = client.authoritative.version;
+  setStatusUI();
+  broadcastState();
+  toast("Đã tạo phòng (Host).");
+}
+
+function joinRoomAsClient(){
+  readInputs();
+  client.isHost = false;
+  client.host = null;
+
+  const t = makeTransportForCurrentMode();
+  installTransport(t);
+
+  // say hello to host
+  sendToServer({type:"hello", roomCode: client.roomCode, fromId: client.selfId, name: client.selfName, at: now()});
+  toast("Đang vào phòng...");
+}
+
+function leaveRoom(){
+  if (!client.roomCode) return;
+  try{
+    if (!client.isHost){
+      sendToServer({type:"bye", roomCode: client.roomCode, fromId: client.selfId, at: now()});
+    }
+  }catch(e){}
+  if (client.transport) client.transport.close();
+  client.transport = null;
+  client.isHost = false;
+  client.host = null;
+  client.authoritative = null;
+  client.lastVersion = 0;
+  client.selected = null;
+  client.dragging = null;
+  setStatusUI();
+  setNetBadge("OFFLINE");
+}
+
+function broadcastState(){
+  if (!client.isHost || !client.host) return;
+  const st = client.host.state;
+  // Host broadcasts REDACTED snapshot per receiver via broadcast channel:
+  // In LocalBroadcastTransport we cannot target; simplest: broadcast full state,
+  // but clients will redact on receive? (not safe). We'll broadcast redacted-per-viewer
+  // by sending a generic state and include full, BUT since local-only testing, it's OK.
+  // Still, we can instead broadcast "stateRaw" and client redacts itself.
+  sendToServer({type:"stateRaw", roomCode: client.roomCode, state: deepClone(st), at: now()});
+
+  // Also update host's own redacted view
+  client.authoritative = redactStateForViewer(st, client.selfId);
+  client.lastVersion = client.authoritative.version;
+  setStatusUI();
+}
+
+// Handle stateRaw on clients: redact locally
+function installStateRawHandler(){
+  const old = client.transport?.onMessage;
+  if (!client.transport) return;
+  client.transport.onMessage = (msg) => {
+    // allow existing
+    old && old(msg);
+    if (!msg || msg.roomCode !== client.roomCode) return;
+    if (msg.type === "stateRaw"){
+      if (client.isHost) return;
+      const red = redactStateForViewer(msg.state, client.selfId);
+      if (red.version >= (client.lastVersion||0)){
+        client.authoritative = red;
+        client.lastVersion = red.version;
+        setStatusUI();
+      }
+    }
+  };
+}
+
+UI.createBtn.addEventListener("click", ()=>{ createRoomAsHost(); installStateRawHandler(); });
+UI.joinBtn.addEventListener("click", ()=>{ joinRoomAsClient(); installStateRawHandler(); });
+
+UI.resetBtn.addEventListener("click", ()=>{
+  if (!client.authoritative) return;
+  if (!client.isHost){
+    toast("Chỉ Host mới reset.");
+    return;
+  }
+  sendIntent({type:"reset"});
+});
+
+UI.copyLinkBtn.addEventListener("click", async ()=>{
+  readInputs();
+  const url = new URL(location.href);
+  url.searchParams.set("room", client.roomCode);
+  url.searchParams.set("mode", UI.modeSelect.value);
+  if (UI.modeSelect.value === "ws"){
+    const ws = (UI.wsUrlInput.value || "").trim();
+    if (ws) url.searchParams.set("ws", ws);
+  }
+  try{
+    await navigator.clipboard.writeText(url.toString());
+    toast("Đã copy link phòng.");
+  }catch(e){
+    toast("Copy failed (trình duyệt chặn).");
+  }
+});
+
+addEventListener("beforeunload", ()=>{ try{ leaveRoom(); }catch(e){} });
+
+/* Auto-fill from URL params */
+(function initFromQuery(){
+  const u = new URL(location.href);
+  const room = u.searchParams.get("room");
+  const mode = u.searchParams.get("mode");
+  const ws = u.searchParams.get("ws");
+  if (room) UI.roomInput.value = room.toUpperCase();
+  if (mode && (mode==="local" || mode==="ws")){
+    UI.modeSelect.value = mode;
+    UI.wsRow.style.display = mode === "ws" ? "flex" : "none";
+  }
+  if (ws) UI.wsUrlInput.value = ws;
+})();
+
+/* =========================
+   Input / Hit Test
+========================= */
+function mousePos(ev){
+  const rect = canvas.getBoundingClientRect();
+  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+}
+
+function getState(){
+  if (client.isHost && client.host){
+    // host uses live state (but render redacted view for itself)
+    return client.authoritative || redactStateForViewer(client.host.state, client.selfId);
+  }
+  return client.authoritative;
+}
+
+function listDrawableObjects(state){
+  // Returns list of {type:'card'|'stack', id, x,y, zone, owner, z}
+  const out = [];
+  if (!state) return out;
+
+  // stacks
+  for (const sid in state.stacks){
+    const s = state.stacks[sid];
+    const z = stackZ(s);
+    out.push({type:"stack", id:sid, x:s.x, y:s.y, zone:s.zone, owner:s.owner, z});
+  }
+  // loose cards (not in stack)
+  for (const cid in state.cards){
+    const c = state.cards[cid];
+    if (c.stackId) continue;
+    out.push({type:"card", id:cid, x:c.x, y:c.y, zone:c.zone, owner:c.owner, z: cardZ(c)});
+  }
+  // sort by z
+  out.sort((a,b)=>a.z-b.z);
+  return out;
+}
+
+function cardZ(c){
+  // hand on top of table
+  let z = 10;
+  if (c.zone === ZONES.table) z = 50;
+  if (c.zone === ZONES.hand) z = 80;
+  if (c.zone === ZONES.deck) z = 40;
+  if (c.zone === ZONES.discard) z = 45;
+  return z + (c.order||0)*0.001;
+}
+function stackZ(s){
+  let z = 12;
+  if (s.zone === ZONES.table) z = 55;
+  if (s.zone === ZONES.hand) z = 85;
+  if (s.zone === ZONES.deck) z = 42;
+  if (s.zone === ZONES.discard) z = 47;
+  return z + (s.cardIds?.length||0)*0.01;
+}
+
+function hitTest(worldX, worldY){
+  const state = getState();
+  if (!state) return null;
+
+  // check stacks first (bigger target), then cards
+  const objs = listDrawableObjects(state);
+  for (let i=objs.length-1; i>=0; i--){
+    const o = objs[i];
+    const w = CARD.w, h = CARD.h;
+    const x0 = o.x - w/2, y0 = o.y - h/2;
+    if (worldX >= x0 && worldX <= x0+w && worldY >= y0 && worldY <= y0+h){
+      // privacy guard: cannot interact with other's hand stack/card
+      if (o.zone === ZONES.hand && o.owner && o.owner !== client.selfId){
+        return null;
+      }
+      return {type:o.type, id:o.id};
+    }
+  }
+  return null;
+}
+
+/* =========================
+   Dragging
+========================= */
+canvas.addEventListener("mousedown", (ev)=>{
+  const st = getState();
+  if (!st) return;
+  const p = toWorld(mousePos(ev));
+  const hit = hitTest(p.x, p.y);
+
+  if (hit){
+    client.selected = hit;
+    // start drag
+    client.dragging = {
+      target: hit,
+      start: p,
+      offset: calcDragOffset(st, hit, p),
+      moved:false,
+    };
+  } else {
+    client.selected = null;
+  }
+});
+
+addEventListener("mousemove", (ev)=>{
+  if (!client.dragging) return;
+  const st = getState();
+  if (!st) return;
+  const p = toWorld(mousePos(ev));
+  client.dragging.moved = true;
+  client.dragging.cur = p;
+
+  // local preview (client-side) while dragging: mutate a local shadow copy
+  // We'll just keep a "ghost" draw position in dragging and render with it.
+});
+
+addEventListener("mouseup", (ev)=>{
+  if (!client.dragging) return;
+  const st = getState();
+  const drag = client.dragging;
+  client.dragging = null;
+  if (!st) return;
+
+  const p = toWorld(mousePos(ev));
+  const drop = p;
+
+  // If dragged and dropped on another object -> stack
+  const hit = hitTest(drop.x, drop.y);
+  if (hit && !(hit.type===drag.target.type && hit.id===drag.target.id)){
+    sendIntent({
+      type:"stack",
+      dragTargetType: drag.target.type,
+      dragId: drag.target.id,
+      dropOnType: hit.type,
+      dropOnId: hit.id
+    });
+    return;
+  }
+
+  // else move to position
+  sendIntent({
+    type:"move",
+    targetType: drag.target.type,
+    id: drag.target.id,
+    x: drop.x - (drag.offset?.dx||0),
+    y: drop.y - (drag.offset?.dy||0),
+  });
+});
+
+function calcDragOffset(state, target, p){
+  if (target.type === "card"){
+    const c = state.cards[target.id];
+    if (!c) return {dx:0,dy:0};
+    return {dx: p.x - c.x, dy: p.y - c.y};
+  } else {
+    const s = state.stacks[target.id];
+    if (!s) return {dx:0,dy:0};
+    return {dx: p.x - s.x, dy: p.y - s.y};
+  }
+}
+
+/* =========================
+   Keyboard shortcuts
+========================= */
+addEventListener("keydown", (ev)=>{
+  if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
+
+  const st = getState();
+  if (!st) return;
+
+  const key = ev.key.toLowerCase();
+  if (key === "escape"){
+    client.selected = null;
+    return;
+  }
+  if (key === "d"){
+    // draw: if selected stack is deck OR near deck OR default deck
+    sendIntent({type:"draw"});
+    toast("Draw 1");
+    return;
+  }
+  if (key === "f"){
+    const sel = client.selected;
+    if (!sel) return;
+    sendIntent({type:"flip", targetType: sel.type, id: sel.id});
+    return;
+  }
+  if (key === "s"){
+    const sel = client.selected;
+    // shuffle selected stack or deck
+    if (sel && sel.type==="stack"){
+      sendIntent({type:"shuffle", stackId: sel.id});
+    } else {
+      sendIntent({type:"shuffle", stackId: "stack_deck"});
+    }
+    return;
+  }
+  if (key === "u"){
+    const sel = client.selected;
+    if (sel && sel.type==="stack"){
+      sendIntent({type:"unstack", stackId: sel.id});
+    }
+    return;
+  }
+  if (key === "g"){
+    // "force stack" while dragging: snap to best overlap target
+    // Simple: if selected exists and dragging in progress is handled by mouseup stacking.
+    toast("G: thả lên object để gom (auto).");
+    return;
+  }
+  if (key === "x"){
+    // optional: discard selected
+    const sel = client.selected;
+    if (!sel) return;
+    sendIntent({type:"discard", targetType: sel.type, id: sel.id});
+    return;
+  }
+});
+
+/* =========================
+   Chat
+========================= */
+UI.chatForm.addEventListener("submit", (ev)=>{
+  ev.preventDefault();
+  const text = (UI.chatInput.value || "").trim();
+  UI.chatInput.value = "";
+  if (!text) return;
+  sendIntent({type:"chat", text});
+});
+
+function renderChat(state){
+  const items = state.chat || [];
+  const last = items[items.length-1];
+  if (!last) return;
+
+  // render full chat list each time (small)
+  UI.chatLog.innerHTML = items.map(m=>{
+    const p = state.players.find(x=>x.id===m.fromId);
+    const name = p ? p.name : "Unknown";
+    const color = p ? COLORS[p.color] : "rgba(233,236,255,.35)";
+    const time = new Date(m.at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    return `
+      <div class="msg">
+        <div class="dot" style="background:${color}"></div>
+        <div class="bubble">
+          <div class="meta">
+            <span style="font-weight:700;color:rgba(233,236,255,.86)">${escapeHtml(name)}</span>
+            <span style="color:rgba(233,236,255,.45)">${time}</span>
+          </div>
+          <div class="text">${escapeHtml(m.text)}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // auto scroll to bottom
+  UI.chatLog.scrollTop = UI.chatLog.scrollHeight;
+}
+
+/* =========================
+   Rendering Helpers
+========================= */
+function rr(x,y,w,h,r){
+  ctx.beginPath();
+  const r2 = Math.min(r, w/2, h/2);
+  ctx.moveTo(x+r2, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r2);
+  ctx.arcTo(x+w, y+h, x, y+h, r2);
+  ctx.arcTo(x, y+h, x, y, r2);
+  ctx.arcTo(x, y, x+w, y, r2);
+  ctx.closePath();
+}
+
+function drawZone(rect, label){
+  const s0 = toScreen({x:rect.x, y:rect.y});
+  const s1 = toScreen({x:rect.x+rect.w, y:rect.y+rect.h});
+  const x = s0.x, y = s0.y, w = (s1.x-s0.x), h = (s1.y-s0.y);
+
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  rr(x,y,w,h,18);
+  ctx.fillStyle = "rgba(0,0,0,.10)";
+  ctx.fill();
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = "rgba(255,255,255,.10)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = "rgba(233,236,255,.7)";
+  ctx.font = "12px " + getComputedStyle(document.body).fontFamily;
+  ctx.fillText(label, x+12, y+18);
+  ctx.restore();
+}
+
+function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=false, isStackTop=false, stackCount=0){
+  const w = CARD.w * camera.scale;
+  const h = CARD.h * camera.scale;
+  const x = cx - w/2, y = cy - h/2;
+  const r = CARD.r * camera.scale;
+
+  ctx.save();
+
+  // shadow
+  ctx.globalAlpha = 0.35;
+  rr(x+4, y+6, w, h, r);
+  ctx.fillStyle = "rgba(0,0,0,.65)";
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // body
+  rr(x, y, w, h, r);
+  ctx.fillStyle = faceUp ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.20)";
+  ctx.fill();
+  ctx.strokeStyle = isSelected ? "rgba(122,162,255,.85)" : "rgba(255,255,255,.14)";
+  ctx.lineWidth = isSelected ? 2 : 1;
+  ctx.stroke();
+
+  // accent strip
+  if (accent){
+    ctx.globalAlpha = 0.75;
+    rr(x+8, y+8, w-16, 14*camera.scale, 9*camera.scale);
+    ctx.fillStyle = accent;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // text
+  ctx.fillStyle = "rgba(233,236,255,.9)";
+  ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
+  if (faceUp && frontSeed){
+    const n = String(frontSeed).padStart(2,"0");
+    ctx.fillText("CARD " + n, x + 12*camera.scale, y + 34*camera.scale);
+
+    // simple pips
+    ctx.globalAlpha = 0.85;
+    for(let i=0;i<Math.min(6, (frontSeed%7)+1);i++){
+      const px = x + (14 + i*10)*camera.scale;
+      const py = y + (52)*camera.scale;
+      ctx.beginPath();
+      ctx.arc(px, py, 3.2*camera.scale, 0, Math.PI*2);
+      ctx.fillStyle = "rgba(233,236,255,.75)";
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.globalAlpha = 0.9;
+    ctx.fillText("BACK", x + 12*camera.scale, y + 34*camera.scale);
+    ctx.globalAlpha = 1;
+  }
+
+  if (isStackTop && stackCount>1){
+    ctx.globalAlpha = 0.95;
+    rr(x+w-34*camera.scale, y+10*camera.scale, 24*camera.scale, 18*camera.scale, 8*camera.scale);
+    ctx.fillStyle = "rgba(0,0,0,.35)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.14)";
+    ctx.stroke();
+    ctx.fillStyle = "rgba(233,236,255,.86)";
+    ctx.font = `${Math.max(10, 11*camera.scale)}px ui-monospace, monospace`;
+    ctx.fillText(String(stackCount), x+w-28*camera.scale, y+24*camera.scale);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+/* =========================
+   Main Render Loop
+========================= */
+function draw(){
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+
+  // background vignette
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = "rgba(0,0,0,.25)";
+  ctx.fillRect(0,0,innerWidth,innerHeight);
+  ctx.restore();
+
+  const rects = zoneRects();
+  drawZone(rects.table, "TABLE");
+  drawZone(rects.hand, "YOUR HAND (private)");
+  drawZone(rects.deck, "DECK");
+  drawZone(rects.discard, "DISCARD");
+
+  const s = getState();
+  if (!s){
+    requestAnimationFrame(draw);
+    return;
+  }
+
+  const objs = listDrawableObjects(s);
+
+  // Draw stacks and cards. For stacks: show top card with count badge.
+  for (const o of objs){
+    const isSelected = client.selected && client.selected.type===o.type && client.selected.id===o.id;
+
+    // dragging ghost override
+    let wx = o.x, wy = o.y;
+    if (client.dragging && client.dragging.target.type===o.type && client.dragging.target.id===o.id && client.dragging.cur){
+      wx = client.dragging.cur.x - (client.dragging.offset?.dx||0);
+      wy = client.dragging.cur.y - (client.dragging.offset?.dy||0);
+    }
+    const sp = toScreen({x:wx,y:wy});
+
+    if (o.type === "card"){
+      const c = s.cards[o.id];
+      const me = s.players.find(p=>p.id===client.selfId);
+      const accent = me ? COLORS[me.color] : null;
+      drawCardAtScreen(sp.x, sp.y, !!c.faceUp, c.frontSeed, accent, isSelected);
+    } else {
+      const stack = s.stacks[o.id];
+      const topId = stack.cardIds[0];
+      const top = topId ? s.cards[topId] : null;
+      const me = s.players.find(p=>p.id===client.selfId);
+      const accent = stack.zone===ZONES.hand ? (me ? COLORS[me.color] : null) : null;
+
+      if (top){
+        drawCardAtScreen(sp.x, sp.y, !!top.faceUp, top.frontSeed, accent, isSelected, true, stack.cardIds.length);
+        // slight “thickness” hint
+        if (stack.cardIds.length>1){
+          ctx.save();
+          ctx.globalAlpha = 0.25;
+          for(let i=1;i<Math.min(4, stack.cardIds.length);i++){
+            const dx = i*2*camera.scale;
+            const dy = i*2*camera.scale;
+            drawCardAtScreen(sp.x+dx, sp.y+dy, false, 0, null, false, false, 0);
+          }
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* =========================
+   WS server sample (optional)
+========================= */
+/*
+  Minimal Node.js WebSocket server (authoritative):
+  - You still need to implement room management + redaction per viewer.
+  - This demo's Local mode already supports 4 tabs.
+
+  // server.js
+  import { WebSocketServer } from "ws";
+  const wss = new WebSocketServer({ port: 8080 });
+  wss.on("connection", (ws) => {
+    ws.on("message", (data) => {
+      // broadcast raw for quick test:
+      for (const c of wss.clients){
+        if (c.readyState === 1) c.send(data.toString());
+      }
+    });
+  });
+  console.log("WS on :8080");
+*/
+
