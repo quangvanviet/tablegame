@@ -1070,8 +1070,9 @@ class HostController {
           c.y = y;
           c.zone = z.zone;
           
-          // ✅ HAND thì có owner, TABLE thì public
-          c.owner = (z.zone === ZONES.hand) ? z.owner : null;
+          if (z.zone === ZONES.hand) {
+            c.owner = z.owner;  // vào hand → đổi owner
+          }
           
           c.stackId = null;
         } else if (targetType === "stack"){
