@@ -1321,8 +1321,17 @@ function installStateRawHandler(){
   };
 }
 
-UI.createBtn.addEventListener("click", ()=>{ createRoomAsHost(); installStateRawHandler(); });
-UI.joinBtn.addEventListener("click", ()=>{ joinRoomAsClient(); installStateRawHandler(); });
+UI.createBtn.addEventListener("click", ()=>{
+  alert("CLICK OK");
+  createRoomAsHost();
+  installStateRawHandler();
+});
+
+UI.joinBtn.addEventListener("click", ()=>{
+  alert("JOIN CLICK OK");
+  joinRoomAsClient();
+  installStateRawHandler();
+});
 
 UI.resetBtn.addEventListener("click", ()=>{
   if (!client.authoritative) return;
