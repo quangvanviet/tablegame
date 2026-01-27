@@ -441,9 +441,6 @@ const randInt = (a, b) => (Math.random() * (b - a + 1) + a) | 0;
 const now = () => Date.now();
 const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
 const deepClone = (obj) => structuredClone ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
-frontBaseInput: document.getElementById("frontBaseInput"),
-backUrlInput: document.getElementById("backUrlInput"),
-applyDeckBtn: document.getElementById("applyDeckBtn"),
 const INS = {
   badge: document.getElementById("insBadge"),
   preview: document.getElementById("insPreview"),
@@ -800,13 +797,6 @@ function redactStateForViewer(state, viewerId){
    Host Logic (Authoritative Server in Local mode)
 ========================= */
 class HostController {
-  case "setAssets": {
-    if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
-    st.assets.frontBase = (action.frontBase||"").trim();
-    st.assets.backUrl = (action.backUrl||"").trim();
-    this.bumpVersion();
-    return {ok:true};
-  }
   
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
@@ -899,33 +889,23 @@ class HostController {
     };
     
     const normalizeCardZoneFromPos = (x,y, forPlayerId) => {
-      const p = st.players.find(pp=>pp.id===forPlayerId);
-      const mySeat = p ? p.seat : 0;
-    
-      // if dropped into ANY hand rect => belongs to that seat's owner
       const handKeys = ["handBottom","handTop","handLeft","handRight"];
       for (const hk of handKeys){
         const r = rects[hk];
         const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
         if (inRect){
-          // map hand rect -> owner by seat
           const seat = hk==="handBottom"?0 : hk==="handTop"?1 : hk==="handLeft"?2 : 3;
           const ownerPlayer = st.players.find(pp=>pp.seat===seat);
-          return {zone:ZONES.hand, owner: ownerPlayer ? ownerPlayer.id : null, handKey: hk};
+    
+          if (!ownerPlayer){
+            return { zone: ZONES.table, owner: null, handKey: null };
+          }
+          return { zone: ZONES.hand, owner: ownerPlayer.id, handKey: hk };
         }
       }
-    
-      if (!ownerPlayer) {
-        // chưa có người ngồi seat này → coi như TABLE
-        return { zone: ZONES.table, owner: null, handKey: null };
-      }
-      
-      return {
-        zone: ZONES.hand,
-        owner: ownerPlayer.id,
-        handKey: hk
-      };
+      return { zone: ZONES.table, owner: null, handKey: null };
     };
+
 
 
     // Validate action types:
@@ -1180,7 +1160,14 @@ class HostController {
         }
         return {ok:true};
       }
-
+        
+      case "setAssets": {
+        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        st.assets.frontBase = (action.frontBase||"").trim();
+        st.assets.backUrl = (action.backUrl||"").trim();
+        this.bumpVersion();
+        return {ok:true};
+      }
         
       default:
         return {ok:false, reason:"Unknown action"};
@@ -1210,6 +1197,9 @@ const UI = {
   chatLog: document.getElementById("chatLog"),
   chatForm: document.getElementById("chatForm"),
   chatInput: document.getElementById("chatInput"),
+  frontBaseInput: document.getElementById("frontBaseInput"),
+  backUrlInput: document.getElementById("backUrlInput"),
+  applyDeckBtn: document.getElementById("applyDeckBtn"),
 };
 
 UI.modeSelect.addEventListener("change", ()=>{
