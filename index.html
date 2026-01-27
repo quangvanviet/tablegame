@@ -516,6 +516,45 @@ class LocalBroadcastTransport extends NetTransport {
   }
 }
 
+class LocalStorageTransport extends NetTransport {
+  /**
+   * Fallback local mode via localStorage "storage" event:
+   * - Works across tabs on same origin (GitHub Pages / localhost).
+   * - Slightly noisier than BroadcastChannel but reliable.
+   */
+  constructor(roomCode, selfId){
+    super();
+    this.roomCode = roomCode;
+    this.selfId = selfId;
+    this.key = "ttc_ls_" + roomCode;
+
+    this._onStorage = (ev) => {
+      if (ev.key !== this.key || !ev.newValue) return;
+      try{
+        const msg = JSON.parse(ev.newValue);
+        if (!msg || msg._from === this.selfId) return;
+        this.onMessage(msg);
+      }catch(e){}
+    };
+    window.addEventListener("storage", this._onStorage);
+    this.onStatus({connected:true, mode:"local"});
+  }
+
+  send(msg){
+    try{
+      const payload = JSON.stringify({...msg, _from:this.selfId, _t: Date.now()});
+      localStorage.setItem(this.key, payload);
+      // optional: cleanup
+      // localStorage.removeItem(this.key);
+    }catch(e){}
+  }
+
+  close(){
+    window.removeEventListener("storage", this._onStorage);
+    this.onStatus({connected:false, mode:"local"});
+  }
+}
+  
 class WebSocketTransport extends NetTransport {
   constructor(url){
     super();
@@ -1163,12 +1202,23 @@ function readInputs(){
 
 function makeTransportForCurrentMode(){
   const mode = UI.modeSelect.value;
+
   if (mode === "ws"){
     const url = (UI.wsUrlInput.value || "").trim() || "ws://localhost:8080";
     return new WebSocketTransport(url);
   }
-  return new LocalBroadcastTransport(client.roomCode, client.selfId);
+
+  // local mode
+  try{
+    if (typeof BroadcastChannel !== "undefined"){
+      return new LocalBroadcastTransport(client.roomCode, client.selfId);
+    }
+  }catch(e){
+    // fall through to localStorage transport
+  }
+  return new LocalStorageTransport(client.roomCode, client.selfId);
 }
+
 
 function createRoomAsHost(){
   //Sửa rồi
@@ -1315,6 +1365,13 @@ addEventListener("beforeunload", ()=>{ try{ leaveRoom(); }catch(e){} });
   }
   if (ws) UI.wsUrlInput.value = ws;
 })();
+
+window.addEventListener("error", (e) => {
+  toast("JS error: " + (e.message || "unknown"));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  toast("Promise error: " + ((e.reason && e.reason.message) || e.reason || "unknown"));
+});
 
 /* =========================
    Input / Hit Test
