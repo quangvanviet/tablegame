@@ -284,6 +284,24 @@
       background: rgba(122,162,255,.25);
     }
 
+    .modal{
+      position:absolute; inset:0;
+      background: rgba(0,0,0,.55);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:50;
+    }
+    .modal-card{
+      width:min(860px, 92vw);
+      max-height:min(86vh, 780px);
+      overflow:auto;
+    }
+    .card-url-row{
+      display:flex; gap:8px; align-items:center;
+    }
+    .card-url-row input{ flex:1; }
+
 
     /* Make HUD smaller + collapsible */
     .hud{ gap:10px; }
@@ -295,6 +313,60 @@
   </style>
 </head>
 <body>
+<div id="deckModal" class="modal" style="display:none;">
+  <div class="modal-card panel">
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div class="title">DECK / SET CARD</div>
+      <button id="closeDeckBtn" class="collapse-btn">×</button>
+    </header>
+
+    <div class="content col" style="gap:10px">
+      <div class="row" style="justify-content:space-between">
+        <div class="badge" id="deckUserBadge">—</div>
+        <button id="newSetBtn" class="secondary">+ Tạo set mới</button>
+      </div>
+
+      <div class="col" style="gap:6px">
+        <label>Set đã lưu</label>
+        <div class="row">
+          <select id="setSelect" style="flex:1; min-width:220px"></select>
+          <button id="loadSetBtn" class="secondary">Load</button>
+          <button id="deleteSetBtn" class="danger">Xóa</button>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid rgba(255,255,255,.08);width:100%">
+
+      <div class="col" style="gap:6px">
+        <label>Tên set</label>
+        <input id="setNameInput" placeholder="VD: Poker / Game A" />
+      </div>
+
+      <div class="col" style="gap:6px">
+        <label>Back URL (mặt sau — 1 link)</label>
+        <input id="setBackUrlInput" class="mono" placeholder="https://.../back.png" />
+      </div>
+
+      <div class="row" style="justify-content:space-between">
+        <div class="hint">Front URL (mặt trước). Bấm <b>+</b> để thêm lá.</div>
+        <button id="addCardUrlBtn" class="secondary">+ Card</button>
+      </div>
+
+      <div id="cardUrlList" class="col" style="gap:8px; max-height:240px; overflow:auto; padding-right:6px"></div>
+
+      <div class="row" style="justify-content:flex-end">
+        <button id="saveSetBtn">Lưu set</button>
+        <button id="loadSetToRoomBtn" class="secondary">Host: Load set vào Room</button>
+      </div>
+
+      <div class="hint" style="opacity:.9">
+        - Khi host load set vào room: <b>D</b> sẽ rút ngẫu nhiên 1 lá từ set.<br/>
+        - Người khác vào room sẽ tự dùng deck của host.
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <canvas id="c"></canvas>
   <div id="toast"></div>
@@ -308,6 +380,7 @@
         </div>
         <button class="collapse-btn" data-target="roomPanel">−</button>
       </header>
+      <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
       <div class="content col">
         <div class="row">
             <div class="content col" style="flex:1; min-width:220px">
@@ -330,6 +403,7 @@
             <div class="col" style="min-width:120px">
               <label>Chế độ</label>
               <select id="modeSelect">
+                <option value="firebase">Firebase RTDB</option>
                 <option value="local">Local (4 tab)</option>
                 <option value="ws">WebSocket</option>
               </select>
@@ -463,7 +537,9 @@
     </div>
   </div>
 </div>
-
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database-compat.js"></script>
 <script>
 /**
  * 2D Tabletop Card Sandbox (4P) — Single-file demo.
@@ -1195,16 +1271,41 @@ class HostController {
       }
 
       case "draw": {
-        const deck = st.stacks["stack_deck"];
-        if (!deck || deck.cardIds.length === 0)
-          return { ok:false, reason:"Deck empty" };
-      
         const player = st.players.find(p=>p.id===fromId);
         if (!player) return { ok:false, reason:"No player" };
       
         const handKey = seatToHandKey(player.seat);
         const handRect = rects[handKey];
         if (!handRect) return { ok:false, reason:"No hand zone" };
+      
+        // ===== NEW: draw from custom pool (URLs) if exists =====
+        const pool = Array.isArray(st._deckPool) ? st._deckPool.filter(Boolean) : [];
+        if (pool.length > 0){
+          const pick = pool[randInt(0, pool.length-1)];
+          const newId = "CI_" + uid().slice(0,10);
+      
+          st.cards[newId] = {
+            id: newId,
+            frontSeed: 1,          // not used for image mode (you'll render by url)
+            faceUp: true,
+            x: handRect.x + handRect.w/2 + randInt(-60,60),
+            y: handRect.y + handRect.h/2 + randInt(-20,20),
+            zone: ZONES.hand,
+            owner: fromId,
+            stackId: null,
+            order: now(),
+            frontUrl: pick,        // << store image url
+            tintOwner: fromId       // << keep color identity
+          };
+      
+          this.bumpVersion();
+          return { ok:true };
+        }
+      
+        // ===== fallback: old physical deck stack_deck =====
+        const deck = st.stacks["stack_deck"];
+        if (!deck || deck.cardIds.length === 0)
+          return { ok:false, reason:"Deck empty" };
       
         const cid = deck.cardIds.shift();
         const c = ensureCard(cid);
@@ -1217,10 +1318,12 @@ class HostController {
         c.y = handRect.y + handRect.h/2 + randInt(-20,20);
         c.stackId = null;
       
+        // keep tint
+        c.tintOwner = fromId;
+      
         this.bumpVersion();
         return { ok:true };
       }
-
 
 
       case "discard": {
@@ -1430,6 +1533,377 @@ UI.modeSelect.addEventListener("change", ()=>{
   UI.wsRow.style.display = UI.modeSelect.value === "ws" ? "flex" : "none";
 });
 
+///REALTIME FIREBASE
+  /* =========================
+   Firebase RTDB Online Mode
+========================= */
+
+// 1) Fill config from Firebase Console
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  databaseURL: "YOUR_DATABASE_URL",
+  projectId: "YOUR_PROJECT_ID",
+  appId: "YOUR_APP_ID",
+};
+
+let FB = {
+  app: null,
+  auth: null,
+  db: null,
+  user: null,
+  uid: null,
+  username: null,
+};
+
+function fbInitOnce(){
+  if (FB.app) return;
+  FB.app = firebase.initializeApp(firebaseConfig);
+  FB.auth = firebase.auth();
+  FB.db = firebase.database();
+}
+
+async function fbEnsureAuth(){
+  fbInitOnce();
+  if (!FB.auth.currentUser){
+    await FB.auth.signInAnonymously();
+  }
+  FB.user = FB.auth.currentUser;
+  FB.uid = FB.user.uid;
+
+  // username lấy từ UI.nameInput
+  FB.username = ((UI.nameInput.value||"").trim().slice(0,18)) || "Player";
+
+  // ensure profile in AllUser
+  const uref = FB.db.ref(`AllUser/${FB.uid}`);
+  const snap = await uref.get();
+  if (!snap.exists()){
+    await uref.set({
+      username: FB.username,
+      createdAt: Date.now()
+    });
+  }else{
+    // update username if changed
+    const cur = snap.val();
+    if ((cur.username||"") !== FB.username){
+      await uref.update({ username: FB.username });
+    }
+  }
+}
+
+/* ---------- Room Index allocate (room1/room2...) ---------- */
+// RoomIndex/nextNo : number
+// RoomIndex/freeNos/{no}: true   (release vào đây)
+// allocate: try take smallest freeNos key (best-effort), else nextNo++ (transaction)
+async function fbAllocateRoomNo(){
+  const db = FB.db;
+
+  // try freeNos first
+  const freeRef = db.ref("RoomIndex/freeNos");
+  const freeSnap = await freeRef.get();
+  if (freeSnap.exists()){
+    const obj = freeSnap.val() || {};
+    const nums = Object.keys(obj).map(x=>parseInt(x,10)).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b);
+    for (const n of nums){
+      const oneRef = db.ref(`RoomIndex/freeNos/${n}`);
+      const r = await oneRef.transaction((cur)=>{
+        if (cur === true) return null; // remove it
+        return; // abort
+      });
+      if (r.committed){
+        return n;
+      }
+    }
+  }
+
+  // fallback: nextNo transaction
+  const nextRef = db.ref("RoomIndex/nextNo");
+  const res = await nextRef.transaction((cur)=>{
+    if (typeof cur !== "number") return 1; // init
+    return cur + 1;
+  });
+  // transaction result snapshot contains NEW value, roomNo is new-1 (because we increment)
+  const newVal = res.snapshot.val();
+  const roomNo = Math.max(1, newVal - 1);
+  return roomNo;
+}
+
+async function fbReleaseRoomNo(roomNo){
+  if (!roomNo) return;
+  await FB.db.ref(`RoomIndex/freeNos/${roomNo}`).set(true);
+}
+
+/* ---------- Firebase Transport (intent/state/presence) ---------- */
+class FirebaseTransport extends NetTransport {
+  constructor(roomId){
+    super();
+    this.roomId = roomId;
+    this.roomRef = FB.db.ref(`AllRoom/${roomId}`);
+    this.intentsRef = this.roomRef.child("intents");
+    this.stateRef = this.roomRef.child("state");
+    this.presRef = this.roomRef.child(`presence/${FB.uid}`);
+
+    this._stateCb = null;
+    this._intentsCb = null;
+    this._connectedRef = FB.db.ref(".info/connected");
+    this._connectedCb = null;
+
+    this.onStatus({connected:true, mode:"firebase"});
+  }
+
+  async attachPresence(){
+    // keep presence true when connected; remove onDisconnect
+    this._connectedCb = async (snap)=>{
+      if (snap.val() === true){
+        await this.presRef.set(true);
+        this.presRef.onDisconnect().remove();
+      }
+    };
+    this._connectedRef.on("value", this._connectedCb);
+  }
+
+  listenState(onState){
+    this._stateCb = (snap)=>{
+      const v = snap.val();
+      onState(v);
+    };
+    this.stateRef.on("value", this._stateCb);
+  }
+
+  listenIntentsAsHost(onIntent){
+    // host only: listen child_added
+    this._intentsCb = (snap)=>{
+      const v = snap.val();
+      if (!v) return;
+      onIntent(v, snap.key);
+    };
+    this.intentsRef.limitToLast(200).on("child_added", this._intentsCb);
+  }
+
+  async sendIntent(action){
+    const payload = {
+      fromUid: FB.uid,
+      fromName: FB.username,
+      at: Date.now(),
+      action
+    };
+    await this.intentsRef.push(payload);
+  }
+
+  async writeState(state){
+    await this.stateRef.set(state);
+  }
+
+  close(){
+    try{
+      if (this._stateCb) this.stateRef.off("value", this._stateCb);
+      if (this._intentsCb) this.intentsRef.off("child_added", this._intentsCb);
+      if (this._connectedCb) this._connectedRef.off("value", this._connectedCb);
+      this.presRef.remove();
+    }catch(e){}
+    this.onStatus({connected:false, mode:"firebase"});
+  }
+}
+
+/* =========================
+   Firebase Room create/join
+========================= */
+
+client.roomMeta = { roomNo: null, roomId: null };
+
+async function createRoomAsHost_Firebase(){
+  await fbEnsureAuth();
+
+  client.selfId = FB.uid;          // IMPORTANT: unify id
+  client.selfName = FB.username;
+
+  // allocate roomNo => roomId = `room${no}`
+  const roomNo = await fbAllocateRoomNo();
+  const roomId = `room${roomNo}`;
+
+  client.roomCode = roomId.toUpperCase(); // keep UI consistent
+  UI.roomInput.value = client.roomCode;
+
+  client.isHost = true;
+  client.host = new HostController(roomId, FB.uid);
+
+  // init room meta + clear intents + write state
+  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  await roomRef.set({
+    meta: {
+      roomNo,
+      roomId,
+      hostUid: FB.uid,
+      status: "active",
+      createdAt: Date.now(),
+      maxPlayers: 6,
+      deckSource: null,
+      deckBackUrl: "",
+    },
+    presence: {},
+    users: {},
+    intents: {},
+    state: client.host.state,
+  });
+
+  // add host user info to users
+  await roomRef.child(`users/${FB.uid}`).set({
+    username: FB.username,
+    seat: 0,
+    atk: 0, def: 0, hp: 20
+  });
+
+  // local UI authoritative
+  client.authoritative = redactStateForViewer(client.host.state, FB.uid);
+  client.lastVersion = client.authoritative.version;
+  setStatusUI();
+
+  // transport
+  const t = new FirebaseTransport(roomId);
+  installTransport(t);
+  await t.attachPresence();
+
+  // host listens intents -> apply -> write state
+  t.listenIntentsAsHost(async (msg, intentKey)=>{
+    // ignore if room mismatch
+    const action = msg.action;
+    const fromId = msg.fromUid;
+
+    // ensure player exists in host controller (same logic join)
+    client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
+
+    // apply intent
+    const r = client.host.applyIntent(fromId, action);
+    if (!r.ok && fromId === FB.uid){
+      toast("Action fail: " + r.reason);
+    }
+    // write state
+    await t.writeState(client.host.state);
+
+    // OPTIONAL: cleanup old intents (keep db light)
+    // remove the intent after processed
+    try{ await FB.db.ref(`AllRoom/${roomId}/intents/${intentKey}`).remove(); }catch(e){}
+  });
+
+  // all clients (including host) listen state
+  t.listenState((st)=>{
+    if (!st) return;
+    // host uses host.state live but also accept db state in case refresh
+    if (client.isHost && client.host){
+      client.host.state = st;
+      client.authoritative = redactStateForViewer(st, FB.uid);
+    }else{
+      client.authoritative = redactStateForViewer(st, FB.uid);
+    }
+    client.lastVersion = st.version || client.lastVersion;
+    setStatusUI();
+  });
+
+  setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+  toast(`Đã tạo room: ${roomId}`);
+  client.roomMeta = { roomNo, roomId };
+
+  // host cleanup when room empty
+  installFirebaseRoomCleanupAsHost(roomId, roomNo);
+}
+
+async function joinRoomAsClient_Firebase(){
+  await fbEnsureAuth();
+
+  client.selfId = FB.uid;
+  client.selfName = FB.username;
+
+  // room input: "ROOM1" or "room1"
+  readInputs();
+  const roomId = (client.roomCode || "").toLowerCase(); // e.g. room1
+  if (!roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
+
+  // check exists
+  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const metaSnap = await roomRef.child("meta").get();
+  if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
+
+  // join seat: assign next seat number based on current players list in state
+  // (host authoritative sẽ set seat đúng khi addOrUpdatePlayer)
+  await roomRef.child(`users/${FB.uid}`).set({
+    username: FB.username,
+    seat: -1,
+    atk: 0, def: 0, hp: 20
+  });
+
+  client.isHost = false;
+  client.host = null;
+
+  const t = new FirebaseTransport(roomId);
+  installTransport(t);
+  await t.attachPresence();
+
+  // listen state
+  t.listenState((st)=>{
+    if (!st) return;
+    const red = redactStateForViewer(st, FB.uid);
+    client.authoritative = red;
+    client.lastVersion = red.version || client.lastVersion;
+    setStatusUI();
+  });
+
+  setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+  toast("Đã vào " + roomId);
+}
+
+/* host cleanup room empty */
+function installFirebaseRoomCleanupAsHost(roomId, roomNo){
+  const presRef = FB.db.ref(`AllRoom/${roomId}/presence`);
+  presRef.on("value", async (snap)=>{
+    if (!client.isHost) return;
+    const v = snap.val() || {};
+    const keys = Object.keys(v);
+    if (keys.length === 0){
+      // room empty => delete and release roomNo
+      try{ await FB.db.ref(`AllRoom/${roomId}`).remove(); }catch(e){}
+      try{ await fbReleaseRoomNo(roomNo); }catch(e){}
+    }
+  });
+}
+
+/* =========================
+   Hook UI create/join buttons
+========================= */
+
+const _oldCreate = UI.createBtn.onclick;
+const _oldJoin   = UI.joinBtn.onclick;
+
+// override click handlers:
+UI.createBtn.addEventListener("click", async ()=>{
+  if (UI.modeSelect.value !== "firebase") return; // keep your old local/ws handlers working
+  try{
+    await createRoomAsHost_Firebase();
+  }catch(e){
+    console.error(e);
+    toast("Firebase create error: " + (e.message || e));
+  }
+});
+
+UI.joinBtn.addEventListener("click", async ()=>{
+  if (UI.modeSelect.value !== "firebase") return;
+  try{
+    await joinRoomAsClient_Firebase();
+  }catch(e){
+    console.error(e);
+    toast("Firebase join error: " + (e.message || e));
+  }
+});
+
+// route intents: in firebase mode, send to RTDB intents instead of BroadcastChannel
+async function sendIntentFirebase(action){
+  if (!(client.transport instanceof FirebaseTransport)) return;
+  await client.transport.sendIntent(action);
+}
+
+// patch your sendIntent(action) function: add this at the TOP of sendIntent
+// (Bạn sửa trực tiếp function sendIntent của bạn)
+
+  
 const client = {
   selfId: uid(),
   selfName: "",
@@ -1526,15 +2000,13 @@ function sendToServer(msg){
 }
 
 function sendIntent(action){
-  // ✅ Host tự xử lý intent luôn (authoritative)
-  if (client.isHost && client.host){
-    const r = client.host.applyIntent(client.selfId, action);
-    if (!r.ok) toast("Action fail: " + r.reason);
-    broadcastState();
+  // Firebase mode
+  if (UI.modeSelect.value === "firebase"){
+    sendIntentFirebase(action);
     return;
   }
 
-  // Client thường: gửi intent lên host
+  // Local/WS mode (giữ nguyên logic cũ)
   sendToServer({
     type: "intent",
     roomCode: client.roomCode,
@@ -1543,6 +2015,7 @@ function sendIntent(action){
     at: now(),
   });
 }
+
 
 
 function installTransport(t){
@@ -2170,7 +2643,17 @@ function drawZone(rect, label, subtitle="", highlight=false){
 }
 
 
-function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=false, isStackTop=false, stackCount=0){
+function drawCardAtScreen(
+  cx, cy,
+  faceUp,
+  frontSeed,
+  accent=null,
+  isSelected=false,
+  isStackTop=false,
+  stackCount=0,
+  frontUrl="",
+  backUrl=""
+){
   const w = CARD.w * camera.scale;
   const h = CARD.h * camera.scale;
   const x = cx - w/2, y = cy - h/2;
@@ -2193,7 +2676,7 @@ function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=fal
   ctx.lineWidth = isSelected ? 2 : 1;
   ctx.stroke();
 
-  // accent strip
+  // accent strip (màu owner)
   if (accent){
     ctx.globalAlpha = 0.75;
     rr(x+8, y+8, w-16, 14*camera.scale, 9*camera.scale);
@@ -2202,30 +2685,46 @@ function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=fal
     ctx.globalAlpha = 1;
   }
 
-  // text
-  ctx.fillStyle = "rgba(233,236,255,.9)";
-  ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
-  if (faceUp && frontSeed){
-    const n = String(frontSeed).padStart(2,"0");
-    ctx.fillText("CARD " + n, x + 12*camera.scale, y + 34*camera.scale);
+  // ===== IMAGE DRAW =====
+  const url = faceUp ? (frontUrl || "") : (backUrl || "");
+  const img = url ? loadImg(url) : null;
 
-    // simple pips
-    ctx.globalAlpha = 0.85;
-    for(let i=0;i<Math.min(6, (frontSeed%7)+1);i++){
-      const px = x + (14 + i*10)*camera.scale;
-      const py = y + (52)*camera.scale;
-      ctx.beginPath();
-      ctx.arc(px, py, 3.2*camera.scale, 0, Math.PI*2);
-      ctx.fillStyle = "rgba(233,236,255,.75)";
-      ctx.fill();
-    }
+  if (img && img.complete && img.naturalWidth > 0){
+    // clip vùng ảnh để không đè header/badge
+    const padX = 6*camera.scale;
+    const topPad = 28*camera.scale;
+    const botPad = 10*camera.scale;
+    rr(x+padX, y+topPad, w-2*padX, h-topPad-botPad, 10*camera.scale);
+    ctx.clip();
+    ctx.globalAlpha = 0.95;
+
+    // contain
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const availW = w-2*padX;
+    const availH = h-topPad-botPad;
+    const scale = Math.min(availW/iw, availH/ih);
+    const dw = iw*scale, dh = ih*scale;
+
+    ctx.drawImage(
+      img,
+      x + (w-dw)/2,
+      y + topPad + (availH-dh)/2,
+      dw, dh
+    );
     ctx.globalAlpha = 1;
   } else {
-    ctx.globalAlpha = 0.9;
-    ctx.fillText("BACK", x + 12*camera.scale, y + 34*camera.scale);
-    ctx.globalAlpha = 1;
+    // fallback text (khi ảnh chưa load / url rỗng)
+    ctx.fillStyle = "rgba(233,236,255,.9)";
+    ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
+    if (faceUp && frontSeed){
+      const n = String(frontSeed).padStart(2,"0");
+      ctx.fillText("CARD " + n, x + 12*camera.scale, y + 34*camera.scale);
+    } else {
+      ctx.fillText("BACK", x + 12*camera.scale, y + 34*camera.scale);
+    }
   }
 
+  // stack count badge
   if (isStackTop && stackCount>1){
     ctx.globalAlpha = 0.95;
     rr(x+w-34*camera.scale, y+10*camera.scale, 24*camera.scale, 18*camera.scale, 8*camera.scale);
@@ -2268,65 +2767,113 @@ function draw(){
 
   const rects = zoneRects();
   const s = getState();
-  
+  if (!s){
+    requestAnimationFrame(draw);
+    return;
+  }
+
   const seatName = (seat)=>{
-    if (!s) return "";
     const p = s.players.find(pp=>pp.seat===seat);
     return p ? p.name : "(empty)";
   };
-  
+
   drawZone(rects.table, "TABLE", "", false);
-  const me = s?.players.find(p=>p.id===client.selfId);
+
+  const me = s.players.find(p=>p.id===client.selfId);
   const mySeat = me ? me.seat : -1;
-  
-  drawZone(rects.handTopLeft,    "Người chơi 1", seatName(0), mySeat===0);
-  drawZone(rects.handTopRight,   "Người chơi 3", seatName(2), mySeat===2);
-  
-  drawZone(rects.handBottomLeft, "Người chơi 2", seatName(1), mySeat===1);
-  drawZone(rects.handBottomRight,"Người chơi 4", seatName(3), mySeat===3);
-  
-  drawZone(rects.handRightTop,   "Người chơi 5", seatName(4), mySeat===4);
-  drawZone(rects.handRightBottom,"Người chơi 6", seatName(5), mySeat===5);
-  
+
+  drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0);
+  drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2);
+
+  drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1);
+  drawZone(rects.handBottomRight, "Người chơi 4", seatName(3), mySeat===3);
+
+  drawZone(rects.handRightTop,    "Người chơi 5", seatName(4), mySeat===4);
+  drawZone(rects.handRightBottom, "Người chơi 6", seatName(5), mySeat===5);
+
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
 
   const objs = listDrawableObjects(s);
 
-  // Draw stacks and cards. For stacks: show top card with count badge.
+  // default back image from room assets
+  const backUrlDefault = (s.assets && s.assets.backUrl) ? s.assets.backUrl : "";
+
   for (const o of objs){
-    const isSelected = client.selected && client.selected.type===o.type && client.selected.id===o.id;
+    const isSelected =
+      client.selected &&
+      client.selected.type === o.type &&
+      client.selected.id === o.id;
 
     // dragging ghost override
     let wx = o.x, wy = o.y;
-    if (client.dragging && client.dragging.target.type===o.type && client.dragging.target.id===o.id && client.dragging.cur){
+    if (client.dragging &&
+        client.dragging.target.type === o.type &&
+        client.dragging.target.id === o.id &&
+        client.dragging.cur){
       wx = client.dragging.cur.x - (client.dragging.offset?.dx||0);
       wy = client.dragging.cur.y - (client.dragging.offset?.dy||0);
     }
-    const sp = toScreen({x:wx,y:wy});
+
+    const sp = toScreen({x: wx, y: wy});
 
     if (o.type === "card"){
       const c = s.cards[o.id];
+      if (!c) continue;
+
       const owner = s.players.find(p=>p.id===c.owner);
       const accent = owner ? COLORS[owner.color] : null;
-      drawCardAtScreen(sp.x, sp.y, !!c.faceUp, c.frontSeed, accent, isSelected);
-    } else {
+
+      const frontUrl = c.frontUrl || "";
+      const backUrl  = backUrlDefault;
+
+      drawCardAtScreen(
+        sp.x, sp.y,
+        !!c.faceUp, c.frontSeed,
+        accent,
+        isSelected,
+        false, 0,
+        frontUrl, backUrl
+      );
+
+    } else { // stack
       const stack = s.stacks[o.id];
-      const topId = stack.cardIds[0];
+      if (!stack) continue;
+
+      const topId = stack.cardIds && stack.cardIds[0];
       const top = topId ? s.cards[topId] : null;
+
       const owner = s.players.find(p=>p.id===stack.owner);
       const accent = owner ? COLORS[owner.color] : null;
 
       if (top){
-        drawCardAtScreen(sp.x, sp.y, !!top.faceUp, top.frontSeed, accent, isSelected, true, stack.cardIds.length);
-        // slight “thickness” hint
-        if (stack.cardIds.length>1){
+        const frontUrl = top.frontUrl || "";
+        const backUrl  = backUrlDefault;
+
+        drawCardAtScreen(
+          sp.x, sp.y,
+          !!top.faceUp, top.frontSeed,
+          accent,
+          isSelected,
+          true, stack.cardIds.length,
+          frontUrl, backUrl
+        );
+
+        // thickness hint
+        if (stack.cardIds.length > 1){
           ctx.save();
           ctx.globalAlpha = 0.25;
-          for(let i=1;i<Math.min(4, stack.cardIds.length);i++){
-            const dx = i*2*camera.scale;
-            const dy = i*2*camera.scale;
-            drawCardAtScreen(sp.x+dx, sp.y+dy, false, 0, null, false, false, 0);
+          for (let i=1; i<Math.min(4, stack.cardIds.length); i++){
+            const dx = i * 2 * camera.scale;
+            const dy = i * 2 * camera.scale;
+            drawCardAtScreen(
+              sp.x+dx, sp.y+dy,
+              false, 0,
+              null,
+              false,
+              false, 0,
+              "", backUrlDefault
+            );
           }
           ctx.restore();
         }
@@ -2359,6 +2906,227 @@ requestAnimationFrame(draw);
   });
   console.log("WS on :8080");
 */
+
+/* =========================
+   Deck / SetCard Modal Logic (RTDB)
+========================= */
+
+const DECKUI = {
+  modal: document.getElementById("deckModal"),
+  openBtn: document.getElementById("openDeckBtn"),
+  closeBtn: document.getElementById("closeDeckBtn"),
+  userBadge: document.getElementById("deckUserBadge"),
+
+  setSelect: document.getElementById("setSelect"),
+  newSetBtn: document.getElementById("newSetBtn"),
+  loadSetBtn: document.getElementById("loadSetBtn"),
+  deleteSetBtn: document.getElementById("deleteSetBtn"),
+
+  setNameInput: document.getElementById("setNameInput"),
+  backUrlInput: document.getElementById("setBackUrlInput"),
+  addCardBtn: document.getElementById("addCardUrlBtn"),
+  list: document.getElementById("cardUrlList"),
+
+  saveBtn: document.getElementById("saveSetBtn"),
+  loadToRoomBtn: document.getElementById("loadSetToRoomBtn"),
+};
+
+let deckSetsCache = {};     // setId -> data
+let deckCurrentSetId = null;
+
+function openDeckModal(){
+  DECKUI.modal.style.display = "flex";
+}
+function closeDeckModal(){
+  DECKUI.modal.style.display = "none";
+}
+
+function makeCardUrlRow(url=""){
+  const row = document.createElement("div");
+  row.className = "card-url-row";
+
+  const inp = document.createElement("input");
+  inp.className = "mono";
+  inp.placeholder = "https://.../front.png";
+  inp.value = url;
+
+  const del = document.createElement("button");
+  del.className = "danger";
+  del.textContent = "X";
+  del.onclick = ()=> row.remove();
+
+  row.appendChild(inp);
+  row.appendChild(del);
+  return row;
+}
+
+function fillEditorFromSet(setId, data){
+  deckCurrentSetId = setId;
+  DECKUI.setNameInput.value = data?.name || "";
+  DECKUI.backUrlInput.value = data?.backUrl || "";
+  DECKUI.list.innerHTML = "";
+  const cards = data?.cards ? Object.values(data.cards) : [];
+  for (const c of cards){
+    DECKUI.list.appendChild(makeCardUrlRow(c.frontUrl || ""));
+  }
+  if (cards.length === 0){
+    // start with 1 empty
+    DECKUI.list.appendChild(makeCardUrlRow(""));
+  }
+}
+
+function editorToSetData(){
+  const name = (DECKUI.setNameInput.value||"").trim() || "Untitled";
+  const backUrl = (DECKUI.backUrlInput.value||"").trim();
+  const urls = [...DECKUI.list.querySelectorAll("input")].map(i=>(i.value||"").trim()).filter(Boolean);
+
+  const cards = {};
+  urls.forEach((u, idx)=>{
+    cards["c"+(idx+1)] = { frontUrl: u };
+  });
+
+  return { name, backUrl, cards, updatedAt: Date.now() };
+}
+
+async function refreshSetList(){
+  await fbEnsureAuth();
+  DECKUI.userBadge.textContent = `UID: ${FB.uid.slice(0,6)}... | ${FB.username}`;
+
+  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard`);
+  const snap = await ref.get();
+  deckSetsCache = snap.val() || {};
+
+  // fill select
+  DECKUI.setSelect.innerHTML = "";
+  const ids = Object.keys(deckSetsCache);
+  if (ids.length === 0){
+    const op = document.createElement("option");
+    op.value = "";
+    op.textContent = "(chưa có set)";
+    DECKUI.setSelect.appendChild(op);
+    deckCurrentSetId = null;
+    fillEditorFromSet(null, {name:"", backUrl:"", cards:{}});
+    return;
+  }
+
+  for (const id of ids){
+    const op = document.createElement("option");
+    op.value = id;
+    op.textContent = `${deckSetsCache[id]?.name || id} (${Object.keys(deckSetsCache[id]?.cards||{}).length})`;
+    DECKUI.setSelect.appendChild(op);
+  }
+
+  // auto load first or keep current
+  const pick = deckCurrentSetId && deckSetsCache[deckCurrentSetId] ? deckCurrentSetId : ids[0];
+  DECKUI.setSelect.value = pick;
+  fillEditorFromSet(pick, deckSetsCache[pick]);
+}
+
+async function createNewSet(){
+  await fbEnsureAuth();
+  const newId = "set_" + uid().slice(0,8);
+  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard/${newId}`);
+  await ref.set({ name:"New Set", backUrl:"", cards:{}, createdAt: Date.now(), updatedAt: Date.now() });
+  await refreshSetList();
+  DECKUI.setSelect.value = newId;
+  fillEditorFromSet(newId, deckSetsCache[newId]);
+}
+
+async function saveCurrentSet(){
+  await fbEnsureAuth();
+  if (!deckCurrentSetId){
+    await createNewSet();
+  }
+  const data = editorToSetData();
+  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard/${deckCurrentSetId}`);
+  await ref.update(data);
+  toast("Đã lưu set");
+  await refreshSetList();
+}
+
+async function deleteCurrentSet(){
+  await fbEnsureAuth();
+  const id = DECKUI.setSelect.value;
+  if (!id) return;
+  await FB.db.ref(`AllUser/${FB.uid}/setCard/${id}`).remove();
+  toast("Đã xóa set");
+  deckCurrentSetId = null;
+  await refreshSetList();
+}
+
+async function loadSelectedSet(){
+  const id = DECKUI.setSelect.value;
+  if (!id || !deckSetsCache[id]) return;
+  fillEditorFromSet(id, deckSetsCache[id]);
+  toast("Đã load set vào editor");
+}
+
+async function hostLoadSetToRoom(){
+  if (!client.isHost) return toast("Chỉ host mới load set vào room");
+  if (!(client.transport instanceof FirebaseTransport)) return toast("Chỉ dùng được trong Firebase mode");
+  const roomId = client.roomCode.toLowerCase();
+  const id = deckCurrentSetId || DECKUI.setSelect.value;
+  if (!id) return toast("Chưa chọn set");
+
+  const data = editorToSetData(); // lấy từ editor (bản mới nhất)
+  // 1) save to user
+  if (!deckCurrentSetId){
+    await createNewSet();
+  }
+  await saveCurrentSet();
+
+  // 2) write to room meta + put cardPool into state for draw
+  const urls = Object.values((data.cards||{})).map(x=>x.frontUrl).filter(Boolean);
+  const backUrl = data.backUrl || "";
+
+  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  await roomRef.child("meta").update({
+    deckSource: { uid: FB.uid, setId: id },
+    deckBackUrl: backUrl
+  });
+
+  // put cardPool in state.stacks.deck (host authoritative state)
+  if (client.host && client.host.state){
+    client.host.state.assets.backUrl = backUrl; // reuse your assets if needed
+    client.host.state._deckPool = urls;         // store custom field for draw
+    client.host.bumpVersion?.();
+    await client.transport.writeState(client.host.state);
+  }
+
+  toast(`Host loaded set (${urls.length} cards)`);
+}
+
+/* bind UI */
+if (DECKUI.openBtn){
+  DECKUI.openBtn.onclick = async ()=>{
+    try{
+      await refreshSetList();
+      openDeckModal();
+    }catch(e){
+      console.error(e);
+      toast("Deck modal error: " + (e.message||e));
+    }
+  };
+}
+if (DECKUI.closeBtn) DECKUI.closeBtn.onclick = closeDeckModal;
+if (DECKUI.newSetBtn) DECKUI.newSetBtn.onclick = createNewSet;
+if (DECKUI.saveBtn) DECKUI.saveBtn.onclick = saveCurrentSet;
+if (DECKUI.deleteSetBtn) DECKUI.deleteSetBtn.onclick = deleteCurrentSet;
+if (DECKUI.loadSetBtn) DECKUI.loadSetBtn.onclick = loadSelectedSet;
+if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=> DECKUI.list.appendChild(makeCardUrlRow(""));
+if (DECKUI.loadToRoomBtn) DECKUI.loadToRoomBtn.onclick = hostLoadSetToRoom;
+
+/* =========================
+   Patch DRAW (D): random from set pool when present
+========================= */
+
+// Trong HostController.applyIntent, case "draw": bạn sửa theo đoạn này:
+
+// 1) tìm đoạn case "draw": { ... } của bạn
+// 2) thay nội dung rút bài bằng logic:
+//    - nếu st._deckPool có URLs => tạo card instance mới theo url random
+//    - nếu không có => fallback rút từ stack_deck như hiện tại
+
 </script>
 </body>
 </html>
