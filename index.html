@@ -1023,25 +1023,28 @@ class HostController {
     };
 
     
-    const normalizeCardZoneFromPos = (x,y, forPlayerId) => {
-      const handKeys = ["handBottom","handTop","handLeft","handRight"];
-      for (const hk of handKeys){
-        const r = rects[hk];
+    const normalizeCardZoneFromPos = (x, y) => {
+      const zones = [
+        { key:"handTopLeft",     seat:0 },
+        { key:"handBottomLeft",  seat:1 },
+        { key:"handTopRight",    seat:2 },
+        { key:"handBottomRight", seat:3 },
+        { key:"handRightTop",    seat:4 },
+        { key:"handRightBottom", seat:5 },
+      ];
+    
+      for (const z of zones){
+        const r = rects[z.key];
         const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
         if (inRect){
-          const seat = hk==="handBottom"?0 : hk==="handTop"?1 : hk==="handLeft"?2 : 3;
-          const ownerPlayer = st.players.find(pp=>pp.seat===seat);
-    
-          if (!ownerPlayer){
-            return { zone: ZONES.table, owner: null, handKey: null };
-          }
-          return { zone: ZONES.hand, owner: ownerPlayer.id, handKey: hk };
+          const ownerPlayer = st.players.find(pp=>pp.seat===z.seat);
+          if (!ownerPlayer) return { zone: ZONES.table, owner: null };
+          return { zone: ZONES.hand, owner: ownerPlayer.id };
         }
       }
-      return { zone: ZONES.table, owner: null, handKey: null };
+    
+      return { zone: ZONES.table, owner: null };
     };
-
-
 
     // Validate action types:
     switch(action.type){
@@ -1061,7 +1064,7 @@ class HostController {
           }
         
           detachFromStack(id);
-          const z = normalizeCardZoneFromPos(x, y, fromId);
+          const z = normalizeCardZoneFromPos(x, y);
           
           c.x = x;
           c.y = y;
@@ -1439,7 +1442,15 @@ function sendToServer(msg){
 }
 
 function sendIntent(action){
-  // Client only sends intent, never direct state.
+  // ✅ Host tự xử lý intent luôn (authoritative)
+  if (client.isHost && client.host){
+    const r = client.host.applyIntent(client.selfId, action);
+    if (!r.ok) toast("Action fail: " + r.reason);
+    broadcastState();
+    return;
+  }
+
+  // Client thường: gửi intent lên host
   sendToServer({
     type: "intent",
     roomCode: client.roomCode,
@@ -1448,6 +1459,7 @@ function sendIntent(action){
     at: now(),
   });
 }
+
 
 function installTransport(t){
   if (client.transport) client.transport.close();
