@@ -1492,6 +1492,10 @@ class HostController {
         this.bumpVersion();
         return {ok:true};
       }
+      case "join": {
+        this.bumpVersion();
+        return { ok:true };
+      }
         
       default:
         return {ok:false, reason:"Unknown action"};
@@ -1742,6 +1746,7 @@ async function createRoomAsHost_Firebase(){
 
   client.isHost = true;
   client.host = new HostController(client.roomCode, FB.uid); // ✅ dùng ROOM1 cho state
+  client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username });
 
   // init room meta + clear intents + write state
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
@@ -1854,6 +1859,7 @@ async function joinRoomAsClient_Firebase(){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
   await t.attachPresence();
+  await t.sendIntent({ type: "join" });
 
   // listen state
   t.listenState((st)=>{
