@@ -539,27 +539,7 @@
 </div>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database-compat.js"></script>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getDatabase } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-  const firebaseConfig = {
-    apiKey: "...",
-    authDomain: "...",
-    databaseURL: "...",
-    projectId: "...",
-    storageBucket: "...",
-    messagingSenderId: "...",
-    appId: "..."
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  window.firebaseDB = db; // để game dùng
-</script>
-  
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database-compat.js"></script> 
 <script>
 /**
  * 2D Tabletop Card Sandbox (4P) — Single-file demo.
@@ -1744,14 +1724,15 @@ async function createRoomAsHost_Firebase(){
   const roomNo = await fbAllocateRoomNo();
   const roomId = `room${roomNo}`;
 
-  client.roomCode = roomId.toUpperCase(); // keep UI consistent
+  client.roomId = roomId.toLowerCase(); // room1 (dùng cho Firebase)
+  client.roomCode = roomId.toUpperCase(); // ROOM1 (chỉ để hiển thị)
   UI.roomInput.value = client.roomCode;
 
   client.isHost = true;
   client.host = new HostController(roomId, FB.uid);
 
   // init room meta + clear intents + write state
-  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   await roomRef.set({
     meta: {
       roomNo,
@@ -1782,7 +1763,7 @@ async function createRoomAsHost_Firebase(){
   setStatusUI();
 
   // transport
-  const t = new FirebaseTransport(roomId);
+  const t = new FirebaseTransport(client.roomId);
   installTransport(t);
   await t.attachPresence();
 
@@ -1805,7 +1786,7 @@ async function createRoomAsHost_Firebase(){
 
     // OPTIONAL: cleanup old intents (keep db light)
     // remove the intent after processed
-    try{ await FB.db.ref(`AllRoom/${roomId}/intents/${intentKey}`).remove(); }catch(e){}
+    try{ await FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`).remove(); }catch(e){}
   });
 
   // all clients (including host) listen state
@@ -1827,7 +1808,7 @@ async function createRoomAsHost_Firebase(){
   client.roomMeta = { roomNo, roomId };
 
   // host cleanup when room empty
-  installFirebaseRoomCleanupAsHost(roomId, roomNo);
+  installFirebaseRoomCleanupAsHost(client.roomId, roomNo);
 }
 
 async function joinRoomAsClient_Firebase(){
@@ -1837,12 +1818,14 @@ async function joinRoomAsClient_Firebase(){
   client.selfName = FB.username;
 
   // room input: "ROOM1" or "room1"
-  readInputs();
+  readInputs(); // cái này set client.roomCode = "ROOM1"
+  client.roomId = client.roomCode.toLowerCase(); // "room1"
+  
   const roomId = (client.roomCode || "").toLowerCase(); // e.g. room1
   if (!roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
   // check exists
-  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
 
@@ -1857,7 +1840,7 @@ async function joinRoomAsClient_Firebase(){
   client.isHost = false;
   client.host = null;
 
-  const t = new FirebaseTransport(roomId);
+  const t = new FirebaseTransport(client.roomId);
   installTransport(t);
   await t.attachPresence();
 
@@ -1892,9 +1875,6 @@ function installFirebaseRoomCleanupAsHost(roomId, roomNo){
 /* =========================
    Hook UI create/join buttons
 ========================= */
-
-const _oldCreate = UI.createBtn.onclick;
-const _oldJoin   = UI.joinBtn.onclick;
 
 // override click handlers:
 UI.createBtn.addEventListener("click", async ()=>{
@@ -2054,8 +2034,15 @@ function installTransport(t){
   };
 
   t.onMessage = (msg) => {
-    if (!msg || msg.roomCode !== client.roomCode) return;
-
+    // FirebaseTransport không dùng msg.roomCode
+    if (!msg) return;
+  
+    // Nếu đang firebase mode thì bỏ qua phần local/ws handler
+    if (client.transport instanceof FirebaseTransport) return;
+  
+    // ===== phần local/ws code cũ giữ nguyên phía dưới =====
+    if (msg.roomCode !== client.roomCode) return;
+    
     // Local authoritative: host acts like server
     if (msg.type === "hello" && client.isHost && client.host){
       // someone joined -> add/update player and send snapshot to all
@@ -2270,11 +2257,13 @@ UI.applyDeckBtn.addEventListener("click", ()=>{
 
   
 UI.createBtn.addEventListener("click", ()=>{
+  if (UI.modeSelect.value === "firebase") return; // ✅ chặn khi firebase
   createRoomAsHost();
   installStateRawHandler();
 });
 
 UI.joinBtn.addEventListener("click", ()=>{
+  if (UI.modeSelect.value === "firebase") return; // ✅ chặn khi firebase
   joinRoomAsClient();
   installStateRawHandler();
 });
