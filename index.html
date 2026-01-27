@@ -244,7 +244,13 @@
       z-index:10;
       pointer-events:auto;
     }
-    
+
+    .panel header .toggle{
+      cursor:pointer;
+      font-size:14px;
+      opacity:.7;
+    }
+
     /* Make HUD smaller + collapsible */
     .hud{ gap:10px; }
     .panel{ max-width: 360px; }
@@ -257,13 +263,13 @@
 <body>
 <div id="app">
   <canvas id="c"></canvas>
-  <button id="toggleHudBtn" class="secondary" style="padding:6px 10px">Ẩn/Hiện</button>
   <div id="toast"></div>
 
   <div class="hud">
     <div class="panel" style="min-width:320px">
       <header>
         <div class="title">PHÒNG CHƠI</div>
+        <div class="toggle">−</div>
         <div class="row" style="gap:8px">
           <div class="badge" id="netBadge">OFFLINE</div>
         </div>
@@ -326,6 +332,7 @@
     <div class="panel" style="min-width:320px">
       <header>
         <div class="title">TRẠNG THÁI</div>
+        <div class="toggle">−</div>
         <div class="badge" id="roomBadge">—</div>
       </header>
       <div class="content col">
@@ -357,6 +364,7 @@
     <div class="panel">
       <header>
         <div class="title">CHAT</div>
+        <div class="toggle">−</div>
         <div class="badge" id="chatBadge">—</div>
       </header>
       <div id="chatLog"></div>
@@ -400,7 +408,10 @@
 
   <div id="help">
     <div class="panel">
-      <header><div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div></header>
+      <header>
+        <div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div>
+        <div class="toggle">−</div>
+      </header>
       <div class="content hint">
         <div>
           <span class="kbd">Kéo thả</span> chuột để di chuyển bài (table / hand).<br/>
@@ -1027,24 +1038,31 @@ class HostController {
       }
 
       case "draw": {
-        // draw from deck to player's hand
         const deck = st.stacks["stack_deck"];
         if (!deck) return {ok:false, reason:"Missing deck"};
         if (deck.cardIds.length === 0) return {ok:false, reason:"Deck empty"};
-        const cid = deck.cardIds.shift(); // take top
+      
+        const cid = deck.cardIds.shift();
         const c = ensureCard(cid);
+      
+        const player = st.players.find(p=>p.id===fromId);
+        if (!player) return {ok:false};
+      
+        const handKey = seatToHandKey(player.seat);
+        const handRect = rects[handKey];
+      
         c.zone = ZONES.hand;
         c.owner = fromId;
-        c.faceUp = true; // typical: show to owner
-        // place into player's hand area near bottom center
-        const hx = rects.hand.x + rects.hand.w/2 + randInt(-80,80);
-        const hy = rects.hand.y + rects.hand.h/2 + randInt(-25,25);
-        c.x = hx; c.y = hy;
+        c.faceUp = true;
         c.stackId = null;
-        // (optional) auto fan? We'll let client render nicely.
+      
+        c.x = handRect.x + handRect.w/2 + randInt(-80,80);
+        c.y = handRect.y + handRect.h/2 + randInt(-25,25);
+      
         this.bumpVersion();
         return {ok:true};
       }
+
 
       case "discard": {
         // move card/stack to discard pile
@@ -1929,16 +1947,16 @@ function rr(x,y,w,h,r){
   ctx.closePath();
 }
 
-function drawZone(rect, label, subtitle=""){
+function drawZone(rect, label, subtitle="", highlight=false){
   const s0 = toScreen({x:rect.x, y:rect.y});
   const s1 = toScreen({x:rect.x+rect.w, y:rect.y+rect.h});
   const x = s0.x, y = s0.y, w = (s1.x-s0.x), h = (s1.y-s0.y);
 
   ctx.save();
-  ctx.globalAlpha = 0.55;
-  rr(x,y,w,h,18);
-  ctx.fillStyle = "rgba(0,0,0,.10)";
+  ctx.globalAlpha = highlight ? 0.85 : 0.35;
+  ctx.fillStyle = highlight ? "rgba(122,162,255,.22)" : "rgba(0,0,0,.10)";
   ctx.fill();
+  rr(x,y,w,h,18);
   ctx.globalAlpha = 0.9;
   ctx.strokeStyle = "rgba(255,255,255,.10)";
   ctx.lineWidth = 1;
@@ -2060,10 +2078,13 @@ function draw(){
   };
   
   drawZone(rects.table, "TABLE");
-  drawZone(rects.handBottom, "HAND (Bottom)", seatName(0));
-  drawZone(rects.handTop,    "HAND (Top)",    seatName(1));
-  drawZone(rects.handLeft,   "HAND (Left)",   seatName(2));
-  drawZone(rects.handRight,  "HAND (Right)",  seatName(3));
+  const me = s?.players.find(p=>p.id===client.selfId);
+  const mySeat = me ? me.seat : -1;
+  
+  drawZone(rects.handBottom, "HAND (Bottom)", seatName(0), mySeat===0);
+  drawZone(rects.handTop,    "HAND (Top)",    seatName(1), mySeat===1);
+  drawZone(rects.handLeft,   "HAND (Left)",   seatName(2), mySeat===2);
+  drawZone(rects.handRight,  "HAND (Right)",  seatName(3), mySeat===3);
   drawZone(
     rects.deck,
     "DECK",
@@ -2087,15 +2108,16 @@ function draw(){
 
     if (o.type === "card"){
       const c = s.cards[o.id];
-      const me = s.players.find(p=>p.id===client.selfId);
-      const accent = me ? COLORS[me.color] : null;
+      const owner = s.players.find(p=>p.id===c.owner);
+      const accent = owner ? COLORS[owner.color] : null;
       drawCardAtScreen(sp.x, sp.y, !!c.faceUp, c.frontSeed, accent, isSelected);
     } else {
       const stack = s.stacks[o.id];
       const topId = stack.cardIds[0];
       const top = topId ? s.cards[topId] : null;
       const me = s.players.find(p=>p.id===client.selfId);
-      const accent = stack.zone===ZONES.hand ? (me ? COLORS[me.color] : null) : null;
+      const owner = s.players.find(p=>p.id===stack.owner);
+      const accent = owner ? COLORS[owner.color] : null;
 
       if (top){
         drawCardAtScreen(sp.x, sp.y, !!top.faceUp, top.frontSeed, accent, isSelected, true, stack.cardIds.length);
