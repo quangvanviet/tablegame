@@ -1322,13 +1322,11 @@ function installStateRawHandler(){
 }
 
 UI.createBtn.addEventListener("click", ()=>{
-  alert("CLICK OK");
   createRoomAsHost();
   installStateRawHandler();
 });
 
 UI.joinBtn.addEventListener("click", ()=>{
-  alert("JOIN CLICK OK");
   joinRoomAsClient();
   installStateRawHandler();
 });
