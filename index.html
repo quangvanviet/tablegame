@@ -1874,7 +1874,7 @@ function rr(x,y,w,h,r){
   ctx.closePath();
 }
 
-function drawZone(rect, label, subtitle="")){
+function drawZone(rect, label, subtitle=""){
   const s0 = toScreen({x:rect.x, y:rect.y});
   const s1 = toScreen({x:rect.x+rect.w, y:rect.y+rect.h});
   const x = s0.x, y = s0.y, w = (s1.x-s0.x), h = (s1.y-s0.y);
