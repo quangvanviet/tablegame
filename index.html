@@ -1654,8 +1654,8 @@ async function fbReleaseRoomNo(roomNo){
 class FirebaseTransport extends NetTransport {
   constructor(roomId){
     super();
-    this.roomId = this.roomId;
-    this.roomRef = FB.db.ref(`AllRoom/${roomId}`);
+    this.roomId = roomId;
+    this.roomRef = FB.db.ref(`AllRoom/${this.roomId}`);
     this.intentsRef = this.roomRef.child("intents");
     this.stateRef = this.roomRef.child("state");
     this.presRef = this.roomRef.child(`presence/${FB.uid}`);
@@ -1741,7 +1741,7 @@ async function createRoomAsHost_Firebase(){
   UI.roomInput.value = client.roomCode;
 
   client.isHost = true;
-  client.host = new HostController(roomId, FB.uid);
+  client.host = new HostController(client.roomCode, FB.uid); // ✅ dùng ROOM1 cho state
 
   // init room meta + clear intents + write state
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
@@ -1830,11 +1830,10 @@ async function joinRoomAsClient_Firebase(){
   client.selfName = FB.username;
 
   // room input: "ROOM1" or "room1"
-  readInputs(); // cái này set client.roomCode = "ROOM1"
+  readInputs(); // sets client.roomCode = "ROOM1"
   client.roomId = client.roomCode.toLowerCase(); // "room1"
   
-  const roomId = (client.roomCode || "").toLowerCase(); // e.g. room1
-  if (!roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
+  if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
   // check exists
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
@@ -1866,7 +1865,7 @@ async function joinRoomAsClient_Firebase(){
   });
 
   setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
-  toast("Đã vào " + roomId);
+  toast("Đã vào " + client.roomCode);
 }
 
 /* host cleanup room empty */
