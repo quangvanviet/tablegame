@@ -597,35 +597,86 @@ const CARD = {
 };
 
 const TABLE = {
-  // virtual board (world coords) — camera is fixed top-down 2D
-  w: 1400,
+  w: 1700,
   h: 900,
-  margin: 60,
-  handH: 190,
-  sideW: 190,
+  margin: 40,
+  handH: 150,     // chiều cao hand trên/dưới
+  sideW: 220,     // deck / discard
+  rightW: 260,    // cột người chơi bên phải
 };
 
 function zoneRects(){
   const m = TABLE.margin;
-  const handH = TABLE.handH;
-  const sideW = TABLE.sideW;
+  const { w, h, handH, sideW, rightW } = TABLE;
 
-  const tableRect = { x: m+sideW, y: m+handH, w: TABLE.w-2*m-2*sideW, h: TABLE.h-2*m-2*handH };
+  // bàn chơi trung tâm
+  const tableRect = {
+    x: m + sideW,
+    y: m + handH,
+    w: w - 2*m - sideW - rightW,
+    h: h - 2*m - 2*handH
+  };
 
   return {
     table: tableRect,
 
-    // 4 hands
-    handBottom: { x: tableRect.x, y: tableRect.y + tableRect.h, w: tableRect.w, h: handH },
-    handTop:    { x: tableRect.x, y: m,                  w: tableRect.w, h: handH },
-    handLeft:   { x: m,           y: tableRect.y,        w: sideW,       h: tableRect.h },
-    handRight:  { x: TABLE.w-m-sideW, y: tableRect.y,    w: sideW,       h: tableRect.h },
+    // ===== TOP PLAYERS =====
+    handTopLeft: {
+      x: tableRect.x,
+      y: m,
+      w: tableRect.w / 2,
+      h: handH
+    },
+    handTopRight: {
+      x: tableRect.x + tableRect.w / 2,
+      y: m,
+      w: tableRect.w / 2,
+      h: handH
+    },
 
-    deck:    { x: m,                y: m+handH,          w: sideW, h: 220 },
-    discard: { x: TABLE.w-m-sideW,  y: m+handH,          w: sideW, h: 220 },
+    // ===== BOTTOM PLAYERS =====
+    handBottomLeft: {
+      x: tableRect.x,
+      y: tableRect.y + tableRect.h,
+      w: tableRect.w / 2,
+      h: handH
+    },
+    handBottomRight: {
+      x: tableRect.x + tableRect.w / 2,
+      y: tableRect.y + tableRect.h,
+      w: tableRect.w / 2,
+      h: handH
+    },
+
+    // ===== RIGHT PLAYERS =====
+    handRightTop: {
+      x: w - m - rightW,
+      y: tableRect.y,
+      w: rightW,
+      h: tableRect.h / 2
+    },
+    handRightBottom: {
+      x: w - m - rightW,
+      y: tableRect.y + tableRect.h / 2,
+      w: rightW,
+      h: tableRect.h / 2
+    },
+
+    // ===== DECK / DISCARD =====
+    deck: {
+      x: m,
+      y: tableRect.y,
+      w: sideW,
+      h: tableRect.h / 2
+    },
+    discard: {
+      x: m,
+      y: tableRect.y + tableRect.h / 2,
+      w: sideW,
+      h: tableRect.h / 2
+    }
   };
 }
-
 
 /* =========================
    Rendering (Canvas)
@@ -959,11 +1010,17 @@ class HostController {
     };
 
     const seatToHandKey = (seat) => {
-      if (seat === 0) return "handBottom";
-      if (seat === 1) return "handTop";
-      if (seat === 2) return "handLeft";
-      return "handRight";
+      switch (seat){
+        case 0: return "handTopLeft";
+        case 1: return "handBottomLeft";
+        case 2: return "handTopRight";
+        case 3: return "handBottomRight";
+        case 4: return "handRightTop";
+        case 5: return "handRightBottom";
+        default: return null;
+      }
     };
+
     
     const normalizeCardZoneFromPos = (x,y, forPlayerId) => {
       const handKeys = ["handBottom","handTop","handLeft","handRight"];
@@ -2113,15 +2170,16 @@ function draw(){
   const me = s?.players.find(p=>p.id===client.selfId);
   const mySeat = me ? me.seat : -1;
   
-  drawZone(rects.handBottom, "HAND (Bottom)", seatName(0), mySeat===0);
-  drawZone(rects.handTop,    "HAND (Top)",    seatName(1), mySeat===1);
-  drawZone(rects.handLeft,   "HAND (Left)",   seatName(2), mySeat===2);
-  drawZone(rects.handRight,  "HAND (Right)",  seatName(3), mySeat===3);
-  drawZone(
-    rects.deck,
-    "DECK",
-    `${s?.stacks?.stack_deck?.cardIds?.length || 0} cards`
-  );
+  drawZone(rects.handTopLeft,    "PLAYER 1", seatName(0), mySeat===0);
+  drawZone(rects.handTopRight,   "PLAYER 3", seatName(2), mySeat===2);
+  
+  drawZone(rects.handBottomLeft, "PLAYER 2", seatName(1), mySeat===1);
+  drawZone(rects.handBottomRight,"PLAYER 4", seatName(3), mySeat===3);
+  
+  drawZone(rects.handRightTop,   "PLAYER 5", seatName(4), mySeat===4);
+  drawZone(rects.handRightBottom,"PLAYER 6", seatName(5), mySeat===5);
+  
+  drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
 
   const objs = listDrawableObjects(s);
