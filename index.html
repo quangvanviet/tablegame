@@ -373,7 +373,7 @@
         </div>
         <div class="row" style="justify-content:space-between">
           <div class="col" style="gap:6px">
-            <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 4)</div>
+            <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 6)</div>
             <div id="playersLine" style="font-size:13px; line-height:1.4">—</div>
           </div>
         </div>
@@ -447,9 +447,6 @@
           <span class="kbd">U</span> tách 1 lá ra khỏi chồng (lấy top).<br/>
           <span class="kbd">G</span> gom chồng: thả 1 lá lên lá khác (auto), hoặc nhấn G khi đang kéo để ép gom.<br/>
           <span class="kbd">Click</span> chọn lá/chồng. <span class="kbd">Esc</span> bỏ chọn.
-        </div>
-        <div style="margin-top:8px; color:rgba(233,236,255,.8)">
-          Tip: Đây là sandbox, không ép luật — chỉ quản lý objects + sync realtime.
         </div>
       </div>
     </div>
@@ -2175,14 +2172,14 @@ function draw(){
   const me = s?.players.find(p=>p.id===client.selfId);
   const mySeat = me ? me.seat : -1;
   
-  drawZone(rects.handTopLeft,    "PLAYER 1", seatName(0), mySeat===0);
-  drawZone(rects.handTopRight,   "PLAYER 3", seatName(2), mySeat===2);
+  drawZone(rects.handTopLeft,    "Người chơi 1", seatName(0), mySeat===0);
+  drawZone(rects.handTopRight,   "Người chơi 3", seatName(2), mySeat===2);
   
-  drawZone(rects.handBottomLeft, "PLAYER 2", seatName(1), mySeat===1);
-  drawZone(rects.handBottomRight,"PLAYER 4", seatName(3), mySeat===3);
+  drawZone(rects.handBottomLeft, "Người chơi 2", seatName(1), mySeat===1);
+  drawZone(rects.handBottomRight,"Người chơi 4", seatName(3), mySeat===3);
   
-  drawZone(rects.handRightTop,   "PLAYER 5", seatName(4), mySeat===4);
-  drawZone(rects.handRightBottom,"PLAYER 6", seatName(5), mySeat===5);
+  drawZone(rects.handRightTop,   "Người chơi 5", seatName(4), mySeat===4);
+  drawZone(rects.handRightBottom,"Người chơi 6", seatName(5), mySeat===5);
   
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
