@@ -1172,22 +1172,34 @@ function makeTransportForCurrentMode(){
 
 function createRoomAsHost(){
   readInputs();
+
   client.isHost = true;
   client.host = new HostController(client.roomCode, client.selfId);
 
   const t = makeTransportForCurrentMode();
   installTransport(t);
 
-  // host adds itself as player
-  client.host.addOrUpdatePlayer({id: client.selfId, name: client.selfName});
-  // initial chat
-  client.host.applyIntent(client.selfId, {type:"chat", text:`Room created. Host: ${client.selfName}`});
-  // show own redacted view too
-  client.authoritative = redactStateForViewer(client.host.state, client.selfId);
+  // ✅ ADD HOST AS PLAYER
+  client.host.addOrUpdatePlayer({
+    id: client.selfId,
+    name: client.selfName
+  });
+
+  // ✅ FORCE STATE FOR HOST ITSELF
+  client.authoritative = redactStateForViewer(
+    client.host.state,
+    client.selfId
+  );
   client.lastVersion = client.authoritative.version;
+
+  // ✅ UPDATE UI IMMEDIATELY
+  setNetBadge("LOCAL", "rgba(73,209,124,.6)");
   setStatusUI();
+
+  // ✅ BROADCAST FOR OTHER TABS
   broadcastState();
-  toast("Đã tạo phòng (Host).");
+
+  toast("Đã tạo phòng (Host)");
 }
 
 function joinRoomAsClient(){
