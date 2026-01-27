@@ -233,6 +233,24 @@
       #chatPanel{width:min(340px, 48vw);}
       .hud{flex-direction:column;}
     }
+    /* Right inspector */
+    #inspector{
+      position:absolute;
+      right:12px;
+      bottom:12px;
+      width:min(360px, 40vw);
+      height:min(520px, 62vh);
+      z-index:10;
+      pointer-events:auto;
+    }
+    
+    /* Make HUD smaller + collapsible */
+    .hud{ gap:10px; }
+    .panel{ max-width: 360px; }
+    
+    /* Optional: minimize buttons row */
+    .hud .panel header{ cursor:default; }
+
   </style>
 </head>
 <body>
@@ -245,7 +263,22 @@
     <div class="panel" style="min-width:320px">
       <header>
         <div class="title">PHÒNG CHƠI</div>
-        <div class="badge" id="netBadge">OFFLINE</div>
+        <div class="row">
+          <div class="col" style="flex:1; min-width:220px">
+            <label>Front folder (host)</label>
+            <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
+          </div>
+          <div class="col" style="flex:1; min-width:220px">
+            <label>Back image URL</label>
+            <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
+          </div>
+        </div>
+        <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
+
+        <div class="row" style="gap:8px">
+          <button id="toggleHudBtn" class="secondary" style="padding:6px 10px">Ẩn/Hiện</button>
+          <div class="badge" id="netBadge">OFFLINE</div>
+        </div>
       </header>
       <div class="content col">
         <div class="row">
@@ -333,6 +366,37 @@
       </form>
     </div>
   </div>
+  
+  <div id="inspector">
+    <div class="panel" style="height:100%; display:flex; flex-direction:column;">
+      <header>
+        <div class="title">CARD INSPECTOR</div>
+        <div class="badge" id="insBadge">—</div>
+      </header>
+  
+      <div class="content" style="display:flex; flex-direction:column; gap:10px; height:100%;">
+        <div id="insPreview" style="
+          flex:1;
+          border:1px solid rgba(255,255,255,.12);
+          border-radius: 14px;
+          background: rgba(0,0,0,.18);
+          display:flex; align-items:center; justify-content:center;
+          overflow:hidden;
+        ">
+          <div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>
+        </div>
+  
+        <div class="row" style="justify-content:space-between">
+          <button id="btnFlip" class="secondary" style="flex:1">Flip</button>
+          <button id="btnDiscard" class="danger" style="flex:1">Discard</button>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <button id="btnUnstack" class="secondary" style="flex:1">Unstack</button>
+          <button id="btnShuffle" class="secondary" style="flex:1">Shuffle</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div id="help">
     <div class="panel">
@@ -377,7 +441,55 @@ const randInt = (a, b) => (Math.random() * (b - a + 1) + a) | 0;
 const now = () => Date.now();
 const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
 const deepClone = (obj) => structuredClone ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
+frontBaseInput: document.getElementById("frontBaseInput"),
+backUrlInput: document.getElementById("backUrlInput"),
+applyDeckBtn: document.getElementById("applyDeckBtn"),
+const INS = {
+  badge: document.getElementById("insBadge"),
+  preview: document.getElementById("insPreview"),
+  btnFlip: document.getElementById("btnFlip"),
+  btnDiscard: document.getElementById("btnDiscard"),
+  btnUnstack: document.getElementById("btnUnstack"),
+  btnShuffle: document.getElementById("btnShuffle"),
+};
 
+function updateInspector(){
+  const st = getState();
+  const sel = client.selected;
+  if (!st || !sel){
+    INS.badge.textContent = "—";
+    INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>`;
+    return;
+  }
+
+  if (sel.type === "card"){
+    const c = st.cards[sel.id];
+    INS.badge.textContent = sel.id + (c?.lockedBy ? " (LOCK)" : "");
+    const frontUrl = st.assets?.frontBase ? (st.assets.frontBase + sel.id + ".png") : "";
+    const backUrl  = st.assets?.backUrl || "";
+    const url = (c?.faceUp && frontUrl) ? frontUrl : (backUrl || "");
+    INS.preview.innerHTML = url
+      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set. Host hãy set Front/Base + Back URL.</div>`;
+  } else {
+    const s = st.stacks[sel.id];
+    const topId = s?.cardIds?.[0];
+    INS.badge.textContent = sel.id + ` (${s?.cardIds?.length||0})`;
+    if (topId){
+      const c = st.cards[topId];
+      const frontUrl = st.assets?.frontBase ? (st.assets.frontBase + topId + ".png") : "";
+      const backUrl  = st.assets?.backUrl || "";
+      const url = (c?.faceUp && frontUrl) ? frontUrl : (backUrl || "");
+      INS.preview.innerHTML = url
+        ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
+        : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set.</div>`;
+    } else {
+      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Empty stack</div>`;
+    }
+  }
+}
+
+  
 function toast(text, ms=1600){
   const el = document.getElementById("toast");
   el.textContent = text;
@@ -420,17 +532,26 @@ const TABLE = {
 };
 
 function zoneRects(){
-  // World-space rectangles defining logical zones.
   const m = TABLE.margin;
   const handH = TABLE.handH;
   const sideW = TABLE.sideW;
+
+  const tableRect = { x: m+sideW, y: m+handH, w: TABLE.w-2*m-2*sideW, h: TABLE.h-2*m-2*handH };
+
   return {
-    table:   { x: m+sideW, y: m,            w: TABLE.w-2*m-2*sideW, h: TABLE.h-2*m-handH },
-    hand:    { x: m+sideW, y: TABLE.h-m-handH, w: TABLE.w-2*m-2*sideW, h: handH },
-    deck:    { x: m,       y: m+120,        w: sideW, h: 220 },
-    discard: { x: TABLE.w-m-sideW, y: m+120, w: sideW, h: 220 },
+    table: tableRect,
+
+    // 4 hands
+    handBottom: { x: tableRect.x, y: tableRect.y + tableRect.h, w: tableRect.w, h: handH },
+    handTop:    { x: tableRect.x, y: m,                  w: tableRect.w, h: handH },
+    handLeft:   { x: m,           y: tableRect.y,        w: sideW,       h: tableRect.h },
+    handRight:  { x: TABLE.w-m-sideW, y: tableRect.y,    w: sideW,       h: tableRect.h },
+
+    deck:    { x: m,                y: m+handH,          w: sideW, h: 220 },
+    discard: { x: TABLE.w-m-sideW,  y: m+handH,          w: sideW, h: 220 },
   };
 }
+
 
 /* =========================
    Rendering (Canvas)
@@ -602,8 +723,9 @@ function makeFreshTableState(roomCode, hostId){
     stacks: {},
     chat: [],
     version: 1,
+    assets: { frontBase:"", backUrl:"" },
   };
-
+  
   // Create a default deck (stack) with 40 cards, placed on deck zone.
   const rects = zoneRects();
   const deckX = rects.deck.x + rects.deck.w/2;
@@ -616,7 +738,9 @@ function makeFreshTableState(roomCode, hostId){
     owner: null,
     x: deckX,
     y: deckY,
-    cardIds: []
+    cardIds: [],
+    lockedBy: null,
+    lockedAt: 0,
   };
 
   for(let i=1;i<=40;i++){
@@ -630,7 +754,9 @@ function makeFreshTableState(roomCode, hostId){
       zone: ZONES.deck,
       owner: null,
       stackId: deckStackId,
-      order: i
+      order: i,
+      lockedBy: null,
+      lockedAt: 0,
     };
     st.stacks[deckStackId].cardIds.push(id);
   }
@@ -674,6 +800,14 @@ function redactStateForViewer(state, viewerId){
    Host Logic (Authoritative Server in Local mode)
 ========================= */
 class HostController {
+  case "setAssets": {
+    if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+    st.assets.frontBase = (action.frontBase||"").trim();
+    st.assets.backUrl = (action.backUrl||"").trim();
+    this.bumpVersion();
+    return {ok:true};
+  }
+  
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
     this.hostId = hostId;
@@ -688,7 +822,8 @@ class HostController {
       // Assign first available color
       const used = new Set(this.state.players.map(x=>x.color));
       const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % 4];
-      p = {id, name: name || "Player", color, connectedAt: now()};
+      const seat = this.state.players.length; // 0..3
+      p = {id, name: name || "Player", color, seat, connectedAt: now()};
       this.state.players.push(p);
     }else{
       p.name = name || p.name;
@@ -713,6 +848,7 @@ class HostController {
     if (!player) return {ok:false, reason:"Not in room"};
 
     const rects = zoneRects();
+    const canUse = (obj) => !obj.lockedBy || obj.lockedBy === fromId;
 
     const ensureCard = (id) => st.cards[id];
     const ensureStack = (id) => st.stacks[id];
@@ -755,13 +891,42 @@ class HostController {
       return sid;
     };
 
-    const normalizeCardZoneFromPos = (x,y, forPlayerId) => {
-      // Determine if point is in player's hand zone or table.
-      const inHand = (x>=rects.hand.x && x<=rects.hand.x+rects.hand.w && y>=rects.hand.y && y<=rects.hand.y+rects.hand.h);
-      // Deck/discard are handled by stacks positions themselves.
-      if (inHand) return {zone:ZONES.hand, owner:forPlayerId};
-      return {zone:ZONES.table, owner:null};
+    const seatToHandKey = (seat) => {
+      if (seat === 0) return "handBottom";
+      if (seat === 1) return "handTop";
+      if (seat === 2) return "handLeft";
+      return "handRight";
     };
+    
+    const normalizeCardZoneFromPos = (x,y, forPlayerId) => {
+      const p = st.players.find(pp=>pp.id===forPlayerId);
+      const mySeat = p ? p.seat : 0;
+    
+      // if dropped into ANY hand rect => belongs to that seat's owner
+      const handKeys = ["handBottom","handTop","handLeft","handRight"];
+      for (const hk of handKeys){
+        const r = rects[hk];
+        const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
+        if (inRect){
+          // map hand rect -> owner by seat
+          const seat = hk==="handBottom"?0 : hk==="handTop"?1 : hk==="handLeft"?2 : 3;
+          const ownerPlayer = st.players.find(pp=>pp.seat===seat);
+          return {zone:ZONES.hand, owner: ownerPlayer ? ownerPlayer.id : null, handKey: hk};
+        }
+      }
+    
+      if (!ownerPlayer) {
+        // chưa có người ngồi seat này → coi như TABLE
+        return { zone: ZONES.table, owner: null, handKey: null };
+      }
+      
+      return {
+        zone: ZONES.hand,
+        owner: ownerPlayer.id,
+        handKey: hk
+      };
+    };
+
 
     // Validate action types:
     switch(action.type){
@@ -771,6 +936,7 @@ class HostController {
         if (targetType === "card"){
           const c = ensureCard(id);
           if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
+          if (!canUse(c)) return {ok:false, reason:"Locked"};
           detachFromStack(id);
           const z = normalizeCardZoneFromPos(x,y, fromId);
           c.x=x; c.y=y; c.zone=z.zone; c.owner=z.owner;
@@ -778,6 +944,7 @@ class HostController {
         } else if (targetType === "stack"){
           const s = ensureStack(id);
           if (!s) return {ok:false, reason:"Missing stack"};
+          if (!canUse(s)) return {ok:false, reason:"Locked"};
           // moving a hand stack is private to owner
           if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
           const z = normalizeCardZoneFromPos(x,y, fromId);
@@ -992,6 +1159,29 @@ class HostController {
         return {ok:true};
       }
 
+      case "lock": {
+        const {targetType, id} = action;
+        const obj = targetType==="card" ? ensureCard(id) : ensureStack(id);
+        if (!obj) return {ok:false, reason:"Missing"};
+        if (obj.lockedBy && obj.lockedBy !== fromId) return {ok:false, reason:"Locked"};
+        obj.lockedBy = fromId;
+        obj.lockedAt = now();
+        this.bumpVersion();
+        return {ok:true};
+      }
+      case "unlock": {
+        const {targetType, id} = action;
+        const obj = targetType==="card" ? ensureCard(id) : ensureStack(id);
+        if (!obj) return {ok:true};
+        if (obj.lockedBy === fromId){
+          obj.lockedBy = null;
+          obj.lockedAt = 0;
+          this.bumpVersion();
+        }
+        return {ok:true};
+      }
+
+        
       default:
         return {ok:false, reason:"Unknown action"};
     }
@@ -1082,7 +1272,7 @@ function setStatusUI(){
       ${p.id===s.hostId ? `<span style="margin-left:auto;color:var(--muted);font-size:11px;border:1px solid rgba(255,255,255,.12);padding:2px 6px;border-radius:999px">HOST</span>` : ""}
     </div>`;
   }).join("");
-
+  updateInspector();
   renderChat(s);
 }
 
@@ -1320,7 +1510,28 @@ function installStateRawHandler(){
     }
   };
 }
+  
+const imgCache = new Map();
+function loadImg(url){
+  if (!url) return null;
+  if (imgCache.has(url)) return imgCache.get(url);
+  const im = new Image();
+  im.src = url;
+  imgCache.set(url, im);
+  return im;
+}
 
+UI.applyDeckBtn.addEventListener("click", ()=>{
+  if (!client.isHost) return toast("Host mới set deck images");
+  sendIntent({
+    type:"setAssets",
+    frontBase: UI.frontBaseInput.value,
+    backUrl: UI.backUrlInput.value
+  });
+  toast("Applied deck images");
+});
+
+  
 UI.createBtn.addEventListener("click", ()=>{
   createRoomAsHost();
   installStateRawHandler();
@@ -1468,6 +1679,8 @@ canvas.addEventListener("mousedown", (ev)=>{
 
   if (hit){
     client.selected = hit;
+    updateInspector();
+    sendIntent({type:"lock", targetType: hit.type, id: hit.id});
     // start drag
     client.dragging = {
       target: hit,
@@ -1477,6 +1690,7 @@ canvas.addEventListener("mousedown", (ev)=>{
     };
   } else {
     client.selected = null;
+    updateInspector();
   }
 });
 
@@ -1512,6 +1726,7 @@ addEventListener("mouseup", (ev)=>{
       dropOnType: hit.type,
       dropOnId: hit.id
     });
+    sendIntent({type:"unlock", targetType: drag.target.type, id: drag.target.id});
     return;
   }
 
@@ -1524,6 +1739,26 @@ addEventListener("mouseup", (ev)=>{
     y: drop.y - (drag.offset?.dy||0),
   });
 });
+
+INS.btnFlip.onclick = ()=>{
+  if (!client.selected) return;
+  sendIntent({type:"flip", targetType: client.selected.type, id: client.selected.id});
+};
+INS.btnDiscard.onclick = ()=>{
+  if (!client.selected) return;
+  sendIntent({type:"discard", targetType: client.selected.type, id: client.selected.id});
+};
+INS.btnUnstack.onclick = ()=>{
+  const sel = client.selected;
+  if (!sel || sel.type!=="stack") return;
+  sendIntent({type:"unstack", stackId: sel.id});
+};
+INS.btnShuffle.onclick = ()=>{
+  const sel = client.selected;
+  if (sel?.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
+  else sendIntent({type:"shuffle", stackId:"stack_deck"});
+};
+
 
 function calcDragOffset(state, target, p){
   if (target.type === "card"){
@@ -1649,7 +1884,7 @@ function rr(x,y,w,h,r){
   ctx.closePath();
 }
 
-function drawZone(rect, label){
+function drawZone(rect, label, subtitle="")){
   const s0 = toScreen({x:rect.x, y:rect.y});
   const s1 = toScreen({x:rect.x+rect.w, y:rect.y+rect.h});
   const x = s0.x, y = s0.y, w = (s1.x-s0.x), h = (s1.y-s0.y);
@@ -1668,6 +1903,11 @@ function drawZone(rect, label){
   ctx.fillStyle = "rgba(233,236,255,.7)";
   ctx.font = "12px " + getComputedStyle(document.body).fontFamily;
   ctx.fillText(label, x+12, y+18);
+  if (subtitle){
+    ctx.globalAlpha = 0.6;
+    ctx.fillText(subtitle, x+12, y+34);
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
 }
 
@@ -1743,6 +1983,15 @@ function drawCardAtScreen(cx, cy, faceUp, frontSeed, accent=null, isSelected=fal
   ctx.restore();
 }
 
+const toggleHudBtn = document.getElementById("toggleHudBtn");
+let hudHidden = false;
+toggleHudBtn.addEventListener("click", ()=>{
+  hudHidden = !hudHidden;
+  document.querySelectorAll(".hud > .panel, #chatPanel, #help").forEach(el=>{
+    el.style.display = hudHidden ? "none" : "";
+  });
+});
+
 /* =========================
    Main Render Loop
 ========================= */
@@ -1757,16 +2006,21 @@ function draw(){
   ctx.restore();
 
   const rects = zoneRects();
+  const s = getState();
+  
+  const seatName = (seat)=>{
+    if (!s) return "";
+    const p = s.players.find(pp=>pp.seat===seat);
+    return p ? p.name : "(empty)";
+  };
+  
   drawZone(rects.table, "TABLE");
-  drawZone(rects.hand, "YOUR HAND (private)");
+  drawZone(rects.handBottom, "HAND (Bottom)", seatName(0));
+  drawZone(rects.handTop,    "HAND (Top)",    seatName(1));
+  drawZone(rects.handLeft,   "HAND (Left)",   seatName(2));
+  drawZone(rects.handRight,  "HAND (Right)",  seatName(3));
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
-
-  const s = getState();
-  if (!s){
-    requestAnimationFrame(draw);
-    return;
-  }
 
   const objs = listDrawableObjects(s);
 
