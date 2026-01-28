@@ -3070,7 +3070,9 @@ if (DECKUI.newSetBtn) DECKUI.newSetBtn.onclick = createNewSet;
 if (DECKUI.saveBtn) DECKUI.saveBtn.onclick = saveCurrentSet;
 if (DECKUI.deleteSetBtn) DECKUI.deleteSetBtn.onclick = deleteCurrentSet;
 if (DECKUI.loadSetBtn) DECKUI.loadSetBtn.onclick = loadSelectedSet;
-if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=> DECKUI.list && DECKUI.list.appendChild(makeCardUrlRow(""));
+if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=>{
+    DECKUI.list.appendChild(makeCardTypeRow());
+  };
 if (DECKUI.loadToRoomBtn) DECKUI.loadToRoomBtn.onclick = hostLoadSetToRoom;
 
 /* =========================================================
