@@ -825,7 +825,6 @@
     <!-- Bảng score -->
     <div id="statusBoard" class="collapsed">
       <header>
-        
         <div class="right">
           <button class="collapse-btn" id="sbToggle" type="button">+</button>
           <div class="hint" id="sbHint">—</div>
@@ -835,8 +834,6 @@
       <div class="body" id="sbBody"></div>
     </div>
 
-
-    
     <!-- Chat -->
     <div id="chatPanel" class="collapsible">
       <header>
@@ -3732,10 +3729,14 @@ function updateStatsOverlay(){
 
 const STATUS = {
   el: document.getElementById("statusBoard"),
+  body: document.getElementById("sbBody"),
+  hint: document.getElementById("sbHint"),
+  toggle: document.getElementById("sbToggle"),
   lastSig: "",
   bound: false,
   editing: false,
   _timer: null,
+  collapsed: true,
 };
 
 function isHost(s){
@@ -3757,11 +3758,24 @@ function ensureStatsRow(s, playerId){
 }
   
 function initStatusBoardUI(){
-  if (!STATUS.el || STATUS.bound) return;
+  if (!STATUS.el || !STATUS.body || STATUS.bound) return;
   STATUS.bound = true;
 
-  // event delegation: chỉ bind 1 lần
-  STATUS.el.addEventListener("input", (e)=>{
+  // toggle +/-
+  if (STATUS.toggle){
+    const apply = ()=>{
+      STATUS.el.classList.toggle("collapsed", STATUS.collapsed);
+      STATUS.toggle.textContent = STATUS.collapsed ? "+" : "−";
+    };
+    STATUS.toggle.addEventListener("click", ()=>{
+      STATUS.collapsed = !STATUS.collapsed;
+      apply();
+    });
+    apply();
+  }
+
+  // event delegation: bind 1 lần trên body
+  STATUS.body.addEventListener("input", (e)=>{
     const inp = e.target.closest("input[data-kind]");
     if (!inp) return;
 
@@ -3784,20 +3798,20 @@ function initStatusBoardUI(){
     }
   });
 
-  // khi đang gõ -> đừng re-render làm mất caret
-  STATUS.el.addEventListener("focusin", (e)=>{
+  // đang gõ -> đừng re-render
+  STATUS.body.addEventListener("focusin", (e)=>{
     if (e.target.closest("input[data-kind]")) STATUS.editing = true;
   });
-  STATUS.el.addEventListener("focusout", (e)=>{
+  STATUS.body.addEventListener("focusout", (e)=>{
     if (e.target.closest("input[data-kind]")){
-      // delay nhẹ để focus chuyển giữa các input không bị bật/tắt
       setTimeout(()=>{
         const active = document.activeElement;
-        STATUS.editing = !!(active && STATUS.el.contains(active) && active.matches("input[data-kind]"));
+        STATUS.editing = !!(active && STATUS.body.contains(active) && active.matches("input[data-kind]"));
       }, 0);
     }
   });
 }
+
 
 // debounce gửi intent
 function sendIntentDebounced(intent){
@@ -3809,7 +3823,7 @@ function renderStatusBoard(){
   initStatusBoardUI();
 
   const s = getState();
-  if (!s || !STATUS.el) return;
+  if (!s || !STATUS.el || !STATUS.body) return;
 
   // nếu đang edit input thì không rebuild DOM (tránh lag + mất con trỏ)
   if (STATUS.editing) return;
@@ -3909,14 +3923,13 @@ function renderStatusBoard(){
     `;
   }).join("");
 
-  STATUS.el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-weight:800;letter-spacing:.04em;opacity:0.95;">SCOREBOARD</div>
-      <div style="opacity:0.65;font-size:11px;">
-        ${host ? "Host sửa tên cột" : "Header: host-only"}
-      </div>
-    </div>
-
+  // update hint trên header
+  if (STATUS.hint){
+    STATUS.hint.textContent = host ? "Host sửa tên cột" : "Header: host-only";
+  }
+  
+  // chỉ render BODY, không đụng header
+  STATUS.body.innerHTML = `
     <table style="border-collapse:collapse;width:100%;">
       <thead>
         <tr>
@@ -3929,6 +3942,7 @@ function renderStatusBoard(){
       </tbody>
     </table>
   `;
+
 }
 
 // chống XSS (vì dùng innerHTML)
