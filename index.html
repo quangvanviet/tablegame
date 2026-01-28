@@ -1561,12 +1561,6 @@ const ensureUIState = (st) => {
   st.ui.statsByPlayer = st.ui.statsByPlayer || {};
 };
   
-function ensureUIState(st){
-  st.ui = st.ui || {};
-  st.ui.statHeaders = st.ui.statHeaders || ["ATK","DEF","HP","COIN"];
-  st.ui.statsByPlayer = st.ui.statsByPlayer || {};
-}
-  
 class HostController {
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
