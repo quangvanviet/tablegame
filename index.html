@@ -818,6 +818,8 @@ window.addEventListener("DOMContentLoaded", () => {
     lobby: pickScreenEl("screenLobby","lobbyScreen"),
     match: pickScreenEl("screenMatch","matchScreen"),
   };
+
+  console.log("SCREENS READY:", SCREENS);
 });
 
 function setScreen(name){
@@ -1104,6 +1106,78 @@ function makeFreshTableState(roomCode, hostId){
   return st;
 }
 
+function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
+  // types: [{name, frontUrl, count}]
+  const deck = st.stacks[deckStackId];
+  if (!deck) throw new Error("Missing stack_deck");
+
+  // Xóa các card cũ thuộc deckStack (tùy bạn: hoặc giữ cards khác)
+  // Ở đây mình làm "rebuild sạch": xóa toàn bộ cards và stacks thường,
+  // giữ discard stack + players + assets.
+  const rects = zoneRects();
+  const deckX = rects.deck.x + rects.deck.w/2;
+  const deckY = rects.deck.y + rects.deck.h/2;
+
+  // reset cards + reset stacks (giữ discard + deck)
+  const keepDeck = st.stacks["stack_deck"];
+  const keepDiscard = st.stacks["stack_discard"];
+
+  st.cards = {};
+  st.stacks = {
+    stack_deck: {...keepDeck, x:deckX, y:deckY, zone:ZONES.deck, owner:null, cardIds:[]},
+    stack_discard: keepDiscard ? keepDiscard : {
+      id:"stack_discard",
+      zone:ZONES.discard,
+      owner:null,
+      x: rects.discard.x + rects.discard.w/2,
+      y: rects.discard.y + rects.discard.h/2,
+      cardIds:[]
+    }
+  };
+
+  // build deck cards
+  let running = 1;
+  for (const t of types){
+    const frontUrl = (t.frontUrl||"").trim();
+    const count = Math.max(1, parseInt(t.count,10)||1);
+    const name = (t.name||"").trim();
+
+    if (!frontUrl) continue;
+
+    for (let k=0; k<count; k++){
+      const id = "D" + String(running).padStart(4,"0") + "_" + uid().slice(0,6);
+      st.cards[id] = {
+        id,
+        faceUp: false,
+        x: deckX, y: deckY,
+        zone: ZONES.deck,
+        owner: null,
+        stackId: "stack_deck",
+        order: running,
+        frontSeed: running,       // fallback text
+        frontUrl: frontUrl,       // << IMPORTANT
+        typeName: name            // optional
+      };
+      st.stacks.stack_deck.cardIds.push(id);
+      running++;
+    }
+  }
+
+  // Nếu muốn: auto shuffle ngay khi build
+  for(let i=st.stacks.stack_deck.cardIds.length-1;i>0;i--){
+    const j = randInt(0,i);
+    const a = st.stacks.stack_deck.cardIds;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+
+  // discard rỗng
+  st.stacks.stack_discard.cardIds = [];
+
+  // bump
+  st.version = (st.version||0) + 1;
+}
+
+  
 function ensureStateShape(state){
   if (!state || typeof state !== "object") return null;
   const s = deepClone(state);
@@ -1347,42 +1421,21 @@ class HostController {
       }
 
       case "draw": {
+        const player = st.players.find(p=>p.id===fromId);
+        if (!player) return { ok:false, reason:"No player" };
+      
         const handKey = seatToHandKey(player.seat);
         const handRect = rects[handKey];
-        if (!handRect) return {ok:false, reason:"No hand zone"};
-
-        // draw from custom pool urls if exists
-        const pool = (Array.isArray(st._deckPool) ? st._deckPool : []).filter(Boolean);
-        if (pool.length > 0){
-          const pick = pool[randInt(0, pool.length-1)];
-          const newId = "CI_" + uid().slice(0,10);
-
-          st.cards[newId] = {
-            id: newId,
-            frontSeed: 1,
-            faceUp: true,
-            x: handRect.x + handRect.w/2 + randInt(-60,60),
-            y: handRect.y + handRect.h/2 + randInt(-20,20),
-            zone: ZONES.hand,
-            owner: fromId,
-            stackId: null,
-            order: now(),
-            frontUrl: pick,
-            tintOwner: fromId
-          };
-
-          this.bumpVersion();
-          return {ok:true};
-        }
-
-        // fallback physical deck stack_deck
+        if (!handRect) return { ok:false, reason:"No hand zone" };
+      
         const deck = st.stacks["stack_deck"];
-        if (!deck || (deck.cardIds?.length||0) === 0) return {ok:false, reason:"Deck empty"};
-
-        const cid = deck.cardIds.shift();
+        if (!deck || deck.cardIds.length === 0)
+          return { ok:false, reason:"Deck empty" };
+      
+        const cid = deck.cardIds.shift();     // rút 1 lá khỏi bộ bài
         const c = ensureCard(cid);
-        if (!c) return {ok:false, reason:"Missing card"};
-
+        if (!c) return { ok:false, reason:"Card missing" };
+      
         c.zone = ZONES.hand;
         c.owner = fromId;
         c.faceUp = true;
@@ -1390,10 +1443,11 @@ class HostController {
         c.y = handRect.y + handRect.h/2 + randInt(-20,20);
         c.stackId = null;
         c.tintOwner = fromId;
-
+      
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
+
 
       case "discard": {
         const {targetType, id} = action;
@@ -2136,49 +2190,83 @@ let deckCurrentSetId = null;
 function openDeckModal(){ if (DECKUI.modal) DECKUI.modal.style.display = "flex"; }
 function closeDeckModal(){ if (DECKUI.modal) DECKUI.modal.style.display = "none"; }
 
-function makeCardUrlRow(url=""){
+function makeCardTypeRow({frontUrl="", count=1, name=""} = {}){
   const row = document.createElement("div");
   row.className = "card-url-row";
 
-  const inp = document.createElement("input");
-  inp.className = "mono";
-  inp.placeholder = "https://.../front.png";
-  inp.value = url;
+  const inpName = document.createElement("input");
+  inpName.className = "mono";
+  inpName.placeholder = "Tên loại (optional)";
+  inpName.value = name;
+
+  const inpUrl = document.createElement("input");
+  inpUrl.className = "mono";
+  inpUrl.placeholder = "https://.../front.png";
+  inpUrl.value = frontUrl;
+
+  const inpCount = document.createElement("input");
+  inpCount.type = "number";
+  inpCount.min = "1";
+  inpCount.step = "1";
+  inpCount.value = String(Math.max(1, parseInt(count,10)||1));
+  inpCount.style.width = "86px";
 
   const del = document.createElement("button");
   del.className = "danger";
   del.textContent = "X";
   del.onclick = ()=> row.remove();
 
-  row.appendChild(inp);
+  row.appendChild(inpName);
+  row.appendChild(inpUrl);
+  row.appendChild(inpCount);
   row.appendChild(del);
   return row;
 }
 
+
 function fillEditorFromSet(setId, data){
   deckCurrentSetId = setId;
-  if (DECKUI.setNameInput) DECKUI.setNameInput.value = data?.name || "";
-  if (DECKUI.backUrlInput) DECKUI.backUrlInput.value = data?.backUrl || "";
-  if (!DECKUI.list) return;
-
+  DECKUI.setNameInput.value = data?.name || "";
+  DECKUI.backUrlInput.value = data?.backUrl || "";
   DECKUI.list.innerHTML = "";
-  const cards = data?.cards ? Object.values(data.cards) : [];
-  for (const c of cards){
-    DECKUI.list.appendChild(makeCardUrlRow(c.frontUrl || ""));
-  }
-  if (cards.length === 0) DECKUI.list.appendChild(makeCardUrlRow(""));
-}
 
+  const cardsObj = data?.cards || {};
+  const types = Object.values(cardsObj);
+
+  for (const t of types){
+    DECKUI.list.appendChild(makeCardTypeRow({
+      name: t.name || "",
+      frontUrl: t.frontUrl || "",
+      count: t.count || 1
+    }));
+  }
+  if (types.length === 0){
+    DECKUI.list.appendChild(makeCardTypeRow());
+  }
+}
 function editorToSetData(){
-  const name = (DECKUI.setNameInput?.value||"").trim() || "Untitled";
-  const backUrl = (DECKUI.backUrlInput?.value||"").trim();
-  const urls = [...(DECKUI.list?.querySelectorAll("input")||[])].map(i=>(i.value||"").trim()).filter(Boolean);
+  const name = (DECKUI.setNameInput.value||"").trim() || "Untitled";
+  const backUrl = (DECKUI.backUrlInput.value||"").trim();
+
+  const rows = [...DECKUI.list.querySelectorAll(".card-url-row")];
 
   const cards = {};
-  urls.forEach((u, idx)=>{ cards["c"+(idx+1)] = { frontUrl: u }; });
+  let idx = 1;
+  for (const row of rows){
+    const inputs = row.querySelectorAll("input");
+    const rowName  = (inputs[0]?.value || "").trim();
+    const frontUrl = (inputs[1]?.value || "").trim();
+    const count    = Math.max(1, parseInt(inputs[2]?.value || "1", 10) || 1);
+
+    if (!frontUrl) continue;
+
+    cards["t"+idx] = { name: rowName, frontUrl, count };
+    idx++;
+  }
 
   return { name, backUrl, cards, updatedAt: Date.now() };
 }
+
 
 async function refreshSetList(){
   await fbEnsureAuth();
@@ -2256,31 +2344,48 @@ async function hostLoadSetToRoom(){
   if (!client.isHost) return toast("Chỉ host mới load set vào room");
   if (!(client.transport instanceof FirebaseTransport)) return toast("Chỉ dùng được trong Firebase mode");
 
-  const id = deckCurrentSetId || DECKUI.setSelect?.value;
+  const id = deckCurrentSetId || DECKUI.setSelect.value;
   if (!id) return toast("Chưa chọn set");
 
-  // lấy từ editor là bản mới nhất
+  // lấy data từ editor
   const data = editorToSetData();
 
-  // save set
-  if (!deckCurrentSetId) await createNewSet();
+  if (!deckCurrentSetId){
+    await createNewSet();
+  }
   await saveCurrentSet();
 
-  const urls = Object.values((data.cards||{})).map(x=>x.frontUrl).filter(Boolean);
+  // extract types
+  const types = Object.values(data.cards || {}).map(t=>({
+    name: t.name || "",
+    frontUrl: t.frontUrl || "",
+    count: t.count || 1,
+  })).filter(t=>t.frontUrl && t.count>0);
+
+  const total = types.reduce((s,t)=>s + (t.count|0), 0);
+  if (total <= 0) return toast("Set rỗng (chưa có url)");
+
   const backUrl = data.backUrl || "";
 
+  // update meta
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
-  await roomRef.child("meta").update({ deckSource: { uid: FB.uid, setId: id }, deckBackUrl: backUrl });
+  await roomRef.child("meta").update({
+    deckSource: { uid: FB.uid, setId: id },
+    deckBackUrl: backUrl,
+    deckTotal: total
+  });
 
+  // BUILD physical deck on host state
   if (client.host && client.host.state){
     client.host.state.assets.backUrl = backUrl;
-    client.host.state._deckPool = urls;
-    client.host.bumpVersion();
+    buildPhysicalDeckFromTypes(client.host.state, types, "stack_deck");
+    client.host.bumpVersion?.();
     await client.transport.writeState(client.host.state);
   }
 
-  toast(`Host loaded set (${urls.length} cards)`);
+  toast(`Loaded deck: ${types.length} loại / ${total} lá`);
 }
+
 
 /* =========================================================
    14) Images cache
