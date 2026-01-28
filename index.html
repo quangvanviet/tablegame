@@ -3677,8 +3677,6 @@ function renderStatusBoard(){
     const tds = stats.map((v, idx)=>{
       const disabled = "";
       const title = "Click để sửa";
-      
-      const title = canEditRow ? "Click để sửa" : "Chỉ chủ nhân (hoặc host) sửa";
       return `
         <td style="padding:6px 6px; text-align:center;">
           <input ${disabled}
