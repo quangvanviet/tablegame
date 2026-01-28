@@ -3057,10 +3057,14 @@ function draw(){
 
   drawZone(rects.table, "TABLE", "", false);
 
-  const playerBySeat = (seat)=> s.players.find(pp=>pp.seat===seat) || null;
+  const selfId = client.selfId ?? client.playerId ?? client.uid ?? FB?.uid;
+  const me = s.players.find(p => p.id === selfId);
+  const mySeat = me ? (Number(me.seat) | 0) : -1;
+  
+  const playerBySeat = (seat)=> s.players.find(pp => (Number(pp.seat)|0) === seat) || null;
   const tintBySeat = (seat)=>{
     const p = playerBySeat(seat);
-    return p ? COLORS[p.color] : null;
+    return p ? (COLORS?.[p.color] ?? p.color ?? null) : null;
   };
   
   drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0, tintBySeat(0));
