@@ -1210,6 +1210,7 @@ function makeFreshTableState(roomCode, hostId){
       y: deckY,
       zone: ZONES.deck,
       owner: null,
+      ownerId: null,
       stackId: deckStackId,
       order: i,
     };
@@ -1412,7 +1413,7 @@ class HostController {
       detachFromStack(cardId);
       c.stackId = stackId;
       c.zone = stack.zone;
-      c.owner = stack.owner;
+      c.owner = (stack.zone === ZONES.hand) ? stack.owner : null; // chỉ hand mới có owner
       c.x = stack.x; c.y = stack.y;
       stack.cardIds = stack.cardIds || [];
       stack.cardIds.unshift(cardId);
@@ -1481,7 +1482,15 @@ class HostController {
           const z = normalizeCardZoneFromPos(x, y);
           c.x = x; c.y = y;
           c.zone = z.zone;
-          c.owner = (z.zone === ZONES.hand) ? z.owner : null;
+          
+          if (z.zone === ZONES.hand){
+            c.owner = z.owner;        // hand privacy
+            c.ownerId = z.owner;      // ✅ đổi chủ thật khi vào hand người khác
+          } else {
+            c.owner = null;           // table/discard ai cũng thao tác
+            // ✅ giữ nguyên c.ownerId
+          }
+          
           c.stackId = null;
         }
 
@@ -1490,20 +1499,26 @@ class HostController {
           if (!s) return {ok:false, reason:"Missing stack"};
           if (s.id === "stack_deck") return {ok:false, reason:"Deck fixed"};
           if (!canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
-
+        
           const z = normalizeCardZoneFromPos(x, y);
           s.x = x; s.y = y;
           s.zone = z.zone;
           s.owner = (z.zone === ZONES.hand) ? z.owner : null;
-
-          for (const cid of (s.cardIds||[])){
+        
+          // ✅ cập nhật toàn bộ card trong stack theo stack mới
+          for (const cid of (s.cardIds || [])){
             const c = ensureCard(cid);
             if (!c) continue;
-            c.x = x; c.y = y;
+            c.x = s.x;
+            c.y = s.y;
             c.zone = s.zone;
-            c.owner = s.owner;
+            c.owner = (s.zone === ZONES.hand) ? s.owner : null;
+        
+            // ✅ nếu muốn đổi CHỦ THẬT khi đưa stack vào hand người khác
+            if (s.zone === ZONES.hand && s.owner) c.ownerId = s.owner;
           }
         }
+
 
         this.bumpVersion();
         return {ok:true};
@@ -1562,6 +1577,7 @@ class HostController {
       
         c.zone = ZONES.hand;
         c.owner = fromId;
+        c.ownerId = fromId;
         c.faceUp = true;
         c.x = handRect.x + handRect.w/2 + randInt(-60,60);
         c.y = handRect.y + handRect.h/2 + randInt(-20,20);
@@ -1628,20 +1644,35 @@ class HostController {
         }
 
         let dropStackId = null;
+
         if (dropOnType === "card"){
           const c2 = ensureCard(dropOnId);
           if (!c2) return {ok:false, reason:"Missing drop card"};
+        
+          // ✅ chặn gom lên card thuộc DECK/DISCARD
+          if (c2.stackId === "stack_deck" || c2.stackId === "stack_discard"){
+            return {ok:false, reason:"Cannot stack onto deck/discard"};
+          }
+        
           dropStackId = c2.stackId || createStackFromCard(c2.id);
         } else {
           const s2 = ensureStack(dropOnId);
           if (!s2) return {ok:false, reason:"Missing drop stack"};
+        
+          // ✅ chặn gom lên DECK/DISCARD cố định
+          if (s2.id === "stack_deck" || s2.id === "stack_discard"){
+            return {ok:false, reason:"Cannot stack onto deck/discard"};
+          }
+        
           dropStackId = s2.id;
         }
+
 
         if (!dropStackId) return {ok:false, reason:"No drop stack"};
         if (dragStackId && dragStackId === dropStackId) return {ok:true};
 
         const dropStack = ensureStack(dropStackId);
+        if (!dropStack) return {ok:false, reason:"Drop stack missing (race)"};
         if (!canInteractStack(dropStack, fromId)) return {ok:false, reason:"No access"};
 
         const moving = [...dragCardIds];
@@ -1660,8 +1691,13 @@ class HostController {
         for (const cid of (dropStack.cardIds||[])){
           const c = ensureCard(cid);
           if (!c) continue;
-          c.x = dropStack.x; c.y = dropStack.y;
+          c.x = dropStack.x; 
+          c.y = dropStack.y;
+          c.zone = dropStack.zone;
+          c.owner = (dropStack.zone === ZONES.hand) ? dropStack.owner : null;
+          if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
         }
+
 
         this.bumpVersion();
         return {ok:true};
@@ -1681,7 +1717,9 @@ class HostController {
         c.x = s.x + randInt(-90,90);
         c.y = s.y + randInt(-60,60);
         c.zone = s.zone;
-        c.owner = s.owner;
+        
+        // ✅ chỉ HAND mới có owner; còn lại null để ai cũng thao tác
+        c.owner = (s.zone === ZONES.hand) ? s.owner : null;
 
         this.bumpVersion();
         return {ok:true};
@@ -2987,7 +3025,7 @@ function draw(){
       const c = s.cards[o.id];
       if (!c) continue;
 
-      const owner = s.players.find(p=>p.id===c.owner);
+      const owner = s.players.find(p=>p.id===(c.ownerId || c.owner));
       const accent = owner ? COLORS[owner.color] : null;
 
       const frontUrl = c.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
@@ -2999,7 +3037,8 @@ function draw(){
       const topId = stack.cardIds?.[0];
       const top = topId ? s.cards[topId] : null;
 
-      const owner = s.players.find(p=>p.id===stack.owner);
+      const topOwnerId = top?.ownerId || top?.owner || stack.owner;
+      const owner = s.players.find(p=>p.id===topOwnerId);
       const accent = owner ? COLORS[owner.color] : null;
 
       if (top){
