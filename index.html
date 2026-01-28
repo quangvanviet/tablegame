@@ -312,7 +312,7 @@
     
     .screen{ display:none; width:100%; height:100%; }
     .screen.active{ display:block; }
-    #authScreen{ display:flex; align-items:flex-start; justify-content:center; }
+    #authScreen{align-items:flex-start; justify-content:center; }
     #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
     #matchScreen{ position:relative; width:100%; height:100%; }
 
@@ -322,7 +322,6 @@
 <body>
 <!-- =========================
   SCREEN: AUTH (mặc định hiện)
-  Giữ nguyên #authPanel của bạn
 ========================= -->
 <div id="authScreen" class="screen active">
   <!-- Đăng nhập / Đăng ký -->
@@ -2916,7 +2915,6 @@ document.querySelectorAll(".collapse-btn").forEach(btn => {
 
 /* =========================================================
    20) Auth UI buttons (login/register/anon/logout/leave)
-   - bạn đã có các id: playAnonBtn, loginBtn, registerBtn, logoutBtn, leaveMatchBtn
 ========================================================= */
 async function registerUser(){
   fbInitOnce();
