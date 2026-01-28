@@ -3673,41 +3673,52 @@ function renderStatusBoard(){
   }).join("");
 
   const rows = (s.players || []).map(p=>{
-    const stats = ensureStatsRow(s, p.id);
-    const tds = stats.map((v, idx)=>{
-      const disabled = "";
-      const title = "Click để sửa";
-      return `
-        <td style="padding:6px 6px; text-align:center;">
-          <input ${disabled}
-            data-kind="stat" data-pid="${p.id}" data-idx="${idx}"
-            value="${escapeHtml((v ?? "").toString())}"
-            title="${title}"
-            style="
-              width: 90px;
-              text-align:center;
-              background: rgba(0,0,0,0.25);
-              border: 1px solid rgba(255,255,255,0.18);
-              border-radius: 6px;
-              color: #fff;
-              padding: 4px 6px;
-              outline: none;
-            "
-          />
-        </td>
-      `;
-    }).join("");
+  const stats = ensureStatsRow(s, p.id);
 
+  const tds = stats.map((v, idx)=>{
     return `
-      <tr style="border-top: 1px solid rgba(255,255,255,0.12);">
-        <td style="padding:6px 8px; white-space:nowrap;">
-          <span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${COLORS?.[p.color] ?? "rgba(255,255,255,0.35)"};margin-right:6px;"></span>
-          <span style="opacity:${isMe ? 1 : 0.85}; font-weight:${isMe ? 700 : 500};">${escapeHtml(p.name || "Player")}</span>
-        </td>
-        ${tds}
-      </tr>
+      <td style="padding:6px 6px; text-align:center;">
+        <input
+          data-kind="stat"
+          data-pid="${p.id}"
+          data-idx="${idx}"
+          value="${escapeHtml((v ?? "").toString())}"
+          title="Click để sửa"
+          style="
+            width: 90px;
+            text-align:center;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 6px;
+            color: #fff;
+            padding: 4px 6px;
+            outline: none;
+          "
+        />
+      </td>
     `;
   }).join("");
+
+  return `
+    <tr style="border-top: 1px solid rgba(255,255,255,0.12);">
+      <td style="padding:6px 8px; white-space:nowrap;">
+        <span style="
+          display:inline-block;
+          width:10px;
+          height:10px;
+          border-radius:3px;
+          background:${COLORS?.[p.color] ?? "rgba(255,255,255,.35)"};
+          margin-right:6px;
+        "></span>
+        <span style="opacity:0.9; font-weight:600;">
+          ${escapeHtml(p.name || "Player")}
+        </span>
+      </td>
+      ${tds}
+    </tr>
+  `;
+}).join("");
+
 
   STATUS.el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
