@@ -3720,8 +3720,9 @@ function updateStatsOverlay(){
 
   // lấy data realtime users (firebase) nếu có, không thì fallback players
   const users = (client.transport instanceof FirebaseTransport)
-    ? (client.authoritative?._users || null
+    ? (client.authoritative?._users || null)
     : null;
+
 
   for (const p of (s.players||[])){
     const key = seatRectKey(p.seat);
