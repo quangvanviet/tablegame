@@ -467,6 +467,29 @@
             </div>
           </div>
 
+          <!-- ===== SETUP / WAITING ROOM (NEW) ===== -->
+          <div id="setupBox" class="col" style="gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,.08)">
+            <div style="font-size:12px; color:var(--muted); font-weight:700;">PHÒNG CHỜ / SETUP</div>
+          
+            <div id="setupPhaseLine" class="hint" style="opacity:.95">
+              Đang chờ host...
+            </div>
+          
+            <!-- Host-only controls -->
+            <div id="hostSetupControls" class="col" style="gap:8px; display:none">
+              <label>Host: chọn setCard để chơi</label>
+              <select id="hostSetSelect" style="width:100%"></select>
+          
+              <div class="row">
+                <button id="hostRefreshSetsBtn" class="secondary" style="flex:1">Refresh set</button>
+                <button id="hostLoadDeckBtn" class="secondary" style="flex:1">Load deck</button>
+              </div>
+          
+              <button id="startGameBtn" style="width:100%">Bắt đầu chơi</button>
+            </div>
+          </div>
+          <!-- ===== /SETUP ===== -->
+          
           <div class="row">
             <button id="leaveMatchBtn" class="danger" style="flex:1">Rời phòng</button>
           </div>
@@ -799,6 +822,14 @@ const UI = {
   frontBaseInput: document.getElementById("frontBaseInput"),
   backUrlInput: document.getElementById("backUrlInput"),
   applyDeckBtn: document.getElementById("applyDeckBtn"),
+  setupBox: document.getElementById("setupBox"),
+  setupPhaseLine: document.getElementById("setupPhaseLine"),
+  hostSetupControls: document.getElementById("hostSetupControls"),
+  hostSetSelect: document.getElementById("hostSetSelect"),
+  hostRefreshSetsBtn: document.getElementById("hostRefreshSetsBtn"),
+  hostLoadDeckBtn: document.getElementById("hostLoadDeckBtn"),
+  startGameBtn: document.getElementById("startGameBtn"),
+
 };
 
   
@@ -829,6 +860,104 @@ function goMatch(){ setScreen("match"); try{ resize(); updateCamera(); }catch(e)
 goAuth();
 
 
+let _hostSetsCache = {}; // {setId: data}
+
+async function refreshHostSetSelect(){
+  await fbEnsureAuth();
+  if (!UI.hostSetSelect) return;
+
+  const snap = await FB.db.ref(`AllUser/${FB.uid}/setCard`).get();
+  _hostSetsCache = snap.val() || {};
+
+  UI.hostSetSelect.innerHTML = "";
+  const ids = Object.keys(_hostSetsCache);
+
+  if (ids.length === 0){
+    const op = document.createElement("option");
+    op.value = "";
+    op.textContent = "(chưa có setCard)";
+    UI.hostSetSelect.appendChild(op);
+    return;
+  }
+
+  for (const id of ids){
+    const set = _hostSetsCache[id] || {};
+    const cnt = Object.keys(set.cards || {}).length;
+    const op = document.createElement("option");
+    op.value = id;
+    op.textContent = `${set.name || id} (${cnt} loại)`;
+    UI.hostSetSelect.appendChild(op);
+  }
+}
+
+async function hostLoadSelectedSetToRoom_FromSaved(){
+  if (!client.isHost) return toast("Chỉ host mới load deck");
+  if (!(client.transport instanceof FirebaseTransport)) return toast("Chỉ dùng được trong Firebase mode");
+  await fbEnsureAuth();
+
+  const setId = UI.hostSetSelect?.value || "";
+  if (!setId) return toast("Chưa chọn set");
+
+  // nếu cache trống thì refresh
+  if (!_hostSetsCache[setId]) await refreshHostSetSelect();
+  const data = _hostSetsCache[setId];
+  if (!data) return toast("Set không tồn tại");
+
+  const types = Object.values(data.cards || {}).map(t=>({
+    name: t?.name || "",
+    frontUrl: (t?.frontUrl || "").trim(),
+    count: Math.max(1, parseInt(t?.count, 10) || 1),
+  })).filter(t => t.frontUrl && t.count > 0);
+
+  const total = types.reduce((s,t)=>s + (t.count|0), 0);
+  if (total <= 0) return toast("Set rỗng (chưa có URL)");
+
+  const backUrl = (data.backUrl || "").trim();
+
+  // update room meta để người khác / host refresh vẫn biết deckSource
+  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+  await roomRef.child("meta").update({
+    deckSource: { uid: FB.uid, setId },
+    deckBackUrl: backUrl,
+    deckTotal: total
+  });
+
+  // build deck vào host state + write state
+  if (client.host && client.host.state){
+    client.host.state.assets = client.host.state.assets || { frontBase:"", backUrl:"" };
+    client.host.state.assets.backUrl = backUrl;
+
+    buildPhysicalDeckFromTypes(client.host.state, types, "stack_deck");
+    client.host.bumpVersion?.();
+    await client.transport.writeState(client.host.state);
+  }
+
+  toast(`Loaded deck: ${types.length} loại / ${total} lá`);
+}
+
+if (UI.hostRefreshSetsBtn){
+  UI.hostRefreshSetsBtn.onclick = async ()=>{
+    try{ await refreshHostSetSelect(); toast("Đã refresh set"); }
+    catch(e){ console.error(e); toast(e.message || e); }
+  };
+}
+
+if (UI.hostLoadDeckBtn){
+  UI.hostLoadDeckBtn.onclick = async ()=>{
+    try{ await hostLoadSelectedSetToRoom_FromSaved(); }
+    catch(e){ console.error(e); toast(e.message || e); }
+  };
+}
+
+if (UI.startGameBtn){
+  UI.startGameBtn.onclick = ()=>{
+    if (!client.isHost) return toast("Chỉ host mới bắt đầu");
+    sendIntent({ type:"startGame" });
+    toast("Bắt đầu!");
+  };
+}
+
+  
 /* =========================================================
    5) Inspector (card inspector popup)
 ========================================================= */
@@ -1061,6 +1190,7 @@ function makeFreshTableState(roomCode, hostId){
     version: 1,
     assets: { frontBase:"", backUrl:"" },
     _deckPool: [], // FIX: bạn dùng _deckPool trong draw => phải có sẵn
+    game: { phase: "setup" },
   };
 
   const rects = zoneRects();
@@ -1167,7 +1297,8 @@ function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
 
   
 function ensureStateShape(state){
-  if (!state || typeof state !== "object") return null;
+  if (!s.game || typeof s.game !== "object") s.game = { phase:"setup" };
+  if (!s.game.phase) s.game.phase = "setup";
   const s = deepClone(state);
   if (!Array.isArray(s.players)) s.players = [];
   if (!s.cards || typeof s.cards !== "object") s.cards = {};
@@ -1583,6 +1714,17 @@ class HostController {
         return {ok:true};
       }
 
+      case "startGame": {
+        // host only
+        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        st.game = st.game || {};
+        st.game.phase = "playing";
+        st.game.startedAt = now();
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+
       default:
         return {ok:false, reason:"Unknown action"};
     }
@@ -1818,6 +1960,28 @@ function setStatusUI(){
     }
   }
 
+  // ===== Setup box UI =====
+  const phase = s.game?.phase || "setup";
+  if (UI.setupBox){
+    UI.setupBox.style.display = (phase === "setup") ? "" : "none";
+  }
+  if (UI.setupPhaseLine){
+    UI.setupPhaseLine.textContent = (phase === "setup")
+      ? "Đang ở phòng chờ. Host chọn deck và bấm Bắt đầu."
+      : "Đang chơi...";
+  }
+  
+  // host controls: chỉ host + firebase
+  const hostCanSetup = client.isHost && (client.transport instanceof FirebaseTransport);
+  if (UI.hostSetupControls){
+    UI.hostSetupControls.style.display = hostCanSetup && phase === "setup" ? "" : "none";
+    if (hostCanSetup && phase === "setup"){
+      // auto load list 1 lần nếu dropdown rỗng
+      if (UI.hostSetSelect && UI.hostSetSelect.options.length === 0){
+        refreshHostSetSelect().catch(()=>{});
+      }
+    }
+  }
   renderChat(s);
 }
 
