@@ -207,16 +207,6 @@
       color: rgba(255,255,255,.92);
     }
     
-    #chatPanel .collapse-btn{
-      width:30px; height:30px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.06);
-      color: rgba(255,255,255,.85);
-      cursor:pointer;
-    }
-    #chatPanel .collapse-btn:hover{ background: rgba(255,255,255,.10); }
-    
     #chatPanel .content{
       flex:1;
       display:flex;
@@ -510,7 +500,7 @@
     /* Status board (LoL-ish compact) */
     #statusBoard{
       position:absolute;
-      left:12px;
+      right:12px;
       top:12px;
       z-index:30;
       width: 360px;
@@ -560,17 +550,6 @@
       opacity:.65;
       user-select:none;
     }
-    
-    #statusBoard .toggleBtn{
-      width:28px;
-      height:28px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.06);
-      color: rgba(255,255,255,.9);
-      cursor:pointer;
-    }
-    #statusBoard .toggleBtn:hover{ background: rgba(255,255,255,.10); }
     
     #statusBoard .body{
       padding: 8px;
@@ -846,11 +825,12 @@
     <!-- Bảng score -->
     <div id="statusBoard" class="collapsed">
       <header>
-        <div class="title">Bảng điểm</div>
+        
         <div class="right">
+          <button class="collapse-btn" id="sbToggle" type="button">+</button>
           <div class="hint" id="sbHint">—</div>
-          <button class="toggleBtn" id="sbToggle" type="button">+</button>
         </div>
+        <div class="title">Bảng điểm</div>
       </header>
       <div class="body" id="sbBody"></div>
     </div>
@@ -860,17 +840,16 @@
     <!-- Chat -->
     <div id="chatPanel" class="collapsible">
       <header>
-        <div class="titleRow">
-          <div class="title">CHAT</div>
-          <div class="badge" id="chatBadge">0</div>
-        </div>
-    
         <div class="actions">
+          <button class="collapse-btn" data-target="chatPanel" type="button">−</button>
           <div class="chatToggle" id="chatToggle">
             <button type="button" data-mode="all" class="active">ALL</button>
             <button type="button" data-mode="team">TEAM</button>
           </div>
-          <button class="collapse-btn" data-target="chatPanel" type="button">−</button>
+        </div>
+        <div class="titleRow">
+          <div class="badge" id="chatBadge">0</div>
+          <div class="title">CHAT</div>
         </div>
       </header>
     
