@@ -507,6 +507,157 @@
       margin-right:2px;
     }
 
+    /* Status board (LoL-ish compact) */
+    #statusBoard{
+      position:absolute;
+      left:12px;
+      top:12px;
+      z-index:30;
+      width: 360px;
+      max-width: min(360px, 46vw);
+      border-radius: 12px;
+      overflow:hidden;
+      pointer-events:auto;
+    
+      background: rgba(10,12,18,.55);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      backdrop-filter: blur(10px);
+      color: rgba(255,255,255,.92);
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+    }
+    
+    #statusBoard.collapsed{
+      height: 40px;
+    }
+    
+    #statusBoard header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      background: linear-gradient(to bottom, rgba(0,0,0,.22), rgba(0,0,0,0));
+    }
+    
+    #statusBoard .title{
+      font-weight:800;
+      letter-spacing:.06em;
+      font-size:11px;
+      opacity:.9;
+      user-select:none;
+    }
+    
+    #statusBoard .right{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    
+    #statusBoard .hint{
+      font-size:11px;
+      opacity:.65;
+      user-select:none;
+    }
+    
+    #statusBoard .toggleBtn{
+      width:28px;
+      height:28px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.9);
+      cursor:pointer;
+    }
+    #statusBoard .toggleBtn:hover{ background: rgba(255,255,255,.10); }
+    
+    #statusBoard .body{
+      padding: 8px;
+    }
+    
+    #statusBoard.collapsed .body{
+      display:none;
+    }
+    
+    #statusBoard table{
+      width:100%;
+      border-collapse:collapse;
+    }
+    
+    #statusBoard th, #statusBoard td{
+      padding: 6px 4px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      text-align:center;
+    }
+    
+    #statusBoard th:first-child,
+    #statusBoard td:first-child{
+      text-align:left;
+      padding-left: 6px;
+      width: 40%;
+    }
+    
+    #statusBoard thead th{
+      border-top:none;
+      padding-top: 2px;
+    }
+    
+    .sbName{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
+    }
+    .sbDot{
+      width:10px; height:10px;
+      border-radius:4px;
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 0 0 3px rgba(0,0,0,.18);
+      flex:0 0 auto;
+    }
+    .sbNameText{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-weight:600;
+      opacity:.92;
+    }
+    
+    .sbInp{
+      width: 64px;
+      max-width: 64px;
+      text-align:center;
+      border-radius: 8px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.92);
+      padding: 6px 6px;
+      outline:none;
+    }
+    
+    .sbHdr{
+      font-weight:700;
+      letter-spacing:.04em;
+      font-size:11px;
+    }
+    
+    .sbHdrInp{
+      width: 64px;
+      max-width: 64px;
+      text-align:center;
+      border-radius: 8px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.92);
+      padding: 6px 6px;
+      outline:none;
+    }
+    .sbHdrInp[readonly]{
+      opacity:.75;
+      cursor: default;
+    }
+
   </style>
 </head>
 <body>
@@ -693,24 +844,17 @@
     </div>
 
     <!-- Bảng score -->
-    <div id="statusBoard" style="
-      position: fixed;
-      left: 50%;
-      bottom: 12px;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.55);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 10px;
-      padding: 10px;
-      color: #fff;
-      font-family: system-ui, sans-serif;
-      font-size: 12px;
-      z-index: 9999;
-      min-width: 520px;
-      user-select: none;
-    ">
-      <!-- render bằng JS -->
+    <div id="statusBoard" class="collapsed">
+      <header>
+        <div class="title">Bảng điểm</div>
+        <div class="right">
+          <div class="hint" id="sbHint">—</div>
+          <button class="toggleBtn" id="sbToggle" type="button">+</button>
+        </div>
+      </header>
+      <div class="body" id="sbBody"></div>
     </div>
+
 
     
     <!-- Chat -->
@@ -3576,7 +3720,7 @@ function updateStatsOverlay(){
 
   // lấy data realtime users (firebase) nếu có, không thì fallback players
   const users = (client.transport instanceof FirebaseTransport)
-    ? (client.authoritative?._users || null) // (mình sẽ hướng dẫn set ở phần dưới)
+    ? (client.authoritative?._users || null
     : null;
 
   for (const p of (s.players||[])){
@@ -3608,61 +3752,108 @@ function updateStatsOverlay(){
 
   const STATUS = {
   el: document.getElementById("statusBoard"),
-  _dirtyTimer: null,
+  lastSig: "",
+  bound: false,
+  editing: false,
+  _timer: null,
 };
 
-function isHost(s){
-  // tùy bạn đang lưu host thế nào
-  // ưu tiên state.hostId, nếu không có thì client.isHost
-  return (s?.hostId && client.selfId === s.hostId) || !!client.isHost;
+function initStatusBoardUI(){
+  if (!STATUS.el || STATUS.bound) return;
+  STATUS.bound = true;
+
+  // event delegation: chỉ bind 1 lần
+  STATUS.el.addEventListener("input", (e)=>{
+    const inp = e.target.closest("input[data-kind]");
+    if (!inp) return;
+
+    const s = getState();
+    if (!s) return;
+
+    const host = isHost(s);
+    const kind = inp.dataset.kind;
+
+    if (kind === "header"){
+      if (!host) return;
+      const idx = Number(inp.dataset.idx) | 0;
+      const value = (inp.value ?? "").toString().slice(0, 12);
+      sendIntentDebounced({ type:"set_stat_header", idx, value });
+    } else if (kind === "stat"){
+      const pid = inp.dataset.pid;
+      const idx = Number(inp.dataset.idx) | 0;
+      const value = (inp.value ?? "").toString().slice(0, 12);
+      sendIntentDebounced({ type:"set_stat", playerId: pid, idx, value });
+    }
+  });
+
+  // khi đang gõ -> đừng re-render làm mất caret
+  STATUS.el.addEventListener("focusin", (e)=>{
+    if (e.target.closest("input[data-kind]")) STATUS.editing = true;
+  });
+  STATUS.el.addEventListener("focusout", (e)=>{
+    if (e.target.closest("input[data-kind]")){
+      // delay nhẹ để focus chuyển giữa các input không bị bật/tắt
+      setTimeout(()=>{
+        const active = document.activeElement;
+        STATUS.editing = !!(active && STATUS.el.contains(active) && active.matches("input[data-kind]"));
+      }, 0);
+    }
+  });
 }
 
-function ensureStatsRow(s, playerId){
-  s.ui = s.ui || {};
-  s.ui.statHeaders = s.ui.statHeaders || ["ATK","DEF","HP","COIN"];
-  s.ui.statsByPlayer = s.ui.statsByPlayer || {};
-  if (!s.ui.statsByPlayer[playerId]) s.ui.statsByPlayer[playerId] = ["", "", "", ""];
-  // đảm bảo đủ 4 ô
-  for (let i=0;i<4;i++){
-    if (s.ui.statsByPlayer[playerId][i] == null) s.ui.statsByPlayer[playerId][i] = "";
-  }
-  return s.ui.statsByPlayer[playerId];
-}
-
-// Gửi intent “debounce” để tránh spam firebase khi gõ
+// debounce gửi intent
 function sendIntentDebounced(intent){
-  clearTimeout(STATUS._dirtyTimer);
-  STATUS._dirtyTimer = setTimeout(()=>{
-    sendIntent(intent);
-  }, 120);
+  clearTimeout(STATUS._timer);
+  STATUS._timer = setTimeout(()=> sendIntent(intent), 120);
 }
 
 function renderStatusBoard(){
+  initStatusBoardUI();
+
   const s = getState();
   if (!s || !STATUS.el) return;
 
+  // nếu đang edit input thì không rebuild DOM (tránh lag + mất con trỏ)
+  if (STATUS.editing) return;
+
+  // đảm bảo shape
   s.ui = s.ui || {};
-  const headers = s.ui.statHeaders || ["ATK","DEF","HP","COIN"];
+  const headers = (s.ui.statHeaders || ["ATK","DEF","HP","COIN"]).slice(0,4);
   while (headers.length < 4) headers.push("");
 
   const host = isHost(s);
 
-  // header cells (host edit)
+  // tạo "signature" nhẹ để chỉ update khi data đổi
+  // (dùng version + headers + players + stats)
+  let sig = `v=${s.version||0}|h=${headers.join(",")}|p=`;
+  const players = (s.players || []);
+  for (let i=0;i<players.length;i++){
+    const p = players[i];
+    if (!p) continue;
+    const stats = ensureStatsRow(s, p.id); // đảm bảo có 4 ô
+    sig += `${p.id}:${p.name||""}:${p.color||""}:${stats.join("/")};`;
+  }
+
+  if (sig === STATUS.lastSig) return; // ✅ không đổi thì thôi
+  STATUS.lastSig = sig;
+
+  // ===== render HTML (chỉ chạy khi sig đổi) =====
   const headerHtml = headers.map((h, idx)=>{
-    const disabled = host ? "" : "disabled";
+    // dùng readonly thay vì disabled để vẫn click/copy được
+    const ro = host ? "" : "readonly";
     const title = host ? "Host có thể đổi tên cột" : "Chỉ host sửa tên cột";
     return `
       <th style="padding:6px 6px; text-align:center;">
-        <input ${disabled}
+        <input ${ro}
           data-kind="header" data-idx="${idx}"
           value="${escapeHtml(h ?? "")}"
           title="${title}"
           style="
-            width: 90px;
+            width: 70px;
             text-align:center;
             background: rgba(255,255,255,0.08);
             border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 6px;
+            border-radius: 8px;
             color: #fff;
             padding: 4px 6px;
             outline: none;
@@ -3672,66 +3863,66 @@ function renderStatusBoard(){
     `;
   }).join("");
 
-  const rows = (s.players || []).map(p=>{
-  const stats = ensureStatsRow(s, p.id);
+  const rows = players.map(p=>{
+    if (!p) return "";
+    const stats = ensureStatsRow(s, p.id);
 
-  const tds = stats.map((v, idx)=>{
+    const tds = stats.slice(0,4).map((v, idx)=>{
+      return `
+        <td style="padding:6px 6px; text-align:center;">
+          <input
+            data-kind="stat"
+            data-pid="${p.id}"
+            data-idx="${idx}"
+            value="${escapeHtml((v ?? "").toString())}"
+            title="Sửa tự do"
+            style="
+              width: 70px;
+              text-align:center;
+              background: rgba(0,0,0,0.25);
+              border: 1px solid rgba(255,255,255,0.18);
+              border-radius: 8px;
+              color: #fff;
+              padding: 4px 6px;
+              outline: none;
+            "
+          />
+        </td>
+      `;
+    }).join("");
+
     return `
-      <td style="padding:6px 6px; text-align:center;">
-        <input
-          data-kind="stat"
-          data-pid="${p.id}"
-          data-idx="${idx}"
-          value="${escapeHtml((v ?? "").toString())}"
-          title="Click để sửa"
-          style="
-            width: 90px;
-            text-align:center;
-            background: rgba(0,0,0,0.25);
-            border: 1px solid rgba(255,255,255,0.18);
-            border-radius: 6px;
-            color: #fff;
-            padding: 4px 6px;
-            outline: none;
-          "
-        />
-      </td>
+      <tr style="border-top: 1px solid rgba(255,255,255,0.10);">
+        <td style="padding:6px 8px; white-space:nowrap;">
+          <span style="
+            display:inline-block;
+            width:10px;
+            height:10px;
+            border-radius:3px;
+            background:${COLORS?.[p.color] ?? "rgba(255,255,255,.35)"};
+            margin-right:6px;
+          "></span>
+          <span style="opacity:0.92; font-weight:600;">
+            ${escapeHtml(p.name || "Player")}
+          </span>
+        </td>
+        ${tds}
+      </tr>
     `;
   }).join("");
 
-  return `
-    <tr style="border-top: 1px solid rgba(255,255,255,0.12);">
-      <td style="padding:6px 8px; white-space:nowrap;">
-        <span style="
-          display:inline-block;
-          width:10px;
-          height:10px;
-          border-radius:3px;
-          background:${COLORS?.[p.color] ?? "rgba(255,255,255,.35)"};
-          margin-right:6px;
-        "></span>
-        <span style="opacity:0.9; font-weight:600;">
-          ${escapeHtml(p.name || "Player")}
-        </span>
-      </td>
-      ${tds}
-    </tr>
-  `;
-}).join("");
-
-
   STATUS.el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-weight:700;opacity:0.95;">Bảng Trạng Thái</div>
-      <div style="opacity:0.7;font-size:11px;">
-        ${host ? "Host: sửa được tên cột + tất cả chỉ số" : "Bạn: sửa chỉ số của mình"}
+      <div style="font-weight:800;letter-spacing:.04em;opacity:0.95;">SCOREBOARD</div>
+      <div style="opacity:0.65;font-size:11px;">
+        ${host ? "Host sửa tên cột" : "Header: host-only"}
       </div>
     </div>
 
     <table style="border-collapse:collapse;width:100%;">
       <thead>
         <tr>
-          <th style="padding:6px 8px;text-align:left;opacity:0.85;">Người chơi</th>
+          <th style="padding:6px 8px;text-align:left;opacity:0.85;">Player</th>
           ${headerHtml}
         </tr>
       </thead>
@@ -3740,27 +3931,6 @@ function renderStatusBoard(){
       </tbody>
     </table>
   `;
-
-  // bind input events
-  STATUS.el.querySelectorAll("input").forEach(inp=>{
-    inp.addEventListener("input", ()=>{
-      const kind = inp.dataset.kind;
-
-      if (kind === "header"){
-        if (!host) return;
-        const idx = Number(inp.dataset.idx) | 0;
-        const value = (inp.value ?? "").toString().slice(0, 12);
-        sendIntentDebounced({ type:"set_stat_header", idx, value });
-      }
-
-      if (kind === "stat"){
-        const pid = inp.dataset.pid;
-        const idx = Number(inp.dataset.idx) | 0;
-        const value = (inp.value ?? "").toString().slice(0, 12);
-        sendIntentDebounced({ type:"set_stat", playerId: pid, idx, value });
-      }
-    });
-  });
 }
 
 // chống XSS (vì dùng innerHTML)
