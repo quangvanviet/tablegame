@@ -3764,6 +3764,18 @@ function isHost(s){
   // ưu tiên state.hostId, nếu không có thì client.isHost
   return (s?.hostId && client.selfId === s.hostId) || !!client.isHost;
 }
+
+function ensureStatsRow(s, playerId){
+  s.ui = s.ui || {};
+  s.ui.statHeaders = s.ui.statHeaders || ["ATK","DEF","HP","COIN"];
+  s.ui.statsByPlayer = s.ui.statsByPlayer || {};
+  if (!s.ui.statsByPlayer[playerId]) s.ui.statsByPlayer[playerId] = ["", "", "", ""];
+  // đảm bảo đủ 4 ô
+  for (let i=0;i<4;i++){
+    if (s.ui.statsByPlayer[playerId][i] == null) s.ui.statsByPlayer[playerId][i] = "";
+  }
+  return s.ui.statsByPlayer[playerId];
+}
   
 function initStatusBoardUI(){
   if (!STATUS.el || STATUS.bound) return;
