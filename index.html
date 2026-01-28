@@ -1901,12 +1901,13 @@ class FirebaseTransport extends NetTransport {
 
     this.usersRef = this.roomRef.child("users");
     this._usersCb = null;
-    listenUsers(onUsers){
-      this._usersCb = (snap)=> onUsers(snap.val() || {});
-      this.usersRef.on("value", this._usersCb);
-    }
   }
-
+  
+  listenUsers(onUsers){
+    this._usersCb = (snap)=> onUsers(snap.val() || {});
+    this.usersRef.on("value", this._usersCb);
+  }
+  
   async attachPresence(){
     this._connectedCb = async (snap)=>{
       if (snap.val() === true){
