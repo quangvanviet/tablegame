@@ -309,10 +309,252 @@
     
     /* Optional: minimize buttons row */
     .hud .panel header{ cursor:default; }
+    
+    .screen{ display:none; width:100%; height:100%; }
+    .screen.active{ display:block; }
+    #authScreen{ display:flex; align-items:flex-start; justify-content:center; }
+    #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
+    #matchScreen{ position:relative; width:100%; height:100%; }
 
+    
   </style>
 </head>
 <body>
+<!-- =========================
+  SCREEN: AUTH (mặc định hiện)
+  Giữ nguyên #authPanel của bạn
+========================= -->
+<div id="authScreen" class="screen active">
+  <!-- Đăng nhập / Đăng ký -->
+  <div class="panel" id="authPanel" style="max-width:320px; margin:40px auto;">
+    <header>
+      <div class="title">ĐĂNG NHẬP</div>
+    </header>
+    <div class="content col">
+      <input id="authEmail" placeholder="Email" />
+      <input id="authPassword" type="password" placeholder="Mật khẩu" />
+      <input id="authUsername" placeholder="Tên hiển thị (khi đăng ký)" />
+
+      <div class="row">
+        <button id="loginBtn">Đăng nhập</button>
+        <button id="registerBtn" class="secondary">Đăng ký</button>
+      </div>
+
+      <div class="row">
+        <button id="playAnonBtn" class="secondary" style="flex:1">Chơi thử (Anonymous)</button>
+      </div>
+
+      <div id="authStatus" style="font-size:12px;color:var(--muted)"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- =========================
+  SCREEN: LOBBY (ẩn ban đầu)
+  Dùng lại roomPanel làm "Sảnh chờ"
+  (Không đổi id roomPanel để JS/CSS khỏi vỡ)
+========================= -->
+<div id="lobbyScreen" class="screen">
+  <!-- GIỮ NGUYÊN deckModal ở ngoài screen cũng được,
+       nhưng để lobby vẫn ok; mình để deckModal ngoài cùng phía dưới -->
+  <div class="hud">
+    <div class="panel collapsible" id="roomPanel">
+      <header>
+        <div class="title">PHÒNG CHƠI</div>
+        <div class="row" style="gap:8px">
+          <div class="badge" id="netBadge">OFFLINE</div>
+        </div>
+        <button class="collapse-btn" data-target="roomPanel">−</button>
+      </header>
+
+      <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
+
+      <div class="content col">
+        <div class="row">
+          <div class="content col" style="flex:1; min-width:220px">
+            <label>Front folder (host)</label>
+            <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
+          </div>
+          <div class="col" style="flex:1; min-width:220px">
+            <label>Back image URL</label>
+            <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
+          </div>
+          <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
+        </div>
+
+        <div class="col">
+          <div class="row">
+            <div class="col" style="flex:1; min-width:150px">
+              <label>Tên hiển thị</label>
+              <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
+            </div>
+            <div class="col" style="min-width:120px">
+              <label>Chế độ</label>
+              <select id="modeSelect">
+                <option value="firebase">Firebase RTDB</option>
+                <option value="local">Local (4 tab)</option>
+                <option value="ws">WebSocket</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="wsRow" class="row" style="display:none">
+            <div class="col" style="flex:1; min-width:200px">
+              <label>WebSocket URL</label>
+              <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col" style="flex:1; min-width:160px">
+              <label>Mã phòng</label>
+              <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
+            </div>
+            <button id="createBtn">Tạo phòng (Host)</button>
+            <button id="joinBtn" class="secondary">Vào phòng</button>
+          </div>
+
+          <div class="row">
+            <button id="copyLinkBtn" class="secondary">Copy link</button>
+            <button id="resetBtn" class="danger">Reset bàn (Host)</button>
+            <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button>
+          </div>
+
+          <div class="hint">
+            - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
+            - Server authoritative: Host giữ state, client chỉ gửi intent.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- =========================
+  SCREEN: MATCH (ẩn ban đầu)
+  Giữ nguyên #app và mọi id bên trong
+========================= -->
+<div id="matchScreen" class="screen">
+  <div id="app">
+    <canvas id="c"></canvas>
+    <div id="toast"></div>
+
+    <div class="hud">
+      <!-- Trạng thái -->
+      <div class="panel collapsible" id="sttPanel">
+        <header>
+          <div class="title">TRẠNG THÁI</div>
+          <div class="badge" id="roomBadge">—</div>
+          <button class="collapse-btn" data-target="sttPanel">−</button>
+        </header>
+        <div class="content col">
+          <div class="row" style="justify-content:space-between">
+            <div class="col" style="gap:4px">
+              <div style="font-size:12px; color:var(--muted)">Bạn là</div>
+              <div id="meLine" style="font-weight:700">—</div>
+            </div>
+            <div class="col" style="gap:4px; align-items:flex-end">
+              <div style="font-size:12px; color:var(--muted)">Host</div>
+              <div id="hostLine" style="font-weight:700">—</div>
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:space-between">
+            <div class="col" style="gap:6px">
+              <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 6)</div>
+              <div id="playersLine" style="font-size:13px; line-height:1.4">—</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <button id="leaveMatchBtn" class="danger" style="flex:1">Rời phòng</button>
+          </div>
+
+          <div class="hint">
+            Privacy: bài trong <b>hand</b> của người khác chỉ hiện mặt sau với bạn.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="panel collapsible" id="chatPanel">
+      <header>
+        <div class="title">CHAT</div>
+        <div class="badge" id="chatBadge">—</div>
+        <button class="collapse-btn" data-target="chatPanel">−</button>
+      </header>
+      <div class="content">
+        <div id="chatLog"></div>
+        <form id="chatForm">
+          <input id="chatInput" placeholder="Nhập chat rồi Enter..." />
+          <button type="submit">Gửi</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Inspector -->
+    <div id="inspector">
+      <div class="panel" style="height:100%; display:flex; flex-direction:column;">
+        <header>
+          <div class="title">CARD INSPECTOR</div>
+          <div class="badge" id="insBadge">—</div>
+        </header>
+
+        <div class="content" style="display:flex; flex-direction:column; gap:10px; height:100%;">
+          <div id="insPreview" style="
+            flex:1;
+            border:1px solid rgba(255,255,255,.12);
+            border-radius: 14px;
+            background: rgba(0,0,0,.18);
+            display:flex; align-items:center; justify-content:center;
+            overflow:hidden;
+          ">
+            <div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>
+          </div>
+
+          <div class="row" style="justify-content:space-between">
+            <button id="btnFlip" class="secondary" style="flex:1">Flip</button>
+            <button id="btnDiscard" class="danger" style="flex:1">Discard</button>
+          </div>
+          <div class="row" style="justify-content:space-between">
+            <button id="btnUnstack" class="secondary" style="flex:1">Unstack</button>
+            <button id="btnShuffle" class="secondary" style="flex:1">Shuffle</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Help -->
+    <div class="panel collapsible" id="help">
+      <div class="panel">
+        <header>
+          <div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div>
+          <button class="collapse-btn" data-target="help">−</button>
+        </header>
+        <div class="content hint">
+          <div>
+            <span class="kbd">Kéo thả</span> chuột để di chuyển bài (table / hand).<br/>
+            <span class="kbd">D</span> rút 1 lá từ Deck về Hand của bạn (đứng gần Deck hoặc chọn Deck).<br/>
+            <span class="kbd">F</span> lật lá / chồng (stack).<br/>
+            <span class="kbd">S</span> trộn chồng (deck/stack).<br/>
+            <span class="kbd">U</span> tách 1 lá ra khỏi chồng (lấy top).<br/>
+            <span class="kbd">G</span> gom chồng: thả 1 lá lên lá khác (auto), hoặc nhấn G khi đang kéo để ép gom.<br/>
+            <span class="kbd">Click</span> chọn lá/chồng. <span class="kbd">Esc</span> bỏ chọn.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- =========================
+  POPUP: Deck / SetCard (giữ nguyên)
+========================= -->
 <div id="deckModal" class="modal" style="display:none;">
   <div class="modal-card panel">
     <header style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -366,303 +608,42 @@
     </div>
   </div>
 </div>
-
-<div id="app">
-  <canvas id="c"></canvas>
-  <div id="toast"></div>
-
-  <div class="hud">
-    <div class="panel collapsible" id="roomPanel">
-      <header>
-        <div class="title">PHÒNG CHƠI</div>
-        <div class="row" style="gap:8px">
-          <div class="badge" id="netBadge">OFFLINE</div>
-        </div>
-        <button class="collapse-btn" data-target="roomPanel">−</button>
-      </header>
-      <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
-      <div class="content col">
-        <div class="row">
-            <div class="content col" style="flex:1; min-width:220px">
-              <label>Front folder (host)</label>
-              <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
-            </div>
-            <div class="col" style="flex:1; min-width:220px">
-              <label>Back image URL</label>
-              <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
-            </div>
-            <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
-        </div>
-      
-        <div class="col">
-          <div class="row">
-            <div class="col" style="flex:1; min-width:150px">
-              <label>Tên hiển thị</label>
-              <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
-            </div>
-            <div class="col" style="min-width:120px">
-              <label>Chế độ</label>
-              <select id="modeSelect">
-                <option value="firebase">Firebase RTDB</option>
-                <option value="local">Local (4 tab)</option>
-                <option value="ws">WebSocket</option>
-              </select>
-            </div>
-          </div>
-  
-          <div id="wsRow" class="row" style="display:none">
-            <div class="col" style="flex:1; min-width:200px">
-              <label>WebSocket URL</label>
-              <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
-            </div>
-          </div>
-  
-          <div class="row">
-            <div class="col" style="flex:1; min-width:160px">
-              <label>Mã phòng</label>
-              <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
-            </div>
-            <button id="createBtn">Tạo phòng (Host)</button>
-            <button id="joinBtn" class="secondary">Vào phòng</button>
-          </div>
-  
-          <div class="row">
-            <button id="copyLinkBtn" class="secondary">Copy link</button>
-            <button id="resetBtn" class="danger">Reset bàn (Host)</button>
-          </div>
-  
-          <div class="hint">
-            - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
-            - Server authoritative: Host giữ state, client chỉ gửi intent.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel collapsible" id="sttPanel">
-      <header>
-        <div class="title">TRẠNG THÁI</div>
-        <div class="badge" id="roomBadge">—</div>
-        <button class="collapse-btn" data-target="sttPanel">−</button>
-      </header>
-      <div class="content col">
-        <div class="row" style="justify-content:space-between">
-          <div class="col" style="gap:4px">
-            <div style="font-size:12px; color:var(--muted)">Bạn là</div>
-            <div id="meLine" style="font-weight:700">—</div>
-          </div>
-          <div class="col" style="gap:4px; align-items:flex-end">
-            <div style="font-size:12px; color:var(--muted)">Host</div>
-            <div id="hostLine" style="font-weight:700">—</div>
-          </div>
-        </div>
-        <div class="row" style="justify-content:space-between">
-          <div class="col" style="gap:6px">
-            <div style="font-size:12px; color:var(--muted)">Người chơi (tối đa 6)</div>
-            <div id="playersLine" style="font-size:13px; line-height:1.4">—</div>
-          </div>
-        </div>
-
-        <div class="hint">
-          Privacy: bài trong <b>hand</b> của người khác chỉ hiện mặt sau với bạn.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel collapsible" id="chatPanel">
-      <header>
-        <div class="title">CHAT</div>
-        <div class="badge" id="chatBadge">—</div>
-        <button class="collapse-btn" data-target="chatPanel">−</button>
-      </header>
-      <div class="content">
-        <div id="chatLog">
-        </div>
-        <form id="chatForm">
-          <input id="chatInput" placeholder="Nhập chat rồi Enter..." />
-          <button type="submit">Gửi</button>
-        </form>
-      </div>
-  </div>
-  
-  <div id="inspector">
-    <div class="panel" style="height:100%; display:flex; flex-direction:column;">
-      <header>
-        <div class="title">CARD INSPECTOR</div>
-        <div class="badge" id="insBadge">—</div>
-      </header>
-  
-      <div class="content" style="display:flex; flex-direction:column; gap:10px; height:100%;">
-        <div id="insPreview" style="
-          flex:1;
-          border:1px solid rgba(255,255,255,.12);
-          border-radius: 14px;
-          background: rgba(0,0,0,.18);
-          display:flex; align-items:center; justify-content:center;
-          overflow:hidden;
-        ">
-          <div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>
-        </div>
-  
-        <div class="row" style="justify-content:space-between">
-          <button id="btnFlip" class="secondary" style="flex:1">Flip</button>
-          <button id="btnDiscard" class="danger" style="flex:1">Discard</button>
-        </div>
-        <div class="row" style="justify-content:space-between">
-          <button id="btnUnstack" class="secondary" style="flex:1">Unstack</button>
-          <button id="btnShuffle" class="secondary" style="flex:1">Shuffle</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel collapsible" id="help">
-    <div class="panel">
-      <header>
-        <div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div>
-        <button class="collapse-btn" data-target="help">−</button>
-      </header>
-      <div class="content hint">
-        <div>
-          <span class="kbd">Kéo thả</span> chuột để di chuyển bài (table / hand).<br/>
-          <span class="kbd">D</span> rút 1 lá từ Deck về Hand của bạn (đứng gần Deck hoặc chọn Deck).<br/>
-          <span class="kbd">F</span> lật lá / chồng (stack).<br/>
-          <span class="kbd">S</span> trộn chồng (deck/stack).<br/>
-          <span class="kbd">U</span> tách 1 lá ra khỏi chồng (lấy top).<br/>
-          <span class="kbd">G</span> gom chồng: thả 1 lá lên lá khác (auto), hoặc nhấn G khi đang kéo để ép gom.<br/>
-          <span class="kbd">Click</span> chọn lá/chồng. <span class="kbd">Esc</span> bỏ chọn.
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database-compat.js"></script> 
 <script>
-/**
- * 2D Tabletop Card Sandbox (4P) — Single-file demo.
- * --------------------------------------------------
- * ✅ Runs immediately in browser.
- * ✅ Multiplayer real-time:
- *    - Local mode: BroadcastChannel (4 tabs) + Host authoritative.
- *    - WebSocket mode: client implementation ready; you can plug any WS server.
- *
- * NOTE:
- * - For "chạy luôn" in 1 file, Local mode is fully functional without external server.
- * - For true online across machines, you need a Node.js WS server (a minimal sample is included at bottom as comment).
- */
+/* =========================================================
+   0) Utils / Core helpers
+========================================================= */
+"use strict";
 
-/* =========================
-   Utilities
-========================= */
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const clamp   = (v, a, b) => Math.max(a, Math.min(b, v));
 const randInt = (a, b) => (Math.random() * (b - a + 1) + a) | 0;
-const now = () => Date.now();
-const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
-const deepClone = (obj) => structuredClone ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
-const INS = {
-  badge: document.getElementById("insBadge"),
-  preview: document.getElementById("insPreview"),
-  btnFlip: document.getElementById("btnFlip"),
-  btnDiscard: document.getElementById("btnDiscard"),
-  btnUnstack: document.getElementById("btnUnstack"),
-  btnShuffle: document.getElementById("btnShuffle"),
-};
+const now     = () => Date.now();
+const uid     = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
+const deepClone = (obj) => (typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj)));
 
-function updateInspector(){
-  const st = getState();
-  const sel = client.selected;
-
-  if (!st || !sel){
-    INS.badge.textContent = "—";
-    INS.preview.innerHTML =
-      `<div style="color:rgba(233,236,255,.55); font-size:12px">
-        Chọn 1 lá bài...
-      </div>`;
-    return;
-  }
-
-  // ===== DECK (SPECIAL CASE) =====
-  if (sel.type === "stack" && sel.id === "stack_deck"){
-    INS.badge.textContent = "DECK";
-    INS.preview.innerHTML = `
-      <div style="text-align:center;font-size:13px">
-        <div>${st.stacks.stack_deck.cardIds.length} cards</div>
-        <div style="opacity:.6;margin-top:6px">Press D to draw</div>
-        <div style="opacity:.4;margin-top:4px">Press S to shuffle</div>
-      </div>
-    `;
-    return;
-  }
-
-  // ===== CARD =====
-  if (sel.type === "card"){
-    const c = st.cards[sel.id];
-    INS.badge.textContent = sel.id + (c?.lockedBy ? " (LOCK)" : "");
-
-    const frontUrl = st.assets?.frontBase
-      ? (st.assets.frontBase + sel.id + ".png")
-      : "";
-    const backUrl  = st.assets?.backUrl || "";
-    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
-
-    INS.preview.innerHTML = url
-      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">
-          No image set. Host hãy set Front/Base + Back URL.
-        </div>`;
-    return;
-  }
-
-  // ===== STACK (NORMAL) =====
-  if (sel.type === "stack"){
-    const s = st.stacks[sel.id];
-    const topId = s?.cardIds?.[0];
-    INS.badge.textContent = `${sel.id} (${s?.cardIds?.length || 0})`;
-
-    if (!topId){
-      INS.preview.innerHTML =
-        `<div style="color:rgba(233,236,255,.55); font-size:12px">
-          Empty stack
-        </div>`;
-      return;
-    }
-
-    const c = st.cards[topId];
-    const frontUrl = st.assets?.frontBase
-      ? (st.assets.frontBase + topId + ".png")
-      : "";
-    const backUrl  = st.assets?.backUrl || "";
-    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
-
-    INS.preview.innerHTML = url
-      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">
-          No image set.
-        </div>`;
-  }
-}
-  
-function showInspector(){
-  document.getElementById("inspector").style.display = "block";
-}
-function hideInspector(){
-  document.getElementById("inspector").style.display = "none";
+function escapeHtml(str){
+  return (str ?? "").toString()
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }
 
 function toast(text, ms=1600){
   const el = document.getElementById("toast");
+  if (!el) return;
   el.textContent = text;
   el.style.display = "block";
   clearTimeout(el._t);
   el._t = setTimeout(()=> el.style.display="none", ms);
 }
 
-/* =========================
-   Constants / Layout
-========================= */
+/* =========================================================
+   1) Constants / Layout
+========================================================= */
 const COLORS = {
   red:   "#ff5c7a",
   blue:  "#5aa7ff",
@@ -673,31 +654,26 @@ const COLOR_ORDER = ["red","blue","green","yellow"];
 
 const ZONES = {
   table: "table",
-  hand: "hand",       // per player hand zone (private)
+  hand: "hand",
   deck: "deck",
   discard: "discard",
 };
 
-const CARD = {
-  w: 86,
-  h: 122,
-  r: 12,
-};
+const CARD = { w: 86, h: 122, r: 12 };
 
 const TABLE = {
   w: 1700,
   h: 900,
   margin: 40,
-  handH: 150,     // chiều cao hand trên/dưới
-  sideW: 220,     // deck / discard
-  rightW: 260,    // cột người chơi bên phải
+  handH: 150,
+  sideW: 220,
+  rightW: 260,
 };
 
 function zoneRects(){
   const m = TABLE.margin;
   const { w, h, handH, sideW, rightW } = TABLE;
 
-  // bàn chơi trung tâm
   const tableRect = {
     x: m + sideW,
     y: m + handH,
@@ -708,7 +684,6 @@ function zoneRects(){
   return {
     table: tableRect,
 
-    // ===== TOP PLAYERS =====
     handTopLeft: {
       x: tableRect.x,
       y: m,
@@ -722,7 +697,6 @@ function zoneRects(){
       h: handH
     },
 
-    // ===== BOTTOM PLAYERS =====
     handBottomLeft: {
       x: tableRect.x,
       y: tableRect.y + tableRect.h,
@@ -736,7 +710,6 @@ function zoneRects(){
       h: handH
     },
 
-    // ===== RIGHT PLAYERS =====
     handRightTop: {
       x: w - m - rightW,
       y: tableRect.y,
@@ -750,7 +723,6 @@ function zoneRects(){
       h: tableRect.h / 2
     },
 
-    // ===== DECK / DISCARD =====
     deck: {
       x: m,
       y: tableRect.y,
@@ -766,9 +738,9 @@ function zoneRects(){
   };
 }
 
-/* =========================
-   Rendering (Canvas)
-========================= */
+/* =========================================================
+   2) Canvas / Camera
+========================================================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
@@ -783,14 +755,9 @@ function resize(){
 addEventListener("resize", resize);
 resize();
 
-/* Camera: fixed top-down, but we scale the virtual table to fit */
-const camera = {
-  scale: 1,
-  offsetX: 0,
-  offsetY: 0,
-};
+const camera = { scale: 1, offsetX: 0, offsetY: 0 };
+
 function updateCamera(){
-  // Fit TABLE into viewport with padding.
   const pad = 18;
   const sx = (innerWidth - pad*2) / TABLE.w;
   const sy = (innerHeight - pad*2) / TABLE.h;
@@ -802,727 +769,15 @@ updateCamera();
 addEventListener("resize", updateCamera);
 
 function toScreen(p){
-  return {
-    x: camera.offsetX + p.x * camera.scale,
-    y: camera.offsetY + p.y * camera.scale
-  };
+  return { x: camera.offsetX + p.x * camera.scale, y: camera.offsetY + p.y * camera.scale };
 }
 function toWorld(p){
-  return {
-    x: (p.x - camera.offsetX) / camera.scale,
-    y: (p.y - camera.offsetY) / camera.scale
-  };
+  return { x: (p.x - camera.offsetX) / camera.scale, y: (p.y - camera.offsetY) / camera.scale };
 }
 
-function getWorldPosOfTarget(st, target){
-  if (!st || !target) return null;
-  if (target.type === "card"){
-    const c = st.cards[target.id];
-    if (!c) return null;
-    return {x: c.x, y: c.y};
-  } else {
-    const s = st.stacks[target.id];
-    if (!s) return null;
-    return {x: s.x, y: s.y};
-  }
-}
-
-function positionInspectorNearTarget(){
-  const st = getState();
-  const sel = client.selected;
-  if (!st || !sel) return;
-
-  const wp = getWorldPosOfTarget(st, sel);
-  if (!wp) return;
-
-  const sp = toScreen(wp);
-  const ins = document.getElementById("inspector");
-
-  // offset popup sang phải-trên lá bài
-  const pad = 10;
-  const offsetX = 20;
-  const offsetY = -20;
-
-  // đảm bảo popup không tràn màn hình
-  const rect = ins.getBoundingClientRect();
-  let left = sp.x + offsetX;
-  let top  = sp.y + offsetY;
-
-  left = clamp(left, pad, innerWidth - rect.width - pad);
-  top  = clamp(top,  pad, innerHeight - rect.height - pad);
-
-  ins.style.left = left + "px";
-  ins.style.top  = top + "px";
-}
-
-function showInspectorPopup(){
-  const ins = document.getElementById("inspector");
-  ins.style.display = "block";
-  updateInspector();
-  // cần timeout 1 tick để getBoundingClientRect có size đúng rồi clamp lại
-  requestAnimationFrame(positionInspectorNearTarget);
-}
-
-function hideInspectorPopup(){
-  document.getElementById("inspector").style.display = "none";
-}
-
-
-/* =========================
-   Networking Abstraction
-========================= */
-class NetTransport {
-  constructor(){ this.onMessage = ()=>{}; this.onStatus = ()=>{}; }
-  send(_msg) {}
-  close() {}
-}
-
-class LocalBroadcastTransport extends NetTransport {
-  /**
-   * Local mode via BroadcastChannel:
-   * - One tab is host (authoritative server).
-   * - Other tabs are clients; they send intents to host.
-   */
-  constructor(roomCode, selfId){
-    super();
-    this.roomCode = roomCode;
-    this.selfId = selfId;
-    this.bc = new BroadcastChannel("ttc_" + roomCode);
-    this.bc.onmessage = (ev) => {
-      const msg = ev.data;
-      if (!msg || msg._from === this.selfId) return;
-      this.onMessage(msg);
-    };
-    this.onStatus({connected:true, mode:"local"});
-  }
-  send(msg){
-    this.bc.postMessage({...msg, _from:this.selfId});
-  }
-  close(){
-    this.onStatus({connected:false, mode:"local"});
-    this.bc.close();
-  }
-}
-
-class LocalStorageTransport extends NetTransport {
-  /**
-   * Fallback local mode via localStorage "storage" event:
-   * - Works across tabs on same origin (GitHub Pages / localhost).
-   * - Slightly noisier than BroadcastChannel but reliable.
-   */
-  constructor(roomCode, selfId){
-    super();
-    this.roomCode = roomCode;
-    this.selfId = selfId;
-    this.key = "ttc_ls_" + roomCode;
-
-    this._onStorage = (ev) => {
-      if (ev.key !== this.key || !ev.newValue) return;
-      try{
-        const msg = JSON.parse(ev.newValue);
-        if (!msg || msg._from === this.selfId) return;
-        this.onMessage(msg);
-      }catch(e){}
-    };
-    window.addEventListener("storage", this._onStorage);
-    this.onStatus({connected:true, mode:"local"});
-  }
-
-  send(msg){
-    try{
-      const payload = JSON.stringify({...msg, _from:this.selfId, _t: Date.now()});
-      localStorage.setItem(this.key, payload);
-      // optional: cleanup
-      // localStorage.removeItem(this.key);
-    }catch(e){}
-  }
-
-  close(){
-    window.removeEventListener("storage", this._onStorage);
-    this.onStatus({connected:false, mode:"local"});
-  }
-}
-  
-class WebSocketTransport extends NetTransport {
-  constructor(url){
-    super();
-    this.ws = new WebSocket(url);
-    this.ws.onopen = () => this.onStatus({connected:true, mode:"ws"});
-    this.ws.onclose = () => this.onStatus({connected:false, mode:"ws"});
-    this.ws.onerror = () => this.onStatus({connected:false, mode:"ws"});
-    this.ws.onmessage = (ev) => {
-      try{
-        const msg = JSON.parse(ev.data);
-        this.onMessage(msg);
-      }catch(e){}
-    };
-  }
-  send(msg){
-    if (this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
-  }
-  close(){ try{ this.ws.close(); }catch(e){} }
-}
-
-/* =========================
-   Game State (Authoritative)
-========================= */
-/**
- * Authoritative state kept by host:
- * state = {
- *   roomCode,
- *   hostId,
- *   players: [{id,name,color,connectedAt}],
- *   cards: { [cardId]: {id,frontSeed,faceUp,x,y,zone,owner,stackId,order} },
- *   stacks: { [stackId]: {id, cardIds:[top..bottom], x,y, zone, owner} },
- *   chat: [{id,at,fromId,text}],
- *   version: number
- * }
- *
- * Client receives REDACTED view depending on viewerId:
- * - If card is in another player's hand => hide front details and force faceUp=false.
- */
-function makeFreshTableState(roomCode, hostId){
-  const st = {
-    roomCode,
-    hostId,
-    players: [],
-    cards: {},
-    stacks: {},
-    chat: [],
-    version: 1,
-    assets: { frontBase:"", backUrl:"" },
-  };
-  
-  // Create a default deck (stack) with 40 cards, placed on deck zone.
-  const rects = zoneRects();
-  const deckX = rects.deck.x + rects.deck.w/2;
-  const deckY = rects.deck.y + rects.deck.h/2;
-
-  const deckStackId = "stack_deck";
-  st.stacks[deckStackId] = {
-    id: deckStackId,
-    zone: ZONES.deck,
-    owner: null,
-    x: deckX,
-    y: deckY,
-    cardIds: [],
-  };
-
-  for(let i=1;i<=40;i++){
-    const id = "C" + String(i).padStart(2,"0");
-    st.cards[id] = {
-      id,
-      frontSeed: i,           // used to render front (no real images to keep 1-file)
-      faceUp: false,
-      x: deckX,
-      y: deckY,
-      zone: ZONES.deck,
-      owner: null,
-      stackId: deckStackId,
-      order: i,
-    };
-    st.stacks[deckStackId].cardIds.push(id);
-  }
-
-  // Create discard pile stack
-  const discardStackId = "stack_discard";
-  const discardX = rects.discard.x + rects.discard.w/2;
-  const discardY = rects.discard.y + rects.discard.h/2;
-  st.stacks[discardStackId] = {
-    id: discardStackId,
-    zone: ZONES.discard,
-    owner: null,
-    x: discardX,
-    y: discardY,
-    cardIds: []
-  };
-
-  return st;
-}
-
-function redactStateForViewer(state, viewerId){
-  // Firebase có thể gửi null lần đầu
-  if (!state || typeof state !== "object"){
-    return null;
-  }
-
-  // đảm bảo các field cơ bản luôn tồn tại để không crash
-  const s = deepClone(state);
-  if (!Array.isArray(s.players)) s.players = [];
-  if (!s.cards || typeof s.cards !== "object") s.cards = {};
-  if (!s.stacks || typeof s.stacks !== "object") s.stacks = {};
-  if (!Array.isArray(s.chat)) s.chat = [];
-  if (!s.assets || typeof s.assets !== "object") s.assets = { frontBase:"", backUrl:"" };
-
-  const viewer = s.players.find(p => p && p.id === viewerId) || null;
-
-  // Ẩn bài trong hand của người khác
-  for (const cardId in s.cards){
-    const c = s.cards[cardId];
-    if (!c) continue;
-
-    if (c.zone === ZONES.hand && c.owner && c.owner !== viewerId){
-      c.faceUp = false;
-      c.frontSeed = 0;
-      // nếu bạn có frontUrl thì cũng nên ẩn luôn để không lộ:
-      if (c.frontUrl) c.frontUrl = "";
-    }
-  }
-
-  s._viewer = viewer ? {id: viewer.id, name: viewer.name, color: viewer.color} : null;
-  return s;
-}
-
-/* =========================
-   Host Logic (Authoritative Server in Local mode)
-========================= */
-class HostController {
-  
-  constructor(roomCode, hostId){
-    this.roomCode = roomCode;
-    this.hostId = hostId;
-    this.state = makeFreshTableState(roomCode, hostId);
-    this.intentSeq = 0;
-  }
-
-  addOrUpdatePlayer({id,name}){
-    let p = this.state.players.find(x=>x.id===id);
-    if (!p){
-      if (this.state.players.length >= 6) return {ok:false, reason:"Room full"};
-      // Assign first available color
-      const used = new Set(this.state.players.map(x=>x.color));
-      const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % 4];
-      const seat = this.state.players.length; // 0..3
-      p = {id, name: name || "Player", color, seat, connectedAt: now()};
-      this.state.players.push(p);
-    }else{
-      p.name = name || p.name;
-    }
-    this.bumpVersion();
-    return {ok:true, player:p};
-  }
-
-  removePlayer(id){
-    this.state.players = this.state.players.filter(p=>p.id!==id);
-    this.bumpVersion();
-  }
-
-  bumpVersion(){
-    this.state.version++;
-  }
-
-  // --- Core actions ---
-  applyIntent(fromId, action){
-    const st = this.state;
-    const player = st.players.find(p=>p.id===fromId);
-    if (!player) return {ok:false, reason:"Not in room"};
-
-    const rects = zoneRects();
-    const canUse = (obj) => !obj.lockedBy || obj.lockedBy === fromId;
-
-    const ensureCard = (id) => st.cards[id];
-    const ensureStack = (id) => st.stacks[id];
-
-    const isOwnerOrPublic = (card) => {
-      if (card.zone !== ZONES.hand) return true;
-      return card.owner === fromId;
-    };
-
-    const detachFromStack = (cardId) => {
-      const c = ensureCard(cardId);
-      if (!c || !c.stackId) return;
-      const stack = ensureStack(c.stackId);
-      if (!stack) { c.stackId = null; return; }
-      stack.cardIds = stack.cardIds.filter(id=>id!==cardId);
-      c.stackId = null;
-      if (stack.cardIds.length === 0 && stack.id !== "stack_deck" && stack.id !== "stack_discard"){
-        delete st.stacks[stack.id];
-      }
-    };
-
-    const attachToStackTop = (cardId, stackId) => {
-      const c = ensureCard(cardId);
-      const stack = ensureStack(stackId);
-      if (!c || !stack) return;
-      detachFromStack(cardId);
-      c.stackId = stackId;
-      c.zone = stack.zone;
-      c.owner = stack.owner;
-      c.x = stack.x; c.y = stack.y;
-      stack.cardIds.unshift(cardId); // top is index 0
-    };
-
-    const createStackFromCard = (cardId) => {
-      const c = ensureCard(cardId);
-      if (!c) return null;
-      const sid = "stack_" + uid().slice(0,8);
-      st.stacks[sid] = { id:sid, zone:c.zone, owner:c.owner, x:c.x, y:c.y, cardIds:[cardId] };
-      c.stackId = sid;
-      return sid;
-    };
-
-    const seatToHandKey = (seat) => {
-      switch (seat){
-        case 0: return "handTopLeft";
-        case 1: return "handBottomLeft";
-        case 2: return "handTopRight";
-        case 3: return "handBottomRight";
-        case 4: return "handRightTop";
-        case 5: return "handRightBottom";
-        default: return null;
-      }
-    };
-    
-    const HAND_ZONES = [
-      { key: "handTopLeft", seat: 0 },
-      { key: "handBottomLeft", seat: 1 },
-      { key: "handTopRight", seat: 2 },
-      { key: "handBottomRight", seat: 3 },
-      { key: "handRightTop", seat: 4 },
-      { key: "handRightBottom", seat: 5 },
-    ];
-    
-    const normalizeCardZoneFromPos = (x, y) => {
-      for (const hz of HAND_ZONES){
-        const r = rects[hz.key];
-        if (!r) continue;
-    
-        const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
-        if (!inRect) continue;
-    
-        const ownerPlayer = st.players.find(pp => pp.seat === hz.seat);
-        if (!ownerPlayer){
-          // zone đang trống người, coi như table
-          return { zone: ZONES.table, owner: null, handKey: null };
-        }
-        return { zone: ZONES.hand, owner: ownerPlayer.id, handKey: hz.key };
-      }
-    
-      return { zone: ZONES.table, owner: null, handKey: null };
-    };
-
-    // Validate action types:
-    switch(action.type){
-      case "move": {
-        // move one card or stack to x,y; also assign zone based on drop
-        const {targetType, id, x, y} = action;
-        if (targetType === "card"){
-          const c = ensureCard(id);
-          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
-          if (!canInteract(c, fromId))
-            return { ok:false, reason:"No permission" };
-
-        
-          // ❗ chặn kéo card trực tiếp từ DECK
-          if (c.stackId === "stack_deck"){
-            return {ok:false, reason:"Use draw (D) to take from deck"};
-          }
-        
-          detachFromStack(id);
-          const z = normalizeCardZoneFromPos(x, y);
-          
-          c.x = x;
-          c.y = y;
-          c.zone = z.zone;
-          
-          if (z.zone === ZONES.hand) {
-            c.owner = z.owner;  // vào hand → đổi owner
-          }
-          
-          c.stackId = null;
-        } else if (targetType === "stack"){
-          const s = ensureStack(id);
-          if (!s) return {ok:false, reason:"Missing stack"};
-          if (s.id === "stack_deck") return {ok:false, reason:"Deck fixed"};
-          if (!canUse(s)) return {ok:false, reason:"Locked"};
-          // moving a hand stack is private to owner
-          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
-          const z = normalizeCardZoneFromPos(x,y, fromId);
-          s.x=x; s.y=y; s.zone=z.zone; s.owner=z.owner;
-          // propagate to its cards
-          for (const cid of s.cardIds){
-            const c = ensureCard(cid);
-            c.x=x; c.y=y; c.zone=z.zone; c.owner=z.owner;
-          }
-        }
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "flip": {
-        const {targetType, id} = action;
-        if (targetType === "card"){
-          const c = ensureCard(id);
-          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
-          c.faceUp = !c.faceUp;
-        } else {
-          const s = ensureStack(id);
-          if (!s) return {ok:false, reason:"Missing stack"};
-          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
-          // flip top card only (common tabletop behavior)
-          const topId = s.cardIds[0];
-          if (topId){
-            const c = ensureCard(topId);
-            c.faceUp = !c.faceUp;
-          }
-        }
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "shuffle": {
-        const {stackId} = action;
-        const s = ensureStack(stackId);
-        if (!s) return {ok:false, reason:"Missing stack"};
-        if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
-        // Fisher-Yates
-        for(let i=s.cardIds.length-1;i>0;i--){
-          const j = randInt(0,i);
-          [s.cardIds[i], s.cardIds[j]] = [s.cardIds[j], s.cardIds[i]];
-        }
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "draw": {
-        const player = st.players.find(p=>p.id===fromId);
-        if (!player) return { ok:false, reason:"No player" };
-      
-        const handKey = seatToHandKey(player.seat);
-        const handRect = rects[handKey];
-        if (!handRect) return { ok:false, reason:"No hand zone" };
-      
-        // ===== NEW: draw from custom pool (URLs) if exists =====
-        const pool = Array.isArray(st._deckPool) ? st._deckPool.filter(Boolean) : [];
-        if (pool.length > 0){
-          const pick = pool[randInt(0, pool.length-1)];
-          const newId = "CI_" + uid().slice(0,10);
-      
-          st.cards[newId] = {
-            id: newId,
-            frontSeed: 1,          // not used for image mode (you'll render by url)
-            faceUp: true,
-            x: handRect.x + handRect.w/2 + randInt(-60,60),
-            y: handRect.y + handRect.h/2 + randInt(-20,20),
-            zone: ZONES.hand,
-            owner: fromId,
-            stackId: null,
-            order: now(),
-            frontUrl: pick,        // << store image url
-            tintOwner: fromId       // << keep color identity
-          };
-      
-          this.bumpVersion();
-          return { ok:true };
-        }
-      
-        // ===== fallback: old physical deck stack_deck =====
-        const deck = st.stacks["stack_deck"];
-        if (!deck || deck.cardIds.length === 0)
-          return { ok:false, reason:"Deck empty" };
-      
-        const cid = deck.cardIds.shift();
-        const c = ensureCard(cid);
-      
-        c.zone = ZONES.hand;
-        c.owner = fromId;
-        c.faceUp = true;
-      
-        c.x = handRect.x + handRect.w/2 + randInt(-60,60);
-        c.y = handRect.y + handRect.h/2 + randInt(-20,20);
-        c.stackId = null;
-      
-        // keep tint
-        c.tintOwner = fromId;
-      
-        this.bumpVersion();
-        return { ok:true };
-      }
-
-
-      case "discard": {
-        // move card/stack to discard pile
-        const {targetType, id} = action;
-        const discard = st.stacks["stack_discard"];
-        if (!discard) return {ok:false, reason:"Missing discard"};
-        if (targetType === "card"){
-          const c = ensureCard(id);
-          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
-          attachToStackTop(id, discard.id);
-          // in discard: public by default
-          discard.zone = ZONES.discard;
-          discard.owner = null;
-          c.zone = ZONES.discard;
-          c.owner = null;
-          c.faceUp = true; // discard visible
-        } else {
-          const s = ensureStack(id);
-          if (!s) return {ok:false, reason:"Missing stack"};
-          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
-          // move all cards to discard top preserving order (top-to-bottom)
-          const cards = [...s.cardIds];
-          for (const cid of cards.reverse()){ // keep top-most ends up on top
-            attachToStackTop(cid, discard.id);
-            const c = ensureCard(cid);
-            c.faceUp = true;
-            c.owner = null;
-            c.zone = ZONES.discard;
-          }
-          // remove moved stack if not special
-          if (s.id !== "stack_deck" && s.id !== "stack_discard") delete st.stacks[s.id];
-        }
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "stack": {
-        // stack a card onto another card/stack
-        const {dragTargetType, dragId, dropOnType, dropOnId} = action;
-        // Resolve dragged set:
-        let dragStackId = null;
-        let dragCardIds = [];
-        if (dragTargetType === "card"){
-          const c = ensureCard(dragId);
-          if (!c || !isOwnerOrPublic(c)) return {ok:false, reason:"No access"};
-          dragCardIds = [dragId];
-          dragStackId = c.stackId; // could be null
-        } else {
-          const s = ensureStack(dragId);
-          if (!s) return {ok:false, reason:"Missing stack"};
-          if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
-          dragCardIds = [...s.cardIds];
-          dragStackId = s.id;
-        }
-
-        // Resolve drop stack:
-        let dropStackId = null;
-        if (dropOnType === "card"){
-          const c2 = ensureCard(dropOnId);
-          if (!c2) return {ok:false, reason:"Missing drop card"};
-          // If drop card isn't in stack, create one
-          dropStackId = c2.stackId || createStackFromCard(c2.id);
-        } else {
-          const s2 = ensureStack(dropOnId);
-          if (!s2) return {ok:false, reason:"Missing drop stack"};
-          dropStackId = s2.id;
-        }
-
-        if (!dropStackId) return {ok:false, reason:"No drop stack"};
-        if (dragStackId && dragStackId === dropStackId) return {ok:true};
-
-        // If dragged is a whole stack, move all cards onto drop stack top preserving order
-        const dropStack = ensureStack(dropStackId);
-        // If you drop onto a hand stack, must be your hand
-        if (dropStack.zone === ZONES.hand && dropStack.owner && dropStack.owner !== fromId) return {ok:false, reason:"No access"};
-
-        // Move dragCardIds so that their relative order keeps top on top
-        // We'll put dragged top on top of drop.
-        const moving = [...dragCardIds];
-        // Remove the dragged stack if it was a stack (and not special)
-        if (dragTargetType === "stack"){
-          const s = ensureStack(dragId);
-          if (s && s.id !== "stack_deck" && s.id !== "stack_discard"){
-            delete st.stacks[s.id];
-          } else if (s){
-            s.cardIds = []; // if special, clear (shouldn't happen normally)
-          }
-        } else {
-          // dragged card: detach from its old stack
-          detachFromStack(dragId);
-        }
-
-        // Attach in reverse so first element becomes top
-        for (let i=moving.length-1; i>=0; i--){
-          attachToStackTop(moving[i], dropStackId);
-        }
-
-        // Align stack position
-        for (const cid of dropStack.cardIds){
-          const c = ensureCard(cid);
-          c.x = dropStack.x; c.y = dropStack.y;
-        }
-
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "unstack": {
-        // Take top card out of a stack and place near it
-        const {stackId} = action;
-        const s = ensureStack(stackId);
-        if (!s) return {ok:false, reason:"Missing stack"};
-        if (s.zone === ZONES.hand && s.owner && s.owner !== fromId) return {ok:false, reason:"No access"};
-        if (s.cardIds.length <= 1) return {ok:true};
-        const top = s.cardIds.shift();
-        const c = ensureCard(top);
-        c.stackId = null;
-        // Place slightly offset
-        c.x = s.x + randInt(-90,90);
-        c.y = s.y + randInt(-60,60);
-        // Keep same zone/owner as stack
-        c.zone = s.zone;
-        c.owner = s.owner;
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "chat": {
-        const text = (action.text || "").toString().slice(0, 300);
-        if (!text.trim()) return {ok:true};
-        st.chat.push({id: uid(), at: now(), fromId, text});
-        // cap chat history
-        if (st.chat.length > 120) st.chat.splice(0, st.chat.length - 120);
-        this.bumpVersion();
-        return {ok:true};
-      }
-
-      case "reset": {
-        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
-        const keepPlayers = deepClone(st.players);
-        this.state = makeFreshTableState(st.roomCode, st.hostId);
-        this.state.players = keepPlayers;
-        this.bumpVersion();
-        return {ok:true};
-      }
-        
-      case "setAssets": {
-        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
-        st.assets.frontBase = (action.frontBase||"").trim();
-        st.assets.backUrl = (action.backUrl||"").trim();
-        this.bumpVersion();
-        return {ok:true};
-      }
-      case "join": {
-        this.bumpVersion();
-        return { ok:true };
-      }
-        
-      default:
-        return {ok:false, reason:"Unknown action"};
-    }
-  }
-}
-function canInteract(card, actorId){
-  if (card.zone === ZONES.hand)
-    return card.owner === actorId;
-
-  if (card.zone === ZONES.table)
-    return true;
-
-  if (card.zone === ZONES.discard)
-    return true;
-
-  return false;
-}
-
-function canInteractStack(stack, actorId){
-  if (stack.zone === ZONES.hand)
-    return stack.owner === actorId;
-  return true;
-}
-/* =========================
-   Client Logic
-========================= */
+/* =========================================================
+   3) UI refs (giữ nguyên id của bạn)
+========================================================= */
 const UI = {
   modeSelect: document.getElementById("modeSelect"),
   wsRow: document.getElementById("wsRow"),
@@ -1547,16 +802,750 @@ const UI = {
   applyDeckBtn: document.getElementById("applyDeckBtn"),
 };
 
-UI.modeSelect.addEventListener("change", ()=>{
-  UI.wsRow.style.display = UI.modeSelect.value === "ws" ? "flex" : "none";
-});
+/* =========================================================
+   4) Screens Router
+   - Bạn đang dùng lẫn: screenAuth/screenLobby/screenMatch và authScreen/lobbyScreen/matchScreen
+   - FIX: Tự detect cái nào tồn tại
+========================================================= */
+function pickScreenEl(a, b){
+  return document.getElementById(a) || document.getElementById(b) || null;
+}
+const SCREENS = {
+  auth:  pickScreenEl("screenAuth","authScreen"),
+  lobby: pickScreenEl("screenLobby","lobbyScreen"),
+  match: pickScreenEl("screenMatch","matchScreen"),
+};
 
-///REALTIME FIREBASE
-  /* =========================
-   Firebase RTDB Online Mode
-========================= */
+function setScreen(name){
+  // nếu bạn chưa tạo wrapper screen thì bỏ qua
+  const keys = Object.keys(SCREENS);
+  const any = keys.some(k => !!SCREENS[k]);
+  if (!any) return;
 
-// 1) Fill config from Firebase Console
+  for (const k of keys){
+    if (SCREENS[k]) SCREENS[k].classList.remove("active");
+  }
+  if (SCREENS[name]) SCREENS[name].classList.add("active");
+}
+
+function goAuth(){ setScreen("auth"); }
+function goLobby(){ setScreen("lobby"); }
+function goMatch(){
+  setScreen("match");
+  try{ resize(); updateCamera(); }catch(e){}
+}
+
+/* =========================================================
+   5) Inspector (card inspector popup)
+========================================================= */
+const INS = {
+  badge: document.getElementById("insBadge"),
+  preview: document.getElementById("insPreview"),
+  btnFlip: document.getElementById("btnFlip"),
+  btnDiscard: document.getElementById("btnDiscard"),
+  btnUnstack: document.getElementById("btnUnstack"),
+  btnShuffle: document.getElementById("btnShuffle"),
+};
+
+function getWorldPosOfTarget(st, target){
+  if (!st || !target) return null;
+  if (target.type === "card"){
+    const c = st.cards?.[target.id];
+    if (!c) return null;
+    return {x: c.x, y: c.y};
+  } else {
+    const s = st.stacks?.[target.id];
+    if (!s) return null;
+    return {x: s.x, y: s.y};
+  }
+}
+
+function positionInspectorNearTarget(){
+  const st = getState();
+  const sel = client.selected;
+  if (!st || !sel) return;
+
+  const wp = getWorldPosOfTarget(st, sel);
+  if (!wp) return;
+
+  const sp = toScreen(wp);
+  const ins = document.getElementById("inspector");
+  if (!ins) return;
+
+  const pad = 10;
+  const offsetX = 20;
+  const offsetY = -20;
+
+  const rect = ins.getBoundingClientRect();
+  let left = sp.x + offsetX;
+  let top  = sp.y + offsetY;
+
+  left = clamp(left, pad, innerWidth - rect.width - pad);
+  top  = clamp(top,  pad, innerHeight - rect.height - pad);
+
+  ins.style.left = left + "px";
+  ins.style.top  = top + "px";
+}
+
+function showInspectorPopup(){
+  const ins = document.getElementById("inspector");
+  if (!ins) return;
+  ins.style.display = "block";
+  updateInspector();
+  requestAnimationFrame(positionInspectorNearTarget);
+}
+function hideInspectorPopup(){
+  const ins = document.getElementById("inspector");
+  if (!ins) return;
+  ins.style.display = "none";
+}
+
+function updateInspector(){
+  const st = getState();
+  const sel = client.selected;
+
+  if (!INS.badge || !INS.preview) return;
+
+  if (!st || !sel){
+    INS.badge.textContent = "—";
+    INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>`;
+    return;
+  }
+
+  // ===== DECK (SPECIAL CASE) =====
+  if (sel.type === "stack" && sel.id === "stack_deck"){
+    const count = st.stacks?.stack_deck?.cardIds?.length || 0;
+    INS.badge.textContent = "DECK";
+    INS.preview.innerHTML = `
+      <div style="text-align:center;font-size:13px">
+        <div>${count} cards</div>
+        <div style="opacity:.6;margin-top:6px">Press D to draw</div>
+        <div style="opacity:.4;margin-top:4px">Press S to shuffle</div>
+      </div>
+    `;
+    return;
+  }
+
+  // ===== CARD =====
+  if (sel.type === "card"){
+    const c = st.cards?.[sel.id];
+    INS.badge.textContent = sel.id + (c?.lockedBy ? " (LOCK)" : "");
+
+    // FIX: ưu tiên frontUrl (setCard), nếu không có thì mới dùng frontBase+id.png
+    const frontUrl = c?.frontUrl
+      ? c.frontUrl
+      : (st.assets?.frontBase ? (st.assets.frontBase + sel.id + ".png") : "");
+    const backUrl  = st.assets?.backUrl || "";
+    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
+
+    INS.preview.innerHTML = url
+      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">
+          No image set. Host hãy set Back URL hoặc load setCard.
+        </div>`;
+    return;
+  }
+
+  // ===== STACK (NORMAL) =====
+  if (sel.type === "stack"){
+    const s = st.stacks?.[sel.id];
+    const topId = s?.cardIds?.[0];
+    INS.badge.textContent = `${sel.id} (${s?.cardIds?.length || 0})`;
+
+    if (!topId){
+      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Empty stack</div>`;
+      return;
+    }
+
+    const c = st.cards?.[topId];
+    const frontUrl = c?.frontUrl
+      ? c.frontUrl
+      : (st.assets?.frontBase ? (st.assets.frontBase + topId + ".png") : "");
+    const backUrl  = st.assets?.backUrl || "";
+    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
+
+    INS.preview.innerHTML = url
+      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set.</div>`;
+  }
+}
+
+/* =========================================================
+   6) Networking Abstraction (Local / WS / Firebase)
+========================================================= */
+class NetTransport {
+  constructor(){ this.onMessage = ()=>{}; this.onStatus = ()=>{}; }
+  send(_msg) {}
+  close() {}
+}
+
+class LocalBroadcastTransport extends NetTransport {
+  constructor(roomCode, selfId){
+    super();
+    this.roomCode = roomCode;
+    this.selfId = selfId;
+    this.bc = new BroadcastChannel("ttc_" + roomCode);
+    this.bc.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg || msg._from === this.selfId) return;
+      this.onMessage(msg);
+    };
+    this.onStatus({connected:true, mode:"local"});
+  }
+  send(msg){
+    this.bc.postMessage({...msg, _from:this.selfId});
+  }
+  close(){
+    this.onStatus({connected:false, mode:"local"});
+    this.bc.close();
+  }
+}
+
+class LocalStorageTransport extends NetTransport {
+  constructor(roomCode, selfId){
+    super();
+    this.roomCode = roomCode;
+    this.selfId = selfId;
+    this.key = "ttc_ls_" + roomCode;
+
+    this._onStorage = (ev) => {
+      if (ev.key !== this.key || !ev.newValue) return;
+      try{
+        const msg = JSON.parse(ev.newValue);
+        if (!msg || msg._from === this.selfId) return;
+        this.onMessage(msg);
+      }catch(e){}
+    };
+    window.addEventListener("storage", this._onStorage);
+    this.onStatus({connected:true, mode:"local"});
+  }
+
+  send(msg){
+    try{
+      const payload = JSON.stringify({...msg, _from:this.selfId, _t: Date.now()});
+      localStorage.setItem(this.key, payload);
+    }catch(e){}
+  }
+
+  close(){
+    window.removeEventListener("storage", this._onStorage);
+    this.onStatus({connected:false, mode:"local"});
+  }
+}
+
+class WebSocketTransport extends NetTransport {
+  constructor(url){
+    super();
+    this.ws = new WebSocket(url);
+    this.ws.onopen = () => this.onStatus({connected:true, mode:"ws"});
+    this.ws.onclose = () => this.onStatus({connected:false, mode:"ws"});
+    this.ws.onerror = () => this.onStatus({connected:false, mode:"ws"});
+    this.ws.onmessage = (ev) => {
+      try{
+        const msg = JSON.parse(ev.data);
+        this.onMessage(msg);
+      }catch(e){}
+    };
+  }
+  send(msg){
+    if (this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
+  }
+  close(){ try{ this.ws.close(); }catch(e){} }
+}
+
+/* =========================================================
+   7) Game State / Redaction (Authoritative on Host)
+========================================================= */
+function makeFreshTableState(roomCode, hostId){
+  const st = {
+    roomCode,
+    hostId,
+    players: [],
+    cards: {},
+    stacks: {},
+    chat: [],
+    version: 1,
+    assets: { frontBase:"", backUrl:"" },
+    _deckPool: [], // FIX: bạn dùng _deckPool trong draw => phải có sẵn
+  };
+
+  const rects = zoneRects();
+  const deckX = rects.deck.x + rects.deck.w/2;
+  const deckY = rects.deck.y + rects.deck.h/2;
+
+  const deckStackId = "stack_deck";
+  st.stacks[deckStackId] = { id: deckStackId, zone: ZONES.deck, owner: null, x: deckX, y: deckY, cardIds: [] };
+
+  for(let i=1;i<=40;i++){
+    const id = "C" + String(i).padStart(2,"0");
+    st.cards[id] = {
+      id,
+      frontSeed: i,
+      faceUp: false,
+      x: deckX,
+      y: deckY,
+      zone: ZONES.deck,
+      owner: null,
+      stackId: deckStackId,
+      order: i,
+    };
+    st.stacks[deckStackId].cardIds.push(id);
+  }
+
+  const discardStackId = "stack_discard";
+  const discardX = rects.discard.x + rects.discard.w/2;
+  const discardY = rects.discard.y + rects.discard.h/2;
+  st.stacks[discardStackId] = { id: discardStackId, zone: ZONES.discard, owner: null, x: discardX, y: discardY, cardIds: [] };
+
+  return st;
+}
+
+function ensureStateShape(state){
+  if (!state || typeof state !== "object") return null;
+  const s = deepClone(state);
+  if (!Array.isArray(s.players)) s.players = [];
+  if (!s.cards || typeof s.cards !== "object") s.cards = {};
+  if (!s.stacks || typeof s.stacks !== "object") s.stacks = {};
+  if (!Array.isArray(s.chat)) s.chat = [];
+  if (!s.assets || typeof s.assets !== "object") s.assets = { frontBase:"", backUrl:"" };
+  if (!Array.isArray(s._deckPool)) s._deckPool = [];
+  if (typeof s.version !== "number") s.version = 1;
+  return s;
+}
+
+function redactStateForViewer(state, viewerId){
+  const s = ensureStateShape(state);
+  if (!s) return null;
+
+  const viewer = s.players.find(p => p && p.id === viewerId) || null;
+
+  for (const cardId in s.cards){
+    const c = s.cards[cardId];
+    if (!c) continue;
+
+    if (c.zone === ZONES.hand && c.owner && c.owner !== viewerId){
+      c.faceUp = false;
+      c.frontSeed = 0;
+      if (c.frontUrl) c.frontUrl = "";
+    }
+  }
+
+  s._viewer = viewer ? {id: viewer.id, name: viewer.name, color: viewer.color} : null;
+  return s;
+}
+
+/* =========================================================
+   8) Host Controller (Authoritative)
+========================================================= */
+function canInteract(card, actorId){
+  if (!card) return false;
+  if (card.zone === ZONES.hand) return card.owner === actorId;
+  return true; // table/deck/discard allow (deck dragging is blocked separately)
+}
+function canInteractStack(stack, actorId){
+  if (!stack) return false;
+  if (stack.zone === ZONES.hand) return stack.owner === actorId;
+  return true;
+}
+
+class HostController {
+  constructor(roomCode, hostId){
+    this.roomCode = roomCode;
+    this.hostId = hostId;
+    this.state = makeFreshTableState(roomCode, hostId);
+  }
+
+  bumpVersion(){ this.state.version = (this.state.version||0) + 1; }
+
+  addOrUpdatePlayer({id,name}){
+    // FIX: chống players undefined
+    if (!Array.isArray(this.state.players)) this.state.players = [];
+
+    let p = this.state.players.find(x=>x && x.id===id);
+    if (!p){
+      if (this.state.players.length >= 6) return {ok:false, reason:"Room full"};
+
+      const used = new Set(this.state.players.map(x=>x.color).filter(Boolean));
+      const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % COLOR_ORDER.length];
+      const seat = this.state.players.length;
+      p = {id, name: name || "Player", color, seat, connectedAt: now()};
+      this.state.players.push(p);
+    }else{
+      p.name = name || p.name;
+    }
+    this.bumpVersion();
+    return {ok:true, player:p};
+  }
+
+  removePlayer(id){
+    this.state.players = (this.state.players||[]).filter(p=>p && p.id!==id);
+    this.bumpVersion();
+  }
+
+  applyIntent(fromId, action){
+    const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, this.hostId);
+    const player = st.players.find(p=>p.id===fromId);
+    if (!player) return {ok:false, reason:"Not in room"};
+
+    const rects = zoneRects();
+    const ensureCard = (id) => st.cards[id];
+    const ensureStack = (id) => st.stacks[id];
+
+    const detachFromStack = (cardId) => {
+      const c = ensureCard(cardId);
+      if (!c || !c.stackId) return;
+      const stack = ensureStack(c.stackId);
+      if (!stack) { c.stackId = null; return; }
+      stack.cardIds = (stack.cardIds||[]).filter(id=>id!==cardId);
+      c.stackId = null;
+      if ((stack.cardIds?.length||0) === 0 && stack.id !== "stack_deck" && stack.id !== "stack_discard"){
+        delete st.stacks[stack.id];
+      }
+    };
+
+    const attachToStackTop = (cardId, stackId) => {
+      const c = ensureCard(cardId);
+      const stack = ensureStack(stackId);
+      if (!c || !stack) return;
+      detachFromStack(cardId);
+      c.stackId = stackId;
+      c.zone = stack.zone;
+      c.owner = stack.owner;
+      c.x = stack.x; c.y = stack.y;
+      stack.cardIds = stack.cardIds || [];
+      stack.cardIds.unshift(cardId);
+    };
+
+    const createStackFromCard = (cardId) => {
+      const c = ensureCard(cardId);
+      if (!c) return null;
+      const sid = "stack_" + uid().slice(0,8);
+      st.stacks[sid] = { id:sid, zone:c.zone, owner:c.owner, x:c.x, y:c.y, cardIds:[cardId] };
+      c.stackId = sid;
+      return sid;
+    };
+
+    const HAND_ZONES = [
+      { key: "handTopLeft", seat: 0 },
+      { key: "handBottomLeft", seat: 1 },
+      { key: "handTopRight", seat: 2 },
+      { key: "handBottomRight", seat: 3 },
+      { key: "handRightTop", seat: 4 },
+      { key: "handRightBottom", seat: 5 },
+    ];
+
+    function normalizeCardZoneFromPos(x, y){
+      for (const hz of HAND_ZONES){
+        const r = rects[hz.key];
+        if (!r) continue;
+
+        const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
+        if (!inRect) continue;
+
+        const ownerPlayer = st.players.find(pp => pp.seat === hz.seat);
+        if (!ownerPlayer){
+          return { zone: ZONES.table, owner: null };
+        }
+        return { zone: ZONES.hand, owner: ownerPlayer.id };
+      }
+      return { zone: ZONES.table, owner: null };
+    }
+
+    const seatToHandKey = (seat) => {
+      switch (seat){
+        case 0: return "handTopLeft";
+        case 1: return "handBottomLeft";
+        case 2: return "handTopRight";
+        case 3: return "handBottomRight";
+        case 4: return "handRightTop";
+        case 5: return "handRightBottom";
+        default: return null;
+      }
+    };
+
+    switch(action.type){
+      case "move": {
+        const {targetType, id, x, y} = action;
+
+        if (targetType === "card"){
+          const c = ensureCard(id);
+          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+
+          // chặn kéo card trực tiếp từ deck
+          if (c.stackId === "stack_deck") return {ok:false, reason:"Use draw (D) to take from deck"};
+
+          detachFromStack(id);
+
+          const z = normalizeCardZoneFromPos(x, y);
+          c.x = x; c.y = y;
+          c.zone = z.zone;
+          c.owner = (z.zone === ZONES.hand) ? z.owner : null;
+          c.stackId = null;
+        }
+
+        if (targetType === "stack"){
+          const s = ensureStack(id);
+          if (!s) return {ok:false, reason:"Missing stack"};
+          if (s.id === "stack_deck") return {ok:false, reason:"Deck fixed"};
+          if (!canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+
+          const z = normalizeCardZoneFromPos(x, y);
+          s.x = x; s.y = y;
+          s.zone = z.zone;
+          s.owner = (z.zone === ZONES.hand) ? z.owner : null;
+
+          for (const cid of (s.cardIds||[])){
+            const c = ensureCard(cid);
+            if (!c) continue;
+            c.x = x; c.y = y;
+            c.zone = s.zone;
+            c.owner = s.owner;
+          }
+        }
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "flip": {
+        const {targetType, id} = action;
+
+        if (targetType === "card"){
+          const c = ensureCard(id);
+          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+          c.faceUp = !c.faceUp;
+        } else {
+          const s = ensureStack(id);
+          if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+          const topId = s.cardIds?.[0];
+          if (topId){
+            const c = ensureCard(topId);
+            if (c) c.faceUp = !c.faceUp;
+          }
+        }
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "shuffle": {
+        const {stackId} = action;
+        const s = ensureStack(stackId);
+        if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+
+        for(let i=(s.cardIds?.length||0)-1;i>0;i--){
+          const j = randInt(0,i);
+          [s.cardIds[i], s.cardIds[j]] = [s.cardIds[j], s.cardIds[i]];
+        }
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "draw": {
+        const handKey = seatToHandKey(player.seat);
+        const handRect = rects[handKey];
+        if (!handRect) return {ok:false, reason:"No hand zone"};
+
+        // draw from custom pool urls if exists
+        const pool = (Array.isArray(st._deckPool) ? st._deckPool : []).filter(Boolean);
+        if (pool.length > 0){
+          const pick = pool[randInt(0, pool.length-1)];
+          const newId = "CI_" + uid().slice(0,10);
+
+          st.cards[newId] = {
+            id: newId,
+            frontSeed: 1,
+            faceUp: true,
+            x: handRect.x + handRect.w/2 + randInt(-60,60),
+            y: handRect.y + handRect.h/2 + randInt(-20,20),
+            zone: ZONES.hand,
+            owner: fromId,
+            stackId: null,
+            order: now(),
+            frontUrl: pick,
+            tintOwner: fromId
+          };
+
+          this.bumpVersion();
+          return {ok:true};
+        }
+
+        // fallback physical deck stack_deck
+        const deck = st.stacks["stack_deck"];
+        if (!deck || (deck.cardIds?.length||0) === 0) return {ok:false, reason:"Deck empty"};
+
+        const cid = deck.cardIds.shift();
+        const c = ensureCard(cid);
+        if (!c) return {ok:false, reason:"Missing card"};
+
+        c.zone = ZONES.hand;
+        c.owner = fromId;
+        c.faceUp = true;
+        c.x = handRect.x + handRect.w/2 + randInt(-60,60);
+        c.y = handRect.y + handRect.h/2 + randInt(-20,20);
+        c.stackId = null;
+        c.tintOwner = fromId;
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "discard": {
+        const {targetType, id} = action;
+        const discard = st.stacks["stack_discard"];
+        if (!discard) return {ok:false, reason:"Missing discard"};
+
+        if (targetType === "card"){
+          const c = ensureCard(id);
+          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+
+          attachToStackTop(id, discard.id);
+          discard.zone = ZONES.discard;
+          discard.owner = null;
+
+          c.zone = ZONES.discard;
+          c.owner = null;
+          c.faceUp = true;
+        } else {
+          const s = ensureStack(id);
+          if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+
+          const cards = [...(s.cardIds||[])];
+          for (const cid of cards.reverse()){
+            attachToStackTop(cid, discard.id);
+            const c = ensureCard(cid);
+            if (!c) continue;
+            c.faceUp = true;
+            c.owner = null;
+            c.zone = ZONES.discard;
+          }
+          if (s.id !== "stack_deck" && s.id !== "stack_discard") delete st.stacks[s.id];
+        }
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "stack": {
+        const {dragTargetType, dragId, dropOnType, dropOnId} = action;
+
+        let dragCardIds = [];
+        let dragStackId = null;
+
+        if (dragTargetType === "card"){
+          const c = ensureCard(dragId);
+          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+          dragCardIds = [dragId];
+          dragStackId = c.stackId;
+        } else {
+          const s = ensureStack(dragId);
+          if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+          dragCardIds = [...(s.cardIds||[])];
+          dragStackId = s.id;
+        }
+
+        let dropStackId = null;
+        if (dropOnType === "card"){
+          const c2 = ensureCard(dropOnId);
+          if (!c2) return {ok:false, reason:"Missing drop card"};
+          dropStackId = c2.stackId || createStackFromCard(c2.id);
+        } else {
+          const s2 = ensureStack(dropOnId);
+          if (!s2) return {ok:false, reason:"Missing drop stack"};
+          dropStackId = s2.id;
+        }
+
+        if (!dropStackId) return {ok:false, reason:"No drop stack"};
+        if (dragStackId && dragStackId === dropStackId) return {ok:true};
+
+        const dropStack = ensureStack(dropStackId);
+        if (!canInteractStack(dropStack, fromId)) return {ok:false, reason:"No access"};
+
+        const moving = [...dragCardIds];
+
+        if (dragTargetType === "stack"){
+          const s = ensureStack(dragId);
+          if (s && s.id !== "stack_deck" && s.id !== "stack_discard") delete st.stacks[s.id];
+        } else {
+          detachFromStack(dragId);
+        }
+
+        for (let i=moving.length-1; i>=0; i--){
+          attachToStackTop(moving[i], dropStackId);
+        }
+
+        for (const cid of (dropStack.cardIds||[])){
+          const c = ensureCard(cid);
+          if (!c) continue;
+          c.x = dropStack.x; c.y = dropStack.y;
+        }
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "unstack": {
+        const {stackId} = action;
+        const s = ensureStack(stackId);
+        if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+        if ((s.cardIds?.length||0) <= 1) return {ok:true};
+
+        const top = s.cardIds.shift();
+        const c = ensureCard(top);
+        if (!c) return {ok:false, reason:"Missing card"};
+
+        c.stackId = null;
+        c.x = s.x + randInt(-90,90);
+        c.y = s.y + randInt(-60,60);
+        c.zone = s.zone;
+        c.owner = s.owner;
+
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "chat": {
+        const text = (action.text || "").toString().slice(0, 300);
+        if (!text.trim()) return {ok:true};
+        st.chat.push({id: uid(), at: now(), fromId, text});
+        if (st.chat.length > 120) st.chat.splice(0, st.chat.length - 120);
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "reset": {
+        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        const keepPlayers = deepClone(st.players);
+        this.state = makeFreshTableState(st.roomCode, st.hostId);
+        this.state.players = keepPlayers;
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "setAssets": {
+        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        st.assets.frontBase = (action.frontBase||"").trim();
+        st.assets.backUrl = (action.backUrl||"").trim();
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      case "join": {
+        // no-op; host side already addOrUpdatePlayer
+        this.bumpVersion();
+        return {ok:true};
+      }
+
+      default:
+        return {ok:false, reason:"Unknown action"};
+    }
+  }
+}
+
+/* =========================================================
+   9) Firebase (Auth + RTDB)
+========================================================= */
 const firebaseConfig = {
   apiKey: "AIzaSyBze3rgBuJ8Ex7c_yWnEVu76huNAuSFll8",
   authDomain: "tablegame-dc4a8.firebaseapp.com",
@@ -1568,14 +1557,7 @@ const firebaseConfig = {
   measurementId: "G-KHWGKGT3GE"
 };
 
-let FB = {
-  app: null,
-  auth: null,
-  db: null,
-  user: null,
-  uid: null,
-  username: null,
-};
+let FB = { app:null, auth:null, db:null, user:null, uid:null, username:null };
 
 function fbInitOnce(){
   if (FB.app) return;
@@ -1586,40 +1568,31 @@ function fbInitOnce(){
 
 async function fbEnsureAuth(){
   fbInitOnce();
-  if (!FB.auth.currentUser){
-    await FB.auth.signInAnonymously();
-  }
+  if (!FB.auth.currentUser) await FB.auth.signInAnonymously();
+
   FB.user = FB.auth.currentUser;
   FB.uid = FB.user.uid;
 
-  // username lấy từ UI.nameInput
-  FB.username = ((UI.nameInput.value||"").trim().slice(0,18)) || "Player";
+  // ưu tiên nameInput (lobby), nếu rỗng thì fallback "Player"
+  FB.username = ((UI.nameInput?.value || "").trim().slice(0,18)) || "Player";
 
-  // ensure profile in AllUser
   const uref = FB.db.ref(`AllUser/${FB.uid}`);
   const snap = await uref.get();
+
   if (!snap.exists()){
-    await uref.set({
-      username: FB.username,
-      createdAt: Date.now()
-    });
+    await uref.set({ username: FB.username, createdAt: Date.now(), setCard:{} });
   }else{
-    // update username if changed
-    const cur = snap.val();
+    const cur = snap.val() || {};
     if ((cur.username||"") !== FB.username){
       await uref.update({ username: FB.username });
     }
+    if (!cur.setCard) await uref.update({ setCard:{} });
   }
 }
 
-/* ---------- Room Index allocate (room1/room2...) ---------- */
-// RoomIndex/nextNo : number
-// RoomIndex/freeNos/{no}: true   (release vào đây)
-// allocate: try take smallest freeNos key (best-effort), else nextNo++ (transaction)
 async function fbAllocateRoomNo(){
   const db = FB.db;
 
-  // try freeNos first
   const freeRef = db.ref("RoomIndex/freeNos");
   const freeSnap = await freeRef.get();
   if (freeSnap.exists()){
@@ -1627,23 +1600,13 @@ async function fbAllocateRoomNo(){
     const nums = Object.keys(obj).map(x=>parseInt(x,10)).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b);
     for (const n of nums){
       const oneRef = db.ref(`RoomIndex/freeNos/${n}`);
-      const r = await oneRef.transaction((cur)=>{
-        if (cur === true) return null; // remove it
-        return; // abort
-      });
-      if (r.committed){
-        return n;
-      }
+      const r = await oneRef.transaction((cur)=>{ if (cur === true) return null; return; });
+      if (r.committed) return n;
     }
   }
 
-  // fallback: nextNo transaction
   const nextRef = db.ref("RoomIndex/nextNo");
-  const res = await nextRef.transaction((cur)=>{
-    if (typeof cur !== "number") return 1; // init
-    return cur + 1;
-  });
-  // transaction result snapshot contains NEW value, roomNo is new-1 (because we increment)
+  const res = await nextRef.transaction((cur)=> (typeof cur !== "number" ? 1 : cur + 1));
   const newVal = res.snapshot.val();
   const roomNo = Math.max(1, newVal - 1);
   return roomNo;
@@ -1654,11 +1617,10 @@ async function fbReleaseRoomNo(roomNo){
   await FB.db.ref(`RoomIndex/freeNos/${roomNo}`).set(true);
 }
 
-/* ---------- Firebase Transport (intent/state/presence) ---------- */
 class FirebaseTransport extends NetTransport {
   constructor(roomId){
     super();
-    this.roomId = roomId;
+    this.roomId = roomId; // FIX: trước đây nhiều bạn viết this.roomId=this.roomId
     this.roomRef = FB.db.ref(`AllRoom/${this.roomId}`);
     this.intentsRef = this.roomRef.child("intents");
     this.stateRef = this.roomRef.child("state");
@@ -1673,7 +1635,6 @@ class FirebaseTransport extends NetTransport {
   }
 
   async attachPresence(){
-    // keep presence true when connected; remove onDisconnect
     this._connectedCb = async (snap)=>{
       if (snap.val() === true){
         await this.presRef.set(true);
@@ -1684,15 +1645,11 @@ class FirebaseTransport extends NetTransport {
   }
 
   listenState(onState){
-    this._stateCb = (snap)=>{
-      const v = snap.val();
-      onState(v);
-    };
+    this._stateCb = (snap)=> onState(snap.val());
     this.stateRef.on("value", this._stateCb);
   }
 
   listenIntentsAsHost(onIntent){
-    // host only: listen child_added
     this._intentsCb = (snap)=>{
       const v = snap.val();
       if (!v) return;
@@ -1702,12 +1659,7 @@ class FirebaseTransport extends NetTransport {
   }
 
   async sendIntent(action){
-    const payload = {
-      fromUid: FB.uid,
-      fromName: FB.username,
-      at: Date.now(),
-      action
-    };
+    const payload = { fromUid: FB.uid, fromName: FB.username, at: Date.now(), action };
     await this.intentsRef.push(payload);
   }
 
@@ -1726,29 +1678,318 @@ class FirebaseTransport extends NetTransport {
   }
 }
 
-/* =========================
-   Firebase Room create/join
-========================= */
+/* =========================================================
+   10) Client State + Transport wiring
+========================================================= */
+const client = {
+  selfId: uid(),
+  selfName: "",
+  roomCode: "",
+  roomId: "",
+  roomMeta: { roomNo:null, roomId:null },
 
+  isHost: false,
+  transport: null,
+  host: null,
+  authoritative: null,
+  lastVersion: 0,
+  selected: null,
+  dragging: null,
+};
+
+function setNetBadge(text, color=null){
+  if (!UI.netBadge) return;
+  UI.netBadge.textContent = text;
+  UI.netBadge.style.borderColor = color ? color : "rgba(255,255,255,.12)";
+}
+
+function getState(){
+  if (client.isHost && client.host){
+    return client.authoritative || redactStateForViewer(client.host.state, client.selfId);
+  }
+  return client.authoritative;
+}
+
+function setStatusUI(){
+  const s = client.authoritative;
+  if (!s){
+    UI.roomBadge && (UI.roomBadge.textContent = "—");
+    UI.meLine && (UI.meLine.textContent = "—");
+    UI.hostLine && (UI.hostLine.textContent = "—");
+    UI.playersLine && (UI.playersLine.textContent = "—");
+    UI.chatBadge && (UI.chatBadge.textContent = "—");
+    updateInspector();
+    return;
+  }
+
+  UI.roomBadge && (UI.roomBadge.textContent = "ROOM " + s.roomCode);
+  UI.chatBadge && (UI.chatBadge.textContent = "v" + s.version);
+
+  const me = s.players.find(p=>p.id===client.selfId);
+  if (UI.meLine){
+    if (me){
+      UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
+        <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[me.color]};box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
+        <span>${escapeHtml(me.name)} (${me.color})</span>
+      </span>`;
+    }else{
+      UI.meLine.textContent = "(chưa vào phòng)";
+    }
+  }
+
+  const hostP = s.players.find(p=>p.id===s.hostId);
+  if (UI.hostLine){
+    UI.hostLine.innerHTML = hostP
+      ? `<span style="display:inline-flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[hostP.color]};border:1px solid rgba(255,255,255,.18)"></span>
+          <span>${escapeHtml(hostP.name)}</span>
+        </span>`
+      : "—";
+  }
+
+  if (UI.playersLine){
+    UI.playersLine.innerHTML = s.players.map(p=>{
+      return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
+        <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[p.color]};border:1px solid rgba(255,255,255,.18)"></span>
+        <span style="color:rgba(233,236,255,.92)">${escapeHtml(p.name)}</span>
+        <span style="color:rgba(233,236,255,.55);font-size:12px">(${p.color})</span>
+        ${p.id===s.hostId ? `<span style="margin-left:auto;color:var(--muted);font-size:11px;border:1px solid rgba(255,255,255,.12);padding:2px 6px;border-radius:999px">HOST</span>` : ""}
+      </div>`;
+    }).join("");
+  }
+
+  updateInspector();
+
+  // nếu inspector đang mở mà target mất -> hide, còn thì reposition
+  const ins = document.getElementById("inspector");
+  if (ins && ins.style.display === "block"){
+    const sel = client.selected;
+    if (!sel) hideInspectorPopup();
+    else {
+      const wp = getWorldPosOfTarget(s, sel);
+      if (!wp) hideInspectorPopup();
+      else positionInspectorNearTarget();
+    }
+  }
+
+  renderChat(s);
+}
+
+function sendToServer(msg){
+  if (!client.transport) return;
+  client.transport.send(msg);
+}
+
+async function sendIntentFirebase(action){
+  if (!(client.transport instanceof FirebaseTransport)) return;
+  await client.transport.sendIntent(action);
+}
+
+function sendIntent(action){
+  if (UI.modeSelect?.value === "firebase"){
+    sendIntentFirebase(action);
+    return;
+  }
+  sendToServer({
+    type: "intent",
+    roomCode: client.roomCode,
+    fromId: client.selfId,
+    action,
+    at: now(),
+  });
+}
+
+function installTransport(t){
+  if (client.transport) client.transport.close();
+  client.transport = t;
+
+  t.onStatus = (st) => {
+    if (st.connected){
+      if (st.mode === "firebase") setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+      else if (st.mode === "ws") setNetBadge("WS", "rgba(73,209,124,.55)");
+      else setNetBadge("LOCAL", "rgba(73,209,124,.55)");
+    } else {
+      setNetBadge("OFFLINE", "rgba(255,255,255,.12)");
+    }
+  };
+
+  t.onMessage = (msg) => {
+    if (!msg) return;
+
+    // Firebase transport không dùng protocol local/ws ở đây
+    if (client.transport instanceof FirebaseTransport) return;
+
+    // Local/WS
+    if (msg.roomCode !== client.roomCode) return;
+
+    if (msg.type === "hello" && client.isHost && client.host){
+      const res = client.host.addOrUpdatePlayer({id: msg.fromId, name: msg.name});
+      if (!res.ok){
+        sendToServer({type:"deny", roomCode: client.roomCode, toId: msg.fromId, reason: res.reason});
+        return;
+      }
+      client.host.applyIntent(client.host.hostId, {type:"chat", text:`${msg.name} joined.`});
+      broadcastStateRaw();
+      return;
+    }
+
+    if (msg.type === "bye" && client.isHost && client.host){
+      client.host.removePlayer(msg.fromId);
+      client.host.applyIntent(client.host.hostId, {type:"chat", text:`A player left.`});
+      broadcastStateRaw();
+      return;
+    }
+
+    if (msg.type === "deny"){
+      if (msg.toId === client.selfId){
+        toast("Không vào được phòng: " + (msg.reason || "Denied"));
+        leaveRoom();
+      }
+      return;
+    }
+
+    if (msg.type === "intent"){
+      if (client.isHost && client.host){
+        const r = client.host.applyIntent(msg.fromId, msg.action);
+        if (!r.ok && msg.fromId === client.selfId) toast("Action fail: " + r.reason);
+        broadcastStateRaw();
+      }
+      return;
+    }
+
+    if (msg.type === "stateRaw"){
+      if (client.isHost) return;
+      const red = redactStateForViewer(msg.state, client.selfId);
+      if (red && (red.version >= (client.lastVersion||0))){
+        client.authoritative = red;
+        client.lastVersion = red.version;
+        setStatusUI();
+      }
+      return;
+    }
+  };
+}
+
+/* =========================================================
+   11) Room: Local/WS create/join/leave
+========================================================= */
+function genRoomCode(){
+  const a = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const b = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${a}-${b}`;
+}
+
+function readInputs(){
+  client.selfName = (UI.nameInput?.value || "").trim().slice(0,18) || "Player";
+  client.roomCode = (UI.roomInput?.value || "").trim().toUpperCase();
+  if (!client.roomCode) client.roomCode = genRoomCode();
+  if (UI.roomInput) UI.roomInput.value = client.roomCode;
+}
+
+function makeTransportForCurrentMode(){
+  const mode = UI.modeSelect?.value || "local";
+
+  if (mode === "ws"){
+    const url = (UI.wsUrlInput?.value || "").trim() || "ws://localhost:8080";
+    return new WebSocketTransport(url);
+  }
+
+  try{
+    if (typeof BroadcastChannel !== "undefined"){
+      return new LocalBroadcastTransport(client.roomCode, client.selfId);
+    }
+  }catch(e){}
+  return new LocalStorageTransport(client.roomCode, client.selfId);
+}
+
+function broadcastStateRaw(){
+  if (!client.isHost || !client.host) return;
+  const st = client.host.state;
+
+  sendToServer({type:"stateRaw", roomCode: client.roomCode, state: deepClone(st), at: now()});
+
+  client.authoritative = redactStateForViewer(st, client.selfId);
+  client.lastVersion = client.authoritative.version;
+  setStatusUI();
+}
+
+function createRoomAsHost_LocalOrWS(){
+  readInputs();
+
+  client.isHost = true;
+  client.host = new HostController(client.roomCode, client.selfId);
+
+  const t = makeTransportForCurrentMode();
+  installTransport(t);
+
+  // host add itself
+  client.host.addOrUpdatePlayer({ id: client.selfId, name: client.selfName });
+
+  client.authoritative = redactStateForViewer(client.host.state, client.selfId);
+  client.lastVersion = client.authoritative.version;
+
+  setStatusUI();
+  broadcastStateRaw();
+
+  toast("Đã tạo phòng (Host)");
+  goMatch();
+}
+
+function joinRoomAsClient_LocalOrWS(){
+  readInputs();
+  client.isHost = false;
+  client.host = null;
+
+  const t = makeTransportForCurrentMode();
+  installTransport(t);
+
+  sendToServer({type:"hello", roomCode: client.roomCode, fromId: client.selfId, name: client.selfName, at: now()});
+  toast("Đang vào phòng...");
+  goMatch();
+}
+
+function leaveRoom(){
+  if (!client.roomCode) return;
+
+  try{
+    if (!client.isHost){
+      sendToServer({type:"bye", roomCode: client.roomCode, fromId: client.selfId, at: now()});
+    }
+  }catch(e){}
+
+  if (client.transport) client.transport.close();
+  client.transport = null;
+  client.isHost = false;
+  client.host = null;
+  client.authoritative = null;
+  client.lastVersion = 0;
+  client.selected = null;
+  client.dragging = null;
+
+  setStatusUI();
+  setNetBadge("OFFLINE");
+}
+
+/* =========================================================
+   12) Room: Firebase create/join
+========================================================= */
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
-  client.selfId = FB.uid;          // IMPORTANT: unify id
+  client.selfId = FB.uid;
   client.selfName = FB.username;
 
-  // allocate roomNo => roomId = `room${no}`
   const roomNo = await fbAllocateRoomNo();
   const roomId = `room${roomNo}`;
 
-  client.roomId = roomId.toLowerCase(); // room1 (dùng cho Firebase)
-  client.roomCode = roomId.toUpperCase(); // ROOM1 (chỉ để hiển thị)
-  UI.roomInput.value = client.roomCode;
+  client.roomId = roomId.toLowerCase();
+  client.roomCode = roomId.toUpperCase();
+  if (UI.roomInput) UI.roomInput.value = client.roomCode;
 
   client.isHost = true;
-  client.host = new HostController(client.roomCode, FB.uid); // ✅ dùng ROOM1 cho state
+  client.host = new HostController(client.roomCode, FB.uid);
   client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username });
 
-  // init room meta + clear intents + write state
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   await roomRef.set({
     meta: {
@@ -1767,65 +2008,48 @@ async function createRoomAsHost_Firebase(){
     state: client.host.state,
   });
 
-  // add host user info to users
-  await roomRef.child(`users/${FB.uid}`).set({
-    username: FB.username,
-    seat: 0,
-    atk: 0, def: 0, hp: 20
-  });
+  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: 0, atk: 0, def: 0, hp: 20 });
 
-  // local UI authoritative
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
   client.lastVersion = client.authoritative.version;
   setStatusUI();
 
-  // transport
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
   await t.attachPresence();
 
-  // host listens intents -> apply -> write state
   t.listenIntentsAsHost(async (msg, intentKey)=>{
-    // ignore if room mismatch
     const action = msg.action;
     const fromId = msg.fromUid;
 
-    // ensure player exists in host controller (same logic join)
     client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
 
-    // apply intent
     const r = client.host.applyIntent(fromId, action);
-    if (!r.ok && fromId === FB.uid){
-      toast("Action fail: " + r.reason);
-    }
-    // write state
+    if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
+
     await t.writeState(client.host.state);
 
-    // OPTIONAL: cleanup old intents (keep db light)
-    // remove the intent after processed
     try{ await FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`).remove(); }catch(e){}
   });
 
-  // all clients (including host) listen state
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
-    // host uses host.state live but also accept db state in case refresh
     if (client.isHost && client.host){
       client.host.state = st;
       client.authoritative = redactStateForViewer(st, FB.uid);
-    }else{
+    } else {
       client.authoritative = redactStateForViewer(st, FB.uid);
     }
     client.lastVersion = st.version || client.lastVersion;
     setStatusUI();
   });
 
-  setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
   toast(`Đã tạo room: ${roomId}`);
   client.roomMeta = { roomNo, roomId };
 
-  // host cleanup when room empty
   installFirebaseRoomCleanupAsHost(client.roomId, roomNo);
+
+  goMatch();
 }
 
 async function joinRoomAsClient_Firebase(){
@@ -1834,24 +2058,15 @@ async function joinRoomAsClient_Firebase(){
   client.selfId = FB.uid;
   client.selfName = FB.username;
 
-  // room input: "ROOM1" or "room1"
-  readInputs(); // sets client.roomCode = "ROOM1"
-  client.roomId = client.roomCode.toLowerCase(); // "room1"
-  
+  readInputs();
+  client.roomId = client.roomCode.toLowerCase();
   if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
-  // check exists
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
 
-  // join seat: assign next seat number based on current players list in state
-  // (host authoritative sẽ set seat đúng khi addOrUpdatePlayer)
-  await roomRef.child(`users/${FB.uid}`).set({
-    username: FB.username,
-    seat: -1,
-    atk: 0, def: 0, hp: 20
-  });
+  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: -1, atk: 0, def: 0, hp: 20 });
 
   client.isHost = false;
   client.host = null;
@@ -1859,405 +2074,213 @@ async function joinRoomAsClient_Firebase(){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
   await t.attachPresence();
+
   await t.sendIntent({ type: "join" });
 
-  // listen state
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
     const red = redactStateForViewer(st, FB.uid);
+    if (!red) return;
     client.authoritative = red;
     client.lastVersion = red.version || client.lastVersion;
     setStatusUI();
   });
 
-  setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
   toast("Đã vào " + client.roomCode);
+  goMatch();
 }
 
-/* host cleanup room empty */
 function installFirebaseRoomCleanupAsHost(roomId, roomNo){
-  const presRef = FB.db.ref(`AllRoom/${client.roomId}/presence`);
+  const presRef = FB.db.ref(`AllRoom/${roomId}/presence`);
   presRef.on("value", async (snap)=>{
     if (!client.isHost) return;
     const v = snap.val() || {};
     const keys = Object.keys(v);
     if (keys.length === 0){
-      // room empty => delete and release roomNo
-      try{ await FB.db.ref(`AllRoom/${client.roomId}`).remove(); }catch(e){}
+      try{ await FB.db.ref(`AllRoom/${roomId}`).remove(); }catch(e){}
       try{ await fbReleaseRoomNo(roomNo); }catch(e){}
     }
   });
 }
 
-/* =========================
-   Hook UI create/join buttons
-========================= */
+/* =========================================================
+   13) Deck/SetCard Modal (RTDB)
+========================================================= */
+const DECKUI = {
+  modal: document.getElementById("deckModal"),
+  openBtn: document.getElementById("openDeckBtn"),
+  closeBtn: document.getElementById("closeDeckBtn"),
+  userBadge: document.getElementById("deckUserBadge"),
 
-// override click handlers:
-UI.createBtn.addEventListener("click", async ()=>{
-  if (UI.modeSelect.value !== "firebase") return; // keep your old local/ws handlers working
-  try{
-    await createRoomAsHost_Firebase();
-  }catch(e){
-    console.error(e);
-    toast("Firebase create error: " + (e.message || e));
-  }
-});
+  setSelect: document.getElementById("setSelect"),
+  newSetBtn: document.getElementById("newSetBtn"),
+  loadSetBtn: document.getElementById("loadSetBtn"),
+  deleteSetBtn: document.getElementById("deleteSetBtn"),
 
-UI.joinBtn.addEventListener("click", async ()=>{
-  if (UI.modeSelect.value !== "firebase") return;
-  try{
-    await joinRoomAsClient_Firebase();
-  }catch(e){
-    console.error(e);
-    toast("Firebase join error: " + (e.message || e));
-  }
-});
+  setNameInput: document.getElementById("setNameInput"),
+  backUrlInput: document.getElementById("setBackUrlInput"),
+  addCardBtn: document.getElementById("addCardUrlBtn"),
+  list: document.getElementById("cardUrlList"),
 
-// route intents: in firebase mode, send to RTDB intents instead of BroadcastChannel
-async function sendIntentFirebase(action){
-  if (!(client.transport instanceof FirebaseTransport)) return;
-  await client.transport.sendIntent(action);
-}
-
-// patch your sendIntent(action) function: add this at the TOP of sendIntent
-// (Bạn sửa trực tiếp function sendIntent của bạn)
-
-  
-const client = {
-  selfId: uid(),
-  selfName: "",
-  roomCode: "",
-
-  roomMeta: {     
-    roomNo: null,
-    roomId: null
-  },
-  
-  isHost: false,
-  transport: null,
-  host: null,               // HostController when we are host in local mode
-  authoritative: null,       // last redacted state received
-  lastVersion: 0,
-  selected: null,            // {type:'card'|'stack', id}
-  dragging: null,            // drag session
+  saveBtn: document.getElementById("saveSetBtn"),
+  loadToRoomBtn: document.getElementById("loadSetToRoomBtn"),
 };
 
-function setNetBadge(text, color=null){
-  UI.netBadge.textContent = text;
-  UI.netBadge.style.borderColor = color ? color : "rgba(255,255,255,.12)";
+let deckSetsCache = {};
+let deckCurrentSetId = null;
+
+function openDeckModal(){ if (DECKUI.modal) DECKUI.modal.style.display = "flex"; }
+function closeDeckModal(){ if (DECKUI.modal) DECKUI.modal.style.display = "none"; }
+
+function makeCardUrlRow(url=""){
+  const row = document.createElement("div");
+  row.className = "card-url-row";
+
+  const inp = document.createElement("input");
+  inp.className = "mono";
+  inp.placeholder = "https://.../front.png";
+  inp.value = url;
+
+  const del = document.createElement("button");
+  del.className = "danger";
+  del.textContent = "X";
+  del.onclick = ()=> row.remove();
+
+  row.appendChild(inp);
+  row.appendChild(del);
+  return row;
 }
 
-function setStatusUI(){
-  const s = client.authoritative;
-  if (!s){
-    UI.roomBadge.textContent = "—";
-    UI.meLine.textContent = "—";
-    UI.hostLine.textContent = "—";
-    UI.playersLine.textContent = "—";
-    UI.chatBadge.textContent = "—";
-    return;
+function fillEditorFromSet(setId, data){
+  deckCurrentSetId = setId;
+  if (DECKUI.setNameInput) DECKUI.setNameInput.value = data?.name || "";
+  if (DECKUI.backUrlInput) DECKUI.backUrlInput.value = data?.backUrl || "";
+  if (!DECKUI.list) return;
+
+  DECKUI.list.innerHTML = "";
+  const cards = data?.cards ? Object.values(data.cards) : [];
+  for (const c of cards){
+    DECKUI.list.appendChild(makeCardUrlRow(c.frontUrl || ""));
   }
-  UI.roomBadge.textContent = "ROOM " + s.roomCode;
-  UI.chatBadge.textContent = "v" + s.version;
-
-  const me = s.players.find(p=>p.id===client.selfId);
-  if (me){
-    UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
-      <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[me.color]};box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
-      <span>${escapeHtml(me.name)} (${me.color})</span>
-    </span>`;
-  }else{
-    UI.meLine.textContent = "(chưa vào phòng)";
-  }
-  const hostP = s.players.find(p=>p.id===s.hostId);
-  UI.hostLine.innerHTML = hostP
-    ? `<span style="display:inline-flex;align-items:center;gap:8px">
-        <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[hostP.color]};border:1px solid rgba(255,255,255,.18)"></span>
-        <span>${escapeHtml(hostP.name)}</span>
-      </span>`
-    : "—";
-
-  UI.playersLine.innerHTML = s.players.map(p=>{
-    return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
-      <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[p.color]};border:1px solid rgba(255,255,255,.18)"></span>
-      <span style="color:rgba(233,236,255,.92)">${escapeHtml(p.name)}</span>
-      <span style="color:rgba(233,236,255,.55);font-size:12px">(${p.color})</span>
-      ${p.id===s.hostId ? `<span style="margin-left:auto;color:var(--muted);font-size:11px;border:1px solid rgba(255,255,255,.12);padding:2px 6px;border-radius:999px">HOST</span>` : ""}
-    </div>`;
-  }).join("");
-  
-  updateInspector();
-
-  // nếu inspector đang mở mà object không còn tồn tại -> ẩn; còn tồn tại -> reposition
-  (function(){
-    const ins = document.getElementById("inspector");
-    if (!ins || ins.style.display !== "block") return;
-
-    const sel = client.selected;
-    if (!s || !sel) return hideInspectorPopup();
-
-    const wp = getWorldPosOfTarget(s, sel);
-    if (!wp) return hideInspectorPopup();
-
-    // chỉ reposition, không tự show
-    positionInspectorNearTarget();
-  })();
-
-  renderChat(s);
-
+  if (cards.length === 0) DECKUI.list.appendChild(makeCardUrlRow(""));
 }
 
-function escapeHtml(str){
-  return (str ?? "").toString()
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+function editorToSetData(){
+  const name = (DECKUI.setNameInput?.value||"").trim() || "Untitled";
+  const backUrl = (DECKUI.backUrlInput?.value||"").trim();
+  const urls = [...(DECKUI.list?.querySelectorAll("input")||[])].map(i=>(i.value||"").trim()).filter(Boolean);
+
+  const cards = {};
+  urls.forEach((u, idx)=>{ cards["c"+(idx+1)] = { frontUrl: u }; });
+
+  return { name, backUrl, cards, updatedAt: Date.now() };
 }
 
-/* =========================
-   Messaging protocol
-========================= */
-function sendToServer(msg){
-  if (!client.transport) return;
-  client.transport.send(msg);
-}
+async function refreshSetList(){
+  await fbEnsureAuth();
+  if (DECKUI.userBadge) DECKUI.userBadge.textContent = `UID: ${FB.uid.slice(0,6)}... | ${FB.username}`;
 
-function sendIntent(action){
-  // Firebase mode
-  if (UI.modeSelect.value === "firebase"){
-    sendIntentFirebase(action);
+  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard`);
+  const snap = await ref.get();
+  deckSetsCache = snap.val() || {};
+
+  if (!DECKUI.setSelect) return;
+
+  DECKUI.setSelect.innerHTML = "";
+  const ids = Object.keys(deckSetsCache);
+
+  if (ids.length === 0){
+    const op = document.createElement("option");
+    op.value = "";
+    op.textContent = "(chưa có set)";
+    DECKUI.setSelect.appendChild(op);
+    deckCurrentSetId = null;
+    fillEditorFromSet(null, {name:"", backUrl:"", cards:{}});
     return;
   }
 
-  // Local/WS mode (giữ nguyên logic cũ)
-  sendToServer({
-    type: "intent",
-    roomCode: client.roomCode,
-    fromId: client.selfId,
-    action,
-    at: now(),
-  });
-}
-
-
-
-function installTransport(t){
-  if (client.transport) client.transport.close();
-  client.transport = t;
-
-  t.onStatus = (st) => {
-    if (st.connected){
-      setNetBadge(st.mode === "local" ? "LOCAL" : "WS", "rgba(73,209,124,.55)");
-    } else {
-      setNetBadge("OFFLINE", "rgba(255,255,255,.12)");
-    }
-  };
-
-  t.onMessage = (msg) => {
-    // FirebaseTransport không dùng msg.roomCode
-    if (!msg) return;
-  
-    // Nếu đang firebase mode thì bỏ qua phần local/ws handler
-    if (client.transport instanceof FirebaseTransport) return;
-  
-    // ===== phần local/ws code cũ giữ nguyên phía dưới =====
-    if (msg.roomCode !== client.roomCode) return;
-    
-    // Local authoritative: host acts like server
-    if (msg.type === "hello" && client.isHost && client.host){
-      // someone joined -> add/update player and send snapshot to all
-      const res = client.host.addOrUpdatePlayer({id: msg.fromId, name: msg.name});
-      if (!res.ok){
-        sendToServer({type:"deny", roomCode: client.roomCode, toId: msg.fromId, reason: res.reason});
-        return;
-      }
-      broadcastState();
-      // announce
-      client.host.applyIntent(client.host.hostId, {type:"chat", text:`${msg.name} joined.`});
-      broadcastState();
-      return;
-    }
-
-    if (msg.type === "bye" && client.isHost && client.host){
-      client.host.removePlayer(msg.fromId);
-      client.host.applyIntent(client.host.hostId, {type:"chat", text:`A player left.`});
-      broadcastState();
-      return;
-    }
-
-    if (msg.type === "deny"){
-      if (msg.toId === client.selfId){
-        toast("Không vào được phòng: " + (msg.reason || "Denied"));
-        leaveRoom();
-      }
-      return;
-    }
-
-    if (msg.type === "intent"){
-      // Host receives intents, applies, then broadcasts snapshot
-      if (client.isHost && client.host){
-        const r = client.host.applyIntent(msg.fromId, msg.action);
-        if (!r.ok && msg.fromId === client.selfId){
-          toast("Action fail: " + r.reason);
-        }
-        broadcastState();
-      }
-      return;
-    }
-
-    if (msg.type === "state"){
-      // Clients receive state snapshot
-      if (client.isHost) return; // host uses its own authoritative state
-      if (msg.state && msg.state.version && msg.state.version >= (client.lastVersion||0)){
-        client.authoritative = msg.state;
-        client.lastVersion = msg.state.version;
-        setStatusUI();
-      }
-      return;
-    }
-  };
-}
-
-/* =========================
-   Room Join / Host / Leave
-========================= */
-function genRoomCode(){
-  const a = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const b = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${a}-${b}`;
-}
-
-function readInputs(){
-  client.selfName = (UI.nameInput.value || "").trim().slice(0,18) || "Player";
-  client.roomCode = (UI.roomInput.value || "").trim().toUpperCase();
-  if (!client.roomCode) client.roomCode = genRoomCode();
-  UI.roomInput.value = client.roomCode;
-}
-
-function makeTransportForCurrentMode(){
-  const mode = UI.modeSelect.value;
-
-  if (mode === "ws"){
-    const url = (UI.wsUrlInput.value || "").trim() || "ws://localhost:8080";
-    return new WebSocketTransport(url);
+  for (const id of ids){
+    const op = document.createElement("option");
+    op.value = id;
+    op.textContent = `${deckSetsCache[id]?.name || id} (${Object.keys(deckSetsCache[id]?.cards||{}).length})`;
+    DECKUI.setSelect.appendChild(op);
   }
 
-  // local mode
-  try{
-    if (typeof BroadcastChannel !== "undefined"){
-      return new LocalBroadcastTransport(client.roomCode, client.selfId);
-    }
-  }catch(e){
-    // fall through to localStorage transport
+  const pick = (deckCurrentSetId && deckSetsCache[deckCurrentSetId]) ? deckCurrentSetId : ids[0];
+  DECKUI.setSelect.value = pick;
+  fillEditorFromSet(pick, deckSetsCache[pick]);
+}
+
+async function createNewSet(){
+  await fbEnsureAuth();
+  const newId = "set_" + uid().slice(0,8);
+  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard/${newId}`);
+  await ref.set({ name:"New Set", backUrl:"", cards:{}, createdAt: Date.now(), updatedAt: Date.now() });
+  await refreshSetList();
+  if (DECKUI.setSelect) DECKUI.setSelect.value = newId;
+  fillEditorFromSet(newId, deckSetsCache[newId]);
+}
+
+async function saveCurrentSet(){
+  await fbEnsureAuth();
+  if (!deckCurrentSetId) await createNewSet();
+  const data = editorToSetData();
+  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard/${deckCurrentSetId}`);
+  await ref.update(data);
+  toast("Đã lưu set");
+  await refreshSetList();
+}
+
+async function deleteCurrentSet(){
+  await fbEnsureAuth();
+  const id = DECKUI.setSelect?.value;
+  if (!id) return;
+  await FB.db.ref(`AllUser/${FB.uid}/setCard/${id}`).remove();
+  toast("Đã xóa set");
+  deckCurrentSetId = null;
+  await refreshSetList();
+}
+
+async function loadSelectedSet(){
+  const id = DECKUI.setSelect?.value;
+  if (!id || !deckSetsCache[id]) return;
+  fillEditorFromSet(id, deckSetsCache[id]);
+  toast("Đã load set vào editor");
+}
+
+async function hostLoadSetToRoom(){
+  if (!client.isHost) return toast("Chỉ host mới load set vào room");
+  if (!(client.transport instanceof FirebaseTransport)) return toast("Chỉ dùng được trong Firebase mode");
+
+  const id = deckCurrentSetId || DECKUI.setSelect?.value;
+  if (!id) return toast("Chưa chọn set");
+
+  // lấy từ editor là bản mới nhất
+  const data = editorToSetData();
+
+  // save set
+  if (!deckCurrentSetId) await createNewSet();
+  await saveCurrentSet();
+
+  const urls = Object.values((data.cards||{})).map(x=>x.frontUrl).filter(Boolean);
+  const backUrl = data.backUrl || "";
+
+  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+  await roomRef.child("meta").update({ deckSource: { uid: FB.uid, setId: id }, deckBackUrl: backUrl });
+
+  if (client.host && client.host.state){
+    client.host.state.assets.backUrl = backUrl;
+    client.host.state._deckPool = urls;
+    client.host.bumpVersion();
+    await client.transport.writeState(client.host.state);
   }
-  return new LocalStorageTransport(client.roomCode, client.selfId);
+
+  toast(`Host loaded set (${urls.length} cards)`);
 }
 
-
-function createRoomAsHost(){
-  //Sửa rồi
-  readInputs();
-
-  client.isHost = true;
-  client.host = new HostController(client.roomCode, client.selfId);
-
-  const t = makeTransportForCurrentMode();
-  installTransport(t);
-
-  // ✅ ADD HOST AS PLAYER
-  client.host.addOrUpdatePlayer({
-    id: client.selfId,
-    name: client.selfName
-  });
-
-  // ✅ FORCE STATE FOR HOST ITSELF
-  client.authoritative = redactStateForViewer(
-    client.host.state,
-    client.selfId
-  );
-  client.lastVersion = client.authoritative.version;
-
-  // ✅ UPDATE UI IMMEDIATELY
-  setNetBadge("LOCAL", "rgba(73,209,124,.6)");
-  setStatusUI();
-
-  // ✅ BROADCAST FOR OTHER TABS
-  broadcastState();
-
-  toast("Đã tạo phòng (Host)");
-}
-
-function joinRoomAsClient(){
-  readInputs();
-  client.isHost = false;
-  client.host = null;
-
-  const t = makeTransportForCurrentMode();
-  installTransport(t);
-
-  // say hello to host
-  sendToServer({type:"hello", roomCode: client.roomCode, fromId: client.selfId, name: client.selfName, at: now()});
-  toast("Đang vào phòng...");
-}
-
-function leaveRoom(){
-  if (!client.roomCode) return;
-  try{
-    if (!client.isHost){
-      sendToServer({type:"bye", roomCode: client.roomCode, fromId: client.selfId, at: now()});
-    }
-  }catch(e){}
-  if (client.transport) client.transport.close();
-  client.transport = null;
-  client.isHost = false;
-  client.host = null;
-  client.authoritative = null;
-  client.lastVersion = 0;
-  client.selected = null;
-  client.dragging = null;
-  setStatusUI();
-  setNetBadge("OFFLINE");
-}
-
-function broadcastState(){
-  if (!client.isHost || !client.host) return;
-  const st = client.host.state;
-  // Host broadcasts REDACTED snapshot per receiver via broadcast channel:
-  // In LocalBroadcastTransport we cannot target; simplest: broadcast full state,
-  // but clients will redact on receive? (not safe). We'll broadcast redacted-per-viewer
-  // by sending a generic state and include full, BUT since local-only testing, it's OK.
-  // Still, we can instead broadcast "stateRaw" and client redacts itself.
-  sendToServer({type:"stateRaw", roomCode: client.roomCode, state: deepClone(st), at: now()});
-
-  // Also update host's own redacted view
-  client.authoritative = redactStateForViewer(st, client.selfId);
-  client.lastVersion = client.authoritative.version;
-  setStatusUI();
-}
-
-// Handle stateRaw on clients: redact locally
-function installStateRawHandler(){
-  const old = client.transport?.onMessage;
-  if (!client.transport) return;
-  client.transport.onMessage = (msg) => {
-    // allow existing
-    old && old(msg);
-    if (!msg || msg.roomCode !== client.roomCode) return;
-    if (msg.type === "stateRaw"){
-      if (client.isHost) return;
-      const red = redactStateForViewer(msg.state, client.selfId);
-      if (red.version >= (client.lastVersion||0)){
-        client.authoritative = red;
-        client.lastVersion = red.version;
-        setStatusUI();
-      }
-    }
-  };
-}
-  
+/* =========================================================
+   14) Images cache
+========================================================= */
 const imgCache = new Map();
 function loadImg(url){
   if (!url) return null;
@@ -2268,343 +2291,13 @@ function loadImg(url){
   return im;
 }
 
-UI.applyDeckBtn.addEventListener("click", ()=>{
-  if (!client.isHost) return toast("Host mới set deck images");
-  sendIntent({
-    type:"setAssets",
-    frontBase: UI.frontBaseInput.value,
-    backUrl: UI.backUrlInput.value
-  });
-  toast("Applied deck images");
-});
-
-  
-UI.createBtn.addEventListener("click", ()=>{
-  if (UI.modeSelect.value === "firebase") return; // ✅ chặn khi firebase
-  createRoomAsHost();
-  installStateRawHandler();
-});
-
-UI.joinBtn.addEventListener("click", ()=>{
-  if (UI.modeSelect.value === "firebase") return; // ✅ chặn khi firebase
-  joinRoomAsClient();
-  installStateRawHandler();
-});
-
-UI.resetBtn.addEventListener("click", ()=>{
-  if (!client.authoritative) return;
-  if (!client.isHost){
-    toast("Chỉ Host mới reset.");
-    return;
-  }
-  sendIntent({type:"reset"});
-});
-
-UI.copyLinkBtn.addEventListener("click", async ()=>{
-  readInputs();
-  const url = new URL(location.href);
-  url.searchParams.set("room", client.roomCode);
-  url.searchParams.set("mode", UI.modeSelect.value);
-  if (UI.modeSelect.value === "ws"){
-    const ws = (UI.wsUrlInput.value || "").trim();
-    if (ws) url.searchParams.set("ws", ws);
-  }
-  try{
-    await navigator.clipboard.writeText(url.toString());
-    toast("Đã copy link phòng.");
-  }catch(e){
-    toast("Copy failed (trình duyệt chặn).");
-  }
-});
-
-addEventListener("beforeunload", ()=>{ try{ leaveRoom(); }catch(e){} });
-
-/* Auto-fill from URL params */
-(function initFromQuery(){
-  const u = new URL(location.href);
-  const room = u.searchParams.get("room");
-  const mode = u.searchParams.get("mode");
-  const ws = u.searchParams.get("ws");
-  if (room) UI.roomInput.value = room.toUpperCase();
-  if (mode && (mode==="local" || mode==="ws")){
-    UI.modeSelect.value = mode;
-    UI.wsRow.style.display = mode === "ws" ? "flex" : "none";
-  }
-  if (ws) UI.wsUrlInput.value = ws;
-})();
-
-window.addEventListener("error", (e) => {
-  toast("JS error: " + (e.message || "unknown"));
-});
-window.addEventListener("unhandledrejection", (e) => {
-  toast("Promise error: " + ((e.reason && e.reason.message) || e.reason || "unknown"));
-});
-
-/* =========================
-   Input / Hit Test
-========================= */
-function mousePos(ev){
-  const rect = canvas.getBoundingClientRect();
-  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
-}
-
-function getState(){
-  if (client.isHost && client.host){
-    // host uses live state (but render redacted view for itself)
-    return client.authoritative || redactStateForViewer(client.host.state, client.selfId);
-  }
-  return client.authoritative;
-}
-
-function listDrawableObjects(state){
-  // Returns list of {type:'card'|'stack', id, x,y, zone, owner, z}
-  const out = [];
-  if (!state) return out;
-
-  // stacks
-  for (const sid in state.stacks){
-    const s = state.stacks[sid];
-    const z = stackZ(s);
-    out.push({type:"stack", id:sid, x:s.x, y:s.y, zone:s.zone, owner:s.owner, z});
-  }
-  // loose cards (not in stack)
-  for (const cid in state.cards){
-    const c = state.cards[cid];
-    if (c.stackId) continue;
-    out.push({type:"card", id:cid, x:c.x, y:c.y, zone:c.zone, owner:c.owner, z: cardZ(c)});
-  }
-  // sort by z
-  out.sort((a,b)=>a.z-b.z);
-  return out;
-}
-
-function cardZ(c){
-  // hand on top of table
-  let z = 10;
-  if (c.zone === ZONES.table) z = 50;
-  if (c.zone === ZONES.hand) z = 80;
-  if (c.zone === ZONES.deck) z = 40;
-  if (c.zone === ZONES.discard) z = 45;
-  return z + (c.order||0)*0.001;
-}
-function stackZ(s){
-  let z = 12;
-  if (s.zone === ZONES.table) z = 55;
-  if (s.zone === ZONES.hand) z = 85;
-  if (s.zone === ZONES.deck) z = 42;
-  if (s.zone === ZONES.discard) z = 47;
-  return z + (s.cardIds?.length||0)*0.01;
-}
-
-function hitTest(worldX, worldY){
-  const state = getState();
-  if (!state) return null;
-
-  // check stacks first (bigger target), then cards
-  const objs = listDrawableObjects(state);
-  for (let i=objs.length-1; i>=0; i--){
-    const o = objs[i];
-    const w = CARD.w, h = CARD.h;
-    const x0 = o.x - w/2, y0 = o.y - h/2;
-    if (worldX >= x0 && worldX <= x0+w && worldY >= y0 && worldY <= y0+h){
-      // privacy guard: cannot interact with other's hand stack/card
-      if (o.zone === ZONES.hand && o.owner && o.owner !== client.selfId){
-        return null;
-      }
-      return {type:o.type, id:o.id};
-    }
-  }
-  return null;
-}
-
-/* =========================
-   Dragging
-========================= */
-canvas.addEventListener("mousedown", (ev)=>{
-  const st = getState();
-  if (!st) return;
-  const p = toWorld(mousePos(ev));
-  const hit = hitTest(p.x, p.y);
-
-  if (hit){
-    client.selected = hit;
-    
-    updateInspector();
-    // start drag
-    client.dragging = {
-      target: hit,
-      start: p,
-      offset: calcDragOffset(st, hit, p),
-      moved:false,
-    };
-  } else {
-    client.selected = null;
-    hideInspectorPopup();
-    updateInspector();
-  }
-});
-
-addEventListener("mousemove", (ev)=>{
-  if (!client.dragging) return;
-  hideInspectorPopup();
-  const st = getState();
-  if (!st) return;
-  const p = toWorld(mousePos(ev));
-  client.dragging.moved = true;
-  client.dragging.cur = p;
-
-  // local preview (client-side) while dragging: mutate a local shadow copy
-  // We'll just keep a "ghost" draw position in dragging and render with it.
-});
-
-addEventListener("mouseup", (ev)=>{
-  if (!client.dragging) return;
-  const st = getState();
-  const drag = client.dragging;
-  client.dragging = null;
-  if (!st) return;
-
-  const p = toWorld(mousePos(ev));
-  const drop = p;
-  
-  if (!drag.moved){
-    showInspectorPopup();
-    return;
-  }
-  
-  // If dragged and dropped on another object -> stack
-  const hit = hitTest(drop.x, drop.y);
-  if (hit && !(hit.type===drag.target.type && hit.id===drag.target.id)){
-    hideInspectorPopup();
-    sendIntent({
-      type:"stack",
-      dragTargetType: drag.target.type,
-      dragId: drag.target.id,
-      dropOnType: hit.type,
-      dropOnId: hit.id
-    });
-    return;
-  }
-
-  // else move to position
-  hideInspectorPopup();
-  sendIntent({
-    type:"move",
-    targetType: drag.target.type,
-    id: drag.target.id,
-    x: drop.x - (drag.offset?.dx||0),
-    y: drop.y - (drag.offset?.dy||0),
-  });
-});
-
-INS.btnFlip.onclick = ()=>{
-  if (!client.selected) return;
-  sendIntent({type:"flip", targetType: client.selected.type, id: client.selected.id});
-};
-INS.btnDiscard.onclick = ()=>{
-  if (!client.selected) return;
-  sendIntent({type:"discard", targetType: client.selected.type, id: client.selected.id});
-};
-INS.btnUnstack.onclick = ()=>{
-  const sel = client.selected;
-  if (!sel || sel.type!=="stack") return;
-  sendIntent({type:"unstack", stackId: sel.id});
-};
-INS.btnShuffle.onclick = ()=>{
-  const sel = client.selected;
-  if (sel?.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
-  else sendIntent({type:"shuffle", stackId:"stack_deck"});
-};
-
-
-function calcDragOffset(state, target, p){
-  if (target.type === "card"){
-    const c = state.cards[target.id];
-    if (!c) return {dx:0,dy:0};
-    return {dx: p.x - c.x, dy: p.y - c.y};
-  } else {
-    const s = state.stacks[target.id];
-    if (!s) return {dx:0,dy:0};
-    return {dx: p.x - s.x, dy: p.y - s.y};
-  }
-}
-
-/* =========================
-   Keyboard shortcuts
-========================= */
-addEventListener("keydown", (ev)=>{
-  if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
-
-  const st = getState();
-  if (!st) return;
-
-  const key = ev.key.toLowerCase();
-  if (key === "escape"){
-    client.selected = null;
-    hideInspectorPopup();
-    return;
-  }
-  if (key === "d"){
-    // draw: if selected stack is deck OR near deck OR default deck
-    sendIntent({type:"draw"});
-    toast("Draw 1");
-    return;
-  }
-  if (key === "f"){
-    const sel = client.selected;
-    if (!sel) return;
-    sendIntent({type:"flip", targetType: sel.type, id: sel.id});
-    return;
-  }
-  if (key === "s"){
-    const sel = client.selected;
-    // shuffle selected stack or deck
-    if (sel && sel.type==="stack"){
-      sendIntent({type:"shuffle", stackId: sel.id});
-    } else {
-      sendIntent({type:"shuffle", stackId: "stack_deck"});
-    }
-    return;
-  }
-  if (key === "u"){
-    const sel = client.selected;
-    if (sel && sel.type==="stack"){
-      sendIntent({type:"unstack", stackId: sel.id});
-    }
-    return;
-  }
-  if (key === "g"){
-    // "force stack" while dragging: snap to best overlap target
-    // Simple: if selected exists and dragging in progress is handled by mouseup stacking.
-    toast("G: thả lên object để gom (auto).");
-    return;
-  }
-  if (key === "x"){
-    // optional: discard selected
-    const sel = client.selected;
-    if (!sel) return;
-    sendIntent({type:"discard", targetType: sel.type, id: sel.id});
-    return;
-  }
-});
-
-/* =========================
-   Chat
-========================= */
-UI.chatForm.addEventListener("submit", (ev)=>{
-  ev.preventDefault();
-  const text = (UI.chatInput.value || "").trim();
-  UI.chatInput.value = "";
-  if (!text) return;
-  sendIntent({type:"chat", text});
-});
-
+/* =========================================================
+   15) Chat
+========================================================= */
 function renderChat(state){
   const items = state.chat || [];
-  const last = items[items.length-1];
-  if (!last) return;
+  if (!UI.chatLog) return;
 
-  // render full chat list each time (small)
   UI.chatLog.innerHTML = items.map(m=>{
     const p = state.players.find(x=>x.id===m.fromId);
     const name = p ? p.name : "Unknown";
@@ -2624,13 +2317,209 @@ function renderChat(state){
     `;
   }).join("");
 
-  // auto scroll to bottom
   UI.chatLog.scrollTop = UI.chatLog.scrollHeight;
 }
 
-/* =========================
-   Rendering Helpers
-========================= */
+/* =========================================================
+   16) Input / HitTest / Drag
+========================================================= */
+function mousePos(ev){
+  const rect = canvas.getBoundingClientRect();
+  return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+}
+
+function cardZ(c){
+  let z = 10;
+  if (c.zone === ZONES.table) z = 50;
+  if (c.zone === ZONES.hand) z = 80;
+  if (c.zone === ZONES.deck) z = 40;
+  if (c.zone === ZONES.discard) z = 45;
+  return z + (c.order||0)*0.001;
+}
+function stackZ(s){
+  let z = 12;
+  if (s.zone === ZONES.table) z = 55;
+  if (s.zone === ZONES.hand) z = 85;
+  if (s.zone === ZONES.deck) z = 42;
+  if (s.zone === ZONES.discard) z = 47;
+  return z + (s.cardIds?.length||0)*0.01;
+}
+
+function listDrawableObjects(state){
+  const out = [];
+  if (!state) return out;
+
+  for (const sid in state.stacks){
+    const s = state.stacks[sid];
+    if (!s) continue;
+    out.push({type:"stack", id:sid, x:s.x, y:s.y, zone:s.zone, owner:s.owner, z: stackZ(s)});
+  }
+  for (const cid in state.cards){
+    const c = state.cards[cid];
+    if (!c || c.stackId) continue;
+    out.push({type:"card", id:cid, x:c.x, y:c.y, zone:c.zone, owner:c.owner, z: cardZ(c)});
+  }
+  out.sort((a,b)=>a.z-b.z);
+  return out;
+}
+
+function hitTest(worldX, worldY){
+  const state = getState();
+  if (!state) return null;
+
+  const objs = listDrawableObjects(state);
+  for (let i=objs.length-1; i>=0; i--){
+    const o = objs[i];
+    const w = CARD.w, h = CARD.h;
+    const x0 = o.x - w/2, y0 = o.y - h/2;
+    if (worldX >= x0 && worldX <= x0+w && worldY >= y0 && worldY <= y0+h){
+      if (o.zone === ZONES.hand && o.owner && o.owner !== client.selfId) return null;
+      return {type:o.type, id:o.id};
+    }
+  }
+  return null;
+}
+
+function calcDragOffset(state, target, p){
+  if (target.type === "card"){
+    const c = state.cards[target.id];
+    if (!c) return {dx:0,dy:0};
+    return {dx: p.x - c.x, dy: p.y - c.y};
+  } else {
+    const s = state.stacks[target.id];
+    if (!s) return {dx:0,dy:0};
+    return {dx: p.x - s.x, dy: p.y - s.y};
+  }
+}
+
+canvas.addEventListener("mousedown", (ev)=>{
+  const st = getState();
+  if (!st) return;
+
+  const p = toWorld(mousePos(ev));
+  const hit = hitTest(p.x, p.y);
+
+  if (hit){
+    client.selected = hit;
+    updateInspector();
+    client.dragging = { target: hit, start: p, offset: calcDragOffset(st, hit, p), moved:false };
+  }else{
+    client.selected = null;
+    hideInspectorPopup();
+    updateInspector();
+  }
+});
+
+addEventListener("mousemove", (ev)=>{
+  if (!client.dragging) return;
+  hideInspectorPopup();
+  const st = getState();
+  if (!st) return;
+  const p = toWorld(mousePos(ev));
+  client.dragging.moved = true;
+  client.dragging.cur = p;
+});
+
+addEventListener("mouseup", (ev)=>{
+  if (!client.dragging) return;
+
+  const st = getState();
+  const drag = client.dragging;
+  client.dragging = null;
+  if (!st) return;
+
+  const p = toWorld(mousePos(ev));
+
+  if (!drag.moved){
+    showInspectorPopup();
+    return;
+  }
+
+  const hit = hitTest(p.x, p.y);
+  if (hit && !(hit.type===drag.target.type && hit.id===drag.target.id)){
+    hideInspectorPopup();
+    sendIntent({ type:"stack", dragTargetType: drag.target.type, dragId: drag.target.id, dropOnType: hit.type, dropOnId: hit.id });
+    return;
+  }
+
+  hideInspectorPopup();
+  sendIntent({
+    type:"move",
+    targetType: drag.target.type,
+    id: drag.target.id,
+    x: p.x - (drag.offset?.dx||0),
+    y: p.y - (drag.offset?.dy||0),
+  });
+});
+
+/* =========================================================
+   17) Keyboard + Inspector buttons
+========================================================= */
+if (INS.btnFlip) INS.btnFlip.onclick = ()=>{
+  if (!client.selected) return;
+  sendIntent({type:"flip", targetType: client.selected.type, id: client.selected.id});
+};
+if (INS.btnDiscard) INS.btnDiscard.onclick = ()=>{
+  if (!client.selected) return;
+  sendIntent({type:"discard", targetType: client.selected.type, id: client.selected.id});
+};
+if (INS.btnUnstack) INS.btnUnstack.onclick = ()=>{
+  const sel = client.selected;
+  if (!sel || sel.type!=="stack") return;
+  sendIntent({type:"unstack", stackId: sel.id});
+};
+if (INS.btnShuffle) INS.btnShuffle.onclick = ()=>{
+  const sel = client.selected;
+  if (sel?.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
+  else sendIntent({type:"shuffle", stackId:"stack_deck"});
+};
+
+addEventListener("keydown", (ev)=>{
+  if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
+
+  const st = getState();
+  if (!st) return;
+
+  const key = ev.key.toLowerCase();
+  if (key === "escape"){
+    client.selected = null;
+    hideInspectorPopup();
+    updateInspector();
+    return;
+  }
+  if (key === "d"){
+    sendIntent({type:"draw"});
+    toast("Draw 1");
+    return;
+  }
+  if (key === "f"){
+    const sel = client.selected;
+    if (!sel) return;
+    sendIntent({type:"flip", targetType: sel.type, id: sel.id});
+    return;
+  }
+  if (key === "s"){
+    const sel = client.selected;
+    if (sel && sel.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
+    else sendIntent({type:"shuffle", stackId:"stack_deck"});
+    return;
+  }
+  if (key === "u"){
+    const sel = client.selected;
+    if (sel && sel.type==="stack") sendIntent({type:"unstack", stackId: sel.id});
+    return;
+  }
+  if (key === "x"){
+    const sel = client.selected;
+    if (!sel) return;
+    sendIntent({type:"discard", targetType: sel.type, id: sel.id});
+    return;
+  }
+});
+
+/* =========================================================
+   18) Rendering helpers + main loop
+========================================================= */
 function rr(x,y,w,h,r){
   ctx.beginPath();
   const r2 = Math.min(r, w/2, h/2);
@@ -2649,21 +2538,16 @@ function drawZone(rect, label, subtitle="", highlight=false){
 
   ctx.save();
 
-  // background
   rr(x,y,w,h,18);
   ctx.globalAlpha = highlight ? 0.85 : 0.35;
-  ctx.fillStyle = highlight
-    ? "rgba(122,162,255,.22)"
-    : "rgba(0,0,0,.10)";
+  ctx.fillStyle = highlight ? "rgba(122,162,255,.22)" : "rgba(0,0,0,.10)";
   ctx.fill();
 
-  // border
   ctx.globalAlpha = 0.9;
   ctx.strokeStyle = "rgba(255,255,255,.10)";
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // label
   ctx.globalAlpha = 0.75;
   ctx.fillStyle = "rgba(233,236,255,.85)";
   ctx.font = "12px " + getComputedStyle(document.body).fontFamily;
@@ -2676,7 +2560,6 @@ function drawZone(rect, label, subtitle="", highlight=false){
 
   ctx.restore();
 }
-
 
 function drawCardAtScreen(
   cx, cy,
@@ -2696,14 +2579,12 @@ function drawCardAtScreen(
 
   ctx.save();
 
-  // shadow
   ctx.globalAlpha = 0.35;
   rr(x+4, y+6, w, h, r);
   ctx.fillStyle = "rgba(0,0,0,.65)";
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // body
   rr(x, y, w, h, r);
   ctx.fillStyle = faceUp ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.20)";
   ctx.fill();
@@ -2711,7 +2592,6 @@ function drawCardAtScreen(
   ctx.lineWidth = isSelected ? 2 : 1;
   ctx.stroke();
 
-  // accent strip (màu owner)
   if (accent){
     ctx.globalAlpha = 0.75;
     rr(x+8, y+8, w-16, 14*camera.scale, 9*camera.scale);
@@ -2720,12 +2600,10 @@ function drawCardAtScreen(
     ctx.globalAlpha = 1;
   }
 
-  // ===== IMAGE DRAW =====
   const url = faceUp ? (frontUrl || "") : (backUrl || "");
   const img = url ? loadImg(url) : null;
 
   if (img && img.complete && img.naturalWidth > 0){
-    // clip vùng ảnh để không đè header/badge
     const padX = 6*camera.scale;
     const topPad = 28*camera.scale;
     const botPad = 10*camera.scale;
@@ -2733,22 +2611,15 @@ function drawCardAtScreen(
     ctx.clip();
     ctx.globalAlpha = 0.95;
 
-    // contain
     const iw = img.naturalWidth, ih = img.naturalHeight;
     const availW = w-2*padX;
     const availH = h-topPad-botPad;
     const scale = Math.min(availW/iw, availH/ih);
     const dw = iw*scale, dh = ih*scale;
 
-    ctx.drawImage(
-      img,
-      x + (w-dw)/2,
-      y + topPad + (availH-dh)/2,
-      dw, dh
-    );
+    ctx.drawImage(img, x + (w-dw)/2, y + topPad + (availH-dh)/2, dw, dh);
     ctx.globalAlpha = 1;
   } else {
-    // fallback text (khi ảnh chưa load / url rỗng)
     ctx.fillStyle = "rgba(233,236,255,.9)";
     ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
     if (faceUp && frontSeed){
@@ -2759,7 +2630,6 @@ function drawCardAtScreen(
     }
   }
 
-  // stack count badge
   if (isStackTop && stackCount>1){
     ctx.globalAlpha = 0.95;
     rr(x+w-34*camera.scale, y+10*camera.scale, 24*camera.scale, 18*camera.scale, 8*camera.scale);
@@ -2776,24 +2646,9 @@ function drawCardAtScreen(
   ctx.restore();
 }
 
-document.querySelectorAll(".collapse-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const panelId = btn.dataset.target;
-    const panel = document.getElementById(panelId);
-    if (!panel) return;
-
-    const collapsed = panel.classList.toggle("collapsed");
-    btn.textContent = collapsed ? "+" : "−";
-  });
-});
-
-/* =========================
-   Main Render Loop
-========================= */
 function draw(){
   ctx.clearRect(0,0,innerWidth,innerHeight);
 
-  // background vignette
   ctx.save();
   ctx.globalAlpha = 0.35;
   ctx.fillStyle = "rgba(0,0,0,.25)";
@@ -2819,10 +2674,8 @@ function draw(){
 
   drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0);
   drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2);
-
   drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1);
   drawZone(rects.handBottomRight, "Người chơi 4", seatName(3), mySeat===3);
-
   drawZone(rects.handRightTop,    "Người chơi 5", seatName(4), mySeat===4);
   drawZone(rects.handRightBottom, "Người chơi 6", seatName(5), mySeat===5);
 
@@ -2830,17 +2683,11 @@ function draw(){
   drawZone(rects.discard, "DISCARD");
 
   const objs = listDrawableObjects(s);
-
-  // default back image from room assets
-  const backUrlDefault = (s.assets && s.assets.backUrl) ? s.assets.backUrl : "";
+  const backUrlDefault = s.assets?.backUrl || "";
 
   for (const o of objs){
-    const isSelected =
-      client.selected &&
-      client.selected.type === o.type &&
-      client.selected.id === o.id;
+    const isSelected = client.selected && client.selected.type === o.type && client.selected.id === o.id;
 
-    // dragging ghost override
     let wx = o.x, wy = o.y;
     if (client.dragging &&
         client.dragging.target.type === o.type &&
@@ -2859,56 +2706,29 @@ function draw(){
       const owner = s.players.find(p=>p.id===c.owner);
       const accent = owner ? COLORS[owner.color] : null;
 
-      const frontUrl = c.frontUrl || "";
-      const backUrl  = backUrlDefault;
-
-      drawCardAtScreen(
-        sp.x, sp.y,
-        !!c.faceUp, c.frontSeed,
-        accent,
-        isSelected,
-        false, 0,
-        frontUrl, backUrl
-      );
-
-    } else { // stack
+      const frontUrl = c.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
+      drawCardAtScreen(sp.x, sp.y, !!c.faceUp, c.frontSeed, accent, isSelected, false, 0, frontUrl, backUrlDefault);
+    } else {
       const stack = s.stacks[o.id];
       if (!stack) continue;
 
-      const topId = stack.cardIds && stack.cardIds[0];
+      const topId = stack.cardIds?.[0];
       const top = topId ? s.cards[topId] : null;
 
       const owner = s.players.find(p=>p.id===stack.owner);
       const accent = owner ? COLORS[owner.color] : null;
 
       if (top){
-        const frontUrl = top.frontUrl || "";
-        const backUrl  = backUrlDefault;
+        const frontUrl = top.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
+        drawCardAtScreen(sp.x, sp.y, !!top.faceUp, top.frontSeed, accent, isSelected, true, stack.cardIds.length, frontUrl, backUrlDefault);
 
-        drawCardAtScreen(
-          sp.x, sp.y,
-          !!top.faceUp, top.frontSeed,
-          accent,
-          isSelected,
-          true, stack.cardIds.length,
-          frontUrl, backUrl
-        );
-
-        // thickness hint
         if (stack.cardIds.length > 1){
           ctx.save();
           ctx.globalAlpha = 0.25;
           for (let i=1; i<Math.min(4, stack.cardIds.length); i++){
             const dx = i * 2 * camera.scale;
             const dy = i * 2 * camera.scale;
-            drawCardAtScreen(
-              sp.x+dx, sp.y+dy,
-              false, 0,
-              null,
-              false,
-              false, 0,
-              "", backUrlDefault
-            );
+            drawCardAtScreen(sp.x+dx, sp.y+dy, false, 0, null, false, false, 0, "", backUrlDefault);
           }
           ctx.restore();
         }
@@ -2920,218 +2740,211 @@ function draw(){
 }
 requestAnimationFrame(draw);
 
-/* =========================
-   WS server sample (optional)
-========================= */
-/*
-  Minimal Node.js WebSocket server (authoritative):
-  - You still need to implement room management + redaction per viewer.
-  - This demo's Local mode already supports 4 tabs.
-
-  // server.js
-  import { WebSocketServer } from "ws";
-  const wss = new WebSocketServer({ port: 8080 });
-  wss.on("connection", (ws) => {
-    ws.on("message", (data) => {
-      // broadcast raw for quick test:
-      for (const c of wss.clients){
-        if (c.readyState === 1) c.send(data.toString());
-      }
-    });
+/* =========================================================
+   19) UI bindings (bind 1 lần)
+========================================================= */
+if (UI.modeSelect){
+  UI.modeSelect.addEventListener("change", ()=>{
+    if (UI.wsRow) UI.wsRow.style.display = (UI.modeSelect.value === "ws") ? "flex" : "none";
   });
-  console.log("WS on :8080");
-*/
-
-/* =========================
-   Deck / SetCard Modal Logic (RTDB)
-========================= */
-
-const DECKUI = {
-  modal: document.getElementById("deckModal"),
-  openBtn: document.getElementById("openDeckBtn"),
-  closeBtn: document.getElementById("closeDeckBtn"),
-  userBadge: document.getElementById("deckUserBadge"),
-
-  setSelect: document.getElementById("setSelect"),
-  newSetBtn: document.getElementById("newSetBtn"),
-  loadSetBtn: document.getElementById("loadSetBtn"),
-  deleteSetBtn: document.getElementById("deleteSetBtn"),
-
-  setNameInput: document.getElementById("setNameInput"),
-  backUrlInput: document.getElementById("setBackUrlInput"),
-  addCardBtn: document.getElementById("addCardUrlBtn"),
-  list: document.getElementById("cardUrlList"),
-
-  saveBtn: document.getElementById("saveSetBtn"),
-  loadToRoomBtn: document.getElementById("loadSetToRoomBtn"),
-};
-
-let deckSetsCache = {};     // setId -> data
-let deckCurrentSetId = null;
-
-function openDeckModal(){
-  DECKUI.modal.style.display = "flex";
-}
-function closeDeckModal(){
-  DECKUI.modal.style.display = "none";
 }
 
-function makeCardUrlRow(url=""){
-  const row = document.createElement("div");
-  row.className = "card-url-row";
-
-  const inp = document.createElement("input");
-  inp.className = "mono";
-  inp.placeholder = "https://.../front.png";
-  inp.value = url;
-
-  const del = document.createElement("button");
-  del.className = "danger";
-  del.textContent = "X";
-  del.onclick = ()=> row.remove();
-
-  row.appendChild(inp);
-  row.appendChild(del);
-  return row;
-}
-
-function fillEditorFromSet(setId, data){
-  deckCurrentSetId = setId;
-  DECKUI.setNameInput.value = data?.name || "";
-  DECKUI.backUrlInput.value = data?.backUrl || "";
-  DECKUI.list.innerHTML = "";
-  const cards = data?.cards ? Object.values(data.cards) : [];
-  for (const c of cards){
-    DECKUI.list.appendChild(makeCardUrlRow(c.frontUrl || ""));
-  }
-  if (cards.length === 0){
-    // start with 1 empty
-    DECKUI.list.appendChild(makeCardUrlRow(""));
-  }
-}
-
-function editorToSetData(){
-  const name = (DECKUI.setNameInput.value||"").trim() || "Untitled";
-  const backUrl = (DECKUI.backUrlInput.value||"").trim();
-  const urls = [...DECKUI.list.querySelectorAll("input")].map(i=>(i.value||"").trim()).filter(Boolean);
-
-  const cards = {};
-  urls.forEach((u, idx)=>{
-    cards["c"+(idx+1)] = { frontUrl: u };
+if (UI.applyDeckBtn){
+  UI.applyDeckBtn.addEventListener("click", ()=>{
+    if (!client.isHost) return toast("Host mới set deck images");
+    sendIntent({ type:"setAssets", frontBase: UI.frontBaseInput?.value, backUrl: UI.backUrlInput?.value });
+    toast("Applied deck images");
   });
-
-  return { name, backUrl, cards, updatedAt: Date.now() };
 }
 
-async function refreshSetList(){
-  await fbEnsureAuth();
-  DECKUI.userBadge.textContent = `UID: ${FB.uid.slice(0,6)}... | ${FB.username}`;
+if (UI.createBtn){
+  UI.createBtn.addEventListener("click", async ()=>{
+    try{
+      if (UI.modeSelect?.value === "firebase") await createRoomAsHost_Firebase();
+      else createRoomAsHost_LocalOrWS();
+    }catch(e){
+      console.error(e);
+      toast("Create error: " + (e.message || e));
+    }
+  });
+}
 
-  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard`);
-  const snap = await ref.get();
-  deckSetsCache = snap.val() || {};
+if (UI.joinBtn){
+  UI.joinBtn.addEventListener("click", async ()=>{
+    try{
+      if (UI.modeSelect?.value === "firebase") await joinRoomAsClient_Firebase();
+      else joinRoomAsClient_LocalOrWS();
+    }catch(e){
+      console.error(e);
+      toast("Join error: " + (e.message || e));
+    }
+  });
+}
 
-  // fill select
-  DECKUI.setSelect.innerHTML = "";
-  const ids = Object.keys(deckSetsCache);
-  if (ids.length === 0){
-    const op = document.createElement("option");
-    op.value = "";
-    op.textContent = "(chưa có set)";
-    DECKUI.setSelect.appendChild(op);
-    deckCurrentSetId = null;
-    fillEditorFromSet(null, {name:"", backUrl:"", cards:{}});
+if (UI.resetBtn){
+  UI.resetBtn.addEventListener("click", ()=>{
+    if (!client.authoritative) return;
+    if (!client.isHost) return toast("Chỉ Host mới reset.");
+    sendIntent({type:"reset"});
+  });
+}
+
+if (UI.copyLinkBtn){
+  UI.copyLinkBtn.addEventListener("click", async ()=>{
+    readInputs();
+    const url = new URL(location.href);
+    url.searchParams.set("room", client.roomCode);
+    url.searchParams.set("mode", UI.modeSelect?.value || "local");
+    if (UI.modeSelect?.value === "ws"){
+      const ws = (UI.wsUrlInput?.value || "").trim();
+      if (ws) url.searchParams.set("ws", ws);
+    }
+    try{
+      await navigator.clipboard.writeText(url.toString());
+      toast("Đã copy link phòng.");
+    }catch(e){
+      toast("Copy failed (trình duyệt chặn).");
+    }
+  });
+}
+
+document.querySelectorAll(".collapse-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const panelId = btn.dataset.target;
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const collapsed = panel.classList.toggle("collapsed");
+    btn.textContent = collapsed ? "+" : "−";
+  });
+});
+
+/* =========================================================
+   20) Auth UI buttons (login/register/anon/logout/leave)
+   - bạn đã có các id: playAnonBtn, loginBtn, registerBtn, logoutBtn, leaveMatchBtn
+========================================================= */
+async function registerUser(){
+  fbInitOnce();
+  const email = (document.getElementById("authEmail")?.value || "").trim();
+  const password = document.getElementById("authPassword")?.value || "";
+  const username = (document.getElementById("authUsername")?.value || "").trim();
+
+  if (!email || !password || !username){
+    toast("Nhập đầy đủ email / mật khẩu / tên");
     return;
   }
 
-  for (const id of ids){
-    const op = document.createElement("option");
-    op.value = id;
-    op.textContent = `${deckSetsCache[id]?.name || id} (${Object.keys(deckSetsCache[id]?.cards||{}).length})`;
-    DECKUI.setSelect.appendChild(op);
-  }
+  const cred = await FB.auth.createUserWithEmailAndPassword(email, password);
+  const user = cred.user;
 
-  // auto load first or keep current
-  const pick = deckCurrentSetId && deckSetsCache[deckCurrentSetId] ? deckCurrentSetId : ids[0];
-  DECKUI.setSelect.value = pick;
-  fillEditorFromSet(pick, deckSetsCache[pick]);
-}
-
-async function createNewSet(){
-  await fbEnsureAuth();
-  const newId = "set_" + uid().slice(0,8);
-  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard/${newId}`);
-  await ref.set({ name:"New Set", backUrl:"", cards:{}, createdAt: Date.now(), updatedAt: Date.now() });
-  await refreshSetList();
-  DECKUI.setSelect.value = newId;
-  fillEditorFromSet(newId, deckSetsCache[newId]);
-}
-
-async function saveCurrentSet(){
-  await fbEnsureAuth();
-  if (!deckCurrentSetId){
-    await createNewSet();
-  }
-  const data = editorToSetData();
-  const ref = FB.db.ref(`AllUser/${FB.uid}/setCard/${deckCurrentSetId}`);
-  await ref.update(data);
-  toast("Đã lưu set");
-  await refreshSetList();
-}
-
-async function deleteCurrentSet(){
-  await fbEnsureAuth();
-  const id = DECKUI.setSelect.value;
-  if (!id) return;
-  await FB.db.ref(`AllUser/${FB.uid}/setCard/${id}`).remove();
-  toast("Đã xóa set");
-  deckCurrentSetId = null;
-  await refreshSetList();
-}
-
-async function loadSelectedSet(){
-  const id = DECKUI.setSelect.value;
-  if (!id || !deckSetsCache[id]) return;
-  fillEditorFromSet(id, deckSetsCache[id]);
-  toast("Đã load set vào editor");
-}
-
-async function hostLoadSetToRoom(){
-  if (!client.isHost) return toast("Chỉ host mới load set vào room");
-  if (!(client.transport instanceof FirebaseTransport)) return toast("Chỉ dùng được trong Firebase mode");
-  const roomId = client.roomCode.toLowerCase();
-  const id = deckCurrentSetId || DECKUI.setSelect.value;
-  if (!id) return toast("Chưa chọn set");
-
-  const data = editorToSetData(); // lấy từ editor (bản mới nhất)
-  // 1) save to user
-  if (!deckCurrentSetId){
-    await createNewSet();
-  }
-  await saveCurrentSet();
-
-  // 2) write to room meta + put cardPool into state for draw
-  const urls = Object.values((data.cards||{})).map(x=>x.frontUrl).filter(Boolean);
-  const backUrl = data.backUrl || "";
-
-  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
-  await roomRef.child("meta").update({
-    deckSource: { uid: FB.uid, setId: id },
-    deckBackUrl: backUrl
+  await FB.db.ref(`AllUser/${user.uid}`).set({
+    username,
+    email,
+    createdAt: Date.now(),
+    setCard: {}
   });
 
-  // put cardPool in state.stacks.deck (host authoritative state)
-  if (client.host && client.host.state){
-    client.host.state.assets.backUrl = backUrl; // reuse your assets if needed
-    client.host.state._deckPool = urls;         // store custom field for draw
-    client.host.bumpVersion?.();
-    await client.transport.writeState(client.host.state);
-  }
+  // sync runtime
+  FB.user = user; FB.uid = user.uid; FB.username = username;
+  if (UI.nameInput) UI.nameInput.value = username;
 
-  toast(`Host loaded set (${urls.length} cards)`);
+  toast("Đăng ký thành công");
+  goLobby();
 }
 
-/* bind UI */
+async function loginUser(){
+  fbInitOnce();
+  const email = (document.getElementById("authEmail")?.value || "").trim();
+  const password = document.getElementById("authPassword")?.value || "";
+
+  if (!email || !password){
+    toast("Nhập email và mật khẩu");
+    return;
+  }
+
+  await FB.auth.signInWithEmailAndPassword(email, password);
+
+  // sau login, lấy username từ profile nếu có
+  FB.user = FB.auth.currentUser;
+  FB.uid = FB.user.uid;
+
+  const snap = await FB.db.ref(`AllUser/${FB.uid}`).get();
+  const prof = snap.val() || {};
+  FB.username = (prof.username || "Player").slice(0,18);
+
+  if (UI.nameInput) UI.nameInput.value = FB.username;
+
+  toast("Đăng nhập thành công");
+  goLobby();
+}
+
+const loginBtn = document.getElementById("loginBtn");
+const registerBtn = document.getElementById("registerBtn");
+const playAnonBtn = document.getElementById("playAnonBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const leaveMatchBtn = document.getElementById("leaveMatchBtn");
+
+if (registerBtn){
+  registerBtn.onclick = async ()=> {
+    try{ await registerUser(); }catch(e){ console.error(e); toast(e.message || e); }
+  };
+}
+if (loginBtn){
+  loginBtn.onclick = async ()=> {
+    try{ await loginUser(); }catch(e){ console.error(e); toast(e.message || e); }
+  };
+}
+if (playAnonBtn){
+  playAnonBtn.onclick = async ()=>{
+    try{
+      fbInitOnce();
+      await FB.auth.signInAnonymously();
+      FB.user = FB.auth.currentUser;
+      FB.uid = FB.user.uid;
+
+      const uname =
+        ((document.getElementById("authUsername")?.value || "").trim().slice(0,18)) ||
+        "Guest";
+      FB.username = uname;
+
+      const uref = FB.db.ref(`AllUser/${FB.uid}`);
+      const snap = await uref.get();
+      if (!snap.exists()){
+        await uref.set({ username: FB.username, createdAt: Date.now(), setCard:{} });
+      }else{
+        await uref.update({ username: FB.username });
+        const cur = snap.val() || {};
+        if (!cur.setCard) await uref.update({ setCard:{} });
+      }
+
+      if (UI.nameInput) UI.nameInput.value = FB.username;
+
+      goLobby();
+      toast("Chơi thử: vào sảnh chờ");
+    }catch(e){
+      console.error(e);
+      toast("Anonymous error: " + (e.message || e));
+    }
+  };
+}
+if (logoutBtn){
+  logoutBtn.onclick = async ()=>{
+    try{ if (FB?.auth?.currentUser) await FB.auth.signOut(); }catch(e){}
+    try{ leaveRoom(); }catch(e){}
+    goAuth();
+    toast("Đã đăng xuất");
+  };
+}
+if (leaveMatchBtn){
+  leaveMatchBtn.onclick = ()=>{
+    try{ leaveRoom(); }catch(e){}
+    goLobby();
+    toast("Đã rời phòng");
+  };
+}
+
+/* =========================================================
+   21) Deck modal binds
+========================================================= */
 if (DECKUI.openBtn){
   DECKUI.openBtn.onclick = async ()=>{
     try{
@@ -3148,19 +2961,39 @@ if (DECKUI.newSetBtn) DECKUI.newSetBtn.onclick = createNewSet;
 if (DECKUI.saveBtn) DECKUI.saveBtn.onclick = saveCurrentSet;
 if (DECKUI.deleteSetBtn) DECKUI.deleteSetBtn.onclick = deleteCurrentSet;
 if (DECKUI.loadSetBtn) DECKUI.loadSetBtn.onclick = loadSelectedSet;
-if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=> DECKUI.list.appendChild(makeCardUrlRow(""));
+if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=> DECKUI.list && DECKUI.list.appendChild(makeCardUrlRow(""));
 if (DECKUI.loadToRoomBtn) DECKUI.loadToRoomBtn.onclick = hostLoadSetToRoom;
 
-/* =========================
-   Patch DRAW (D): random from set pool when present
-========================= */
+/* =========================================================
+   22) Auto-fill URL params
+========================================================= */
+(function initFromQuery(){
+  const u = new URL(location.href);
+  const room = u.searchParams.get("room");
+  const mode = u.searchParams.get("mode");
+  const ws = u.searchParams.get("ws");
+  if (room && UI.roomInput) UI.roomInput.value = room.toUpperCase();
+  if (mode && UI.modeSelect && (mode==="local" || mode==="ws" || mode==="firebase")){
+    UI.modeSelect.value = mode;
+    if (UI.wsRow) UI.wsRow.style.display = mode === "ws" ? "flex" : "none";
+  }
+  if (ws && UI.wsUrlInput) UI.wsUrlInput.value = ws;
+})();
 
-// Trong HostController.applyIntent, case "draw": bạn sửa theo đoạn này:
+addEventListener("beforeunload", ()=>{ try{ leaveRoom(); }catch(e){} });
 
-// 1) tìm đoạn case "draw": { ... } của bạn
-// 2) thay nội dung rút bài bằng logic:
-//    - nếu st._deckPool có URLs => tạo card instance mới theo url random
-//    - nếu không có => fallback rút từ stack_deck như hiện tại
+window.addEventListener("error", (e) => {
+  toast("JS error: " + (e.message || "unknown"));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  toast("Promise error: " + ((e.reason && e.reason.message) || e.reason || "unknown"));
+});
+
+/* =========================================================
+   23) Boot
+========================================================= */
+goAuth();
+setNetBadge("OFFLINE");
 
 </script>
 </body>
