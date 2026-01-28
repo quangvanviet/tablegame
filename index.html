@@ -1295,11 +1295,11 @@ function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
   st.version = (st.version||0) + 1;
 }
 
-  
 function ensureStateShape(state){
-  if (!s.game || typeof s.game !== "object") s.game = { phase:"setup" };
-  if (!s.game.phase) s.game.phase = "setup";
+  if (!state || typeof state !== "object") return null;
+
   const s = deepClone(state);
+
   if (!Array.isArray(s.players)) s.players = [];
   if (!s.cards || typeof s.cards !== "object") s.cards = {};
   if (!s.stacks || typeof s.stacks !== "object") s.stacks = {};
@@ -1307,6 +1307,11 @@ function ensureStateShape(state){
   if (!s.assets || typeof s.assets !== "object") s.assets = { frontBase:"", backUrl:"" };
   if (!Array.isArray(s._deckPool)) s._deckPool = [];
   if (typeof s.version !== "number") s.version = 1;
+
+  // ✅ thêm game.phase (setup/playing)
+  if (!s.game || typeof s.game !== "object") s.game = { phase: "setup" };
+  if (!s.game.phase) s.game.phase = "setup";
+
   return s;
 }
 
