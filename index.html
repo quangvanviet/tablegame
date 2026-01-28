@@ -453,50 +453,6 @@
     #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
     #matchScreen{ position:relative; width:100%; height:100%; }
 
-    #statsOverlay{
-      position:absolute; inset:0;
-      z-index:12;
-      pointer-events:none; /* chỉ input bật pointer */
-    }
-    .statBox{
-      position:absolute;
-      pointer-events:auto;
-      display:flex;
-      gap:6px;
-      align-items:center;
-      padding:6px 8px;
-      border-radius: 12px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(0,0,0,.18);
-      backdrop-filter: blur(8px);
-      box-shadow: 0 10px 30px rgba(0,0,0,.25);
-      font-size:12px;
-    }
-    .statBox .dot{
-      width:10px;height:10px;border-radius:999px;
-      border:1px solid rgba(255,255,255,.18);
-      box-shadow: 0 0 0 3px rgba(0,0,0,.12);
-    }
-    .statBox .name{
-      max-width: 110px;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      color: rgba(233,236,255,.9);
-      font-weight:700;
-    }
-    .statBox input{
-      width:52px;
-      padding:6px 8px;
-      border-radius:10px;
-      border:1px solid rgba(255,255,255,.16);
-      background: rgba(0,0,0,.22);
-      color: rgba(233,236,255,.95);
-    }
-    .statBox label{
-      font-size:11px;
-      color: rgba(233,236,255,.55);
-      margin-right:2px;
-    }
-
     /* Status board (LoL-ish compact) */
     #statusBoard{
       position:absolute;
@@ -758,7 +714,6 @@
 <div id="matchScreen" class="screen">
   <div id="app">
     <canvas id="c"></canvas>
-    <div id="statsOverlay"></div>
     <div id="toast"></div>
 
     <div class="hud">
@@ -3591,13 +3546,11 @@ function draw(){
       }
     }
   }
-  updateStatsOverlay();
   requestAnimationFrame(draw);
   renderStatusBoard();
 }
 requestAnimationFrame(draw);
 
-const STATS_UI = { root: document.getElementById("statsOverlay") };
 const _statInputs = new Map(); // key: uid
 
 function seatRectKey(seat){
@@ -3679,52 +3632,6 @@ function ensureStatBoxForUser(userId){
   const obj = { box, dot, name, atk: atk.inp, def: def.inp, hp: hp.inp };
   _statInputs.set(userId, obj);
   return obj;
-}
-
-function updateStatsOverlay(){
-  const root = STATS_UI.root;
-  if (!root) return;
-
-  const s = getState();
-  if (!s){
-    root.style.display = "none";
-    return;
-  }
-  root.style.display = "block";
-
-  const rects = zoneRects();
-
-  // lấy data realtime users (firebase) nếu có, không thì fallback players
-  const users = (client.transport instanceof FirebaseTransport)
-    ? (client.authoritative?._users || null)
-    : null;
-
-
-  for (const p of (s.players||[])){
-    const key = seatRectKey(p.seat);
-    const r = key ? rects[key] : null;
-    if (!r) continue;
-
-    const ui = ensureStatBoxForUser(p.id);
-
-    ui.dot.style.background = COLORS[p.color] || "rgba(233,236,255,.35)";
-    ui.name.textContent = p.name || "Player";
-
-    // set value from RTDB users if present
-    const u = users?.[p.id] || null;
-    if (u){
-      ui.atk.value = String(u.atk ?? 0);
-      ui.def.value = String(u.def ?? 0);
-      ui.hp.value  = String(u.hp  ?? 0);
-    }
-
-    // position: góc phải trên vùng hand của người đó
-    const sp0 = toScreen({x:r.x, y:r.y});
-    const sp1 = toScreen({x:r.x+r.w, y:r.y+r.h});
-
-    ui.box.style.left = (sp1.x - 260) + "px";
-    ui.box.style.top  = (sp0.y + 8) + "px";
-  }
 }
 
 const STATUS = {
