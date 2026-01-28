@@ -3751,7 +3751,7 @@ function updateStatsOverlay(){
   }
 }
 
-  const STATUS = {
+const STATUS = {
   el: document.getElementById("statusBoard"),
   lastSig: "",
   bound: false,
@@ -3759,6 +3759,12 @@ function updateStatsOverlay(){
   _timer: null,
 };
 
+function isHost(s){
+  // tùy bạn đang lưu host thế nào
+  // ưu tiên state.hostId, nếu không có thì client.isHost
+  return (s?.hostId && client.selfId === s.hostId) || !!client.isHost;
+}
+  
 function initStatusBoardUI(){
   if (!STATUS.el || STATUS.bound) return;
   STATUS.bound = true;
