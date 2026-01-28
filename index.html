@@ -127,64 +127,211 @@
     /* Chat */
     #chatPanel{
       position:absolute;
-      right:12px;
-      top:12px;
-      width:min(360px, 40vw);
-      height:min(420px, 52vh);
-      z-index:10;
+      right:14px;
+      bottom:14px;
+      width:min(420px, 42vw);
+      height:min(320px, 42vh);
+      z-index:20;
       display:flex;
       flex-direction:column;
       pointer-events:auto;
+      border-radius:14px;
+      overflow:hidden;
+      background: rgba(10,12,18,.55);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      backdrop-filter: blur(10px);
     }
+    
     #chatPanel.collapsed{
-      height:auto !important;
+      height:44px !important;
     }
-    #chatPanel .panel{height:100%; display:flex; flex-direction:column; pointer-events:auto;}
+    
+    #chatPanel header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 10px 8px 12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      background: linear-gradient(to bottom, rgba(0,0,0,.22), rgba(0,0,0,0));
+    }
+    
+    #chatPanel .titleRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    
+    #chatPanel .title{
+      font-weight:800;
+      letter-spacing:.08em;
+      font-size:11px;
+      opacity:.9;
+    }
+    
+    #chatPanel .badge{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:999px;
+      background: rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.10);
+      opacity:.85;
+    }
+    
+    #chatPanel .actions{
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    
+    .chatToggle{
+      display:flex;
+      gap:4px;
+      padding:3px;
+      border-radius:999px;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+    }
+    .chatToggle button{
+      border:0;
+      background: transparent;
+      color: rgba(233,236,255,.72);
+      font-size:11px;
+      padding:4px 10px;
+      border-radius:999px;
+      cursor:pointer;
+    }
+    .chatToggle button.active{
+      background: rgba(255,255,255,.12);
+      color: rgba(255,255,255,.92);
+    }
+    
+    #chatPanel .collapse-btn{
+      width:30px; height:30px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.85);
+      cursor:pointer;
+    }
+    #chatPanel .collapse-btn:hover{ background: rgba(255,255,255,.10); }
+    
+    #chatPanel .content{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    
     #chatLog{
       flex:1;
       overflow:auto;
-      padding:12px;
+      padding:10px 10px 8px 10px;
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:8px;
+      scroll-behavior:smooth;
     }
+    
+    /* scrollbar subtle */
+    #chatLog::-webkit-scrollbar{ width:10px; }
+    #chatLog::-webkit-scrollbar-thumb{
+      background: rgba(255,255,255,.10);
+      border:3px solid rgba(0,0,0,0);
+      background-clip: padding-box;
+      border-radius:999px;
+    }
+    
+    /* Message row */
     .msg{
       display:flex;
       gap:8px;
       align-items:flex-start;
     }
+    
     .msg .dot{
       width:10px; height:10px; border-radius:999px;
-      margin-top:4px;
+      margin-top:6px;
       flex:0 0 auto;
-      box-shadow: 0 0 0 3px rgba(0,0,0,.15);
       border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 0 0 3px rgba(0,0,0,.18);
     }
+    
     .msg .bubble{
-      background: rgba(0,0,0,.18);
+      flex:1;
+      background: rgba(0,0,0,.28);
       border:1px solid rgba(255,255,255,.10);
       border-radius: 12px;
-      padding:8px 10px;
-      max-width: 100%;
+      padding:7px 9px;
+      max-width:100%;
     }
+    
     .msg .meta{
-      font-size:11px;
-      color:rgba(233,236,255,.6);
-      margin-bottom:4px;
       display:flex;
       gap:8px;
       align-items:baseline;
       flex-wrap:wrap;
+      margin-bottom:4px;
+      font-size:11px;
+      color: rgba(233,236,255,.62);
     }
-    .msg .text{font-size:13px; line-height:1.35; white-space:pre-wrap; word-break:break-word;}
+    .msg .name{
+      font-weight:700;
+      color: rgba(255,255,255,.88);
+    }
+    .msg .time{
+      opacity:.75;
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .msg .text{
+      font-size:13px;
+      line-height:1.35;
+      color: rgba(255,255,255,.92);
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    
+    /* Fade older messages a bit (LoL vibe) */
+    .msg.age2 .bubble{ opacity:.92; }
+    .msg.age3 .bubble{ opacity:.82; }
+    .msg.age4 .bubble{ opacity:.70; }
+    
     #chatForm{
       display:flex;
       gap:8px;
-      padding:10px 12px;
-      border-top:1px solid rgba(255,255,255,.06);
-      background: rgba(0,0,0,.10);
+      padding:10px;
+      border-top:1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.12);
     }
-    #chatInput{flex:1}
+    
+    #chatInput{
+      flex:1;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      padding:10px 12px;
+      color: rgba(255,255,255,.92);
+      outline:none;
+    }
+    #chatInput::placeholder{ color: rgba(233,236,255,.45); }
+    
+    #chatSend{
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.9);
+      padding:10px 14px;
+      cursor:pointer;
+    }
+    #chatSend:hover{ background: rgba(255,255,255,.12); }
+    
+    /* Small */
+    @media (max-width: 880px){
+      #chatPanel{ width:min(360px, 60vw); height:min(280px, 40vh); }
+    }
+
 
     /* Floating help */
     #help{
@@ -233,7 +380,7 @@
     /* Small */
     @media (max-width: 880px){
       #help{display:none;}
-      #chatPanel{width:min(340px, 48vw);}
+      #chatPanel{ width:min(360px, 60vw); height:min(280px, 40vh); }
       .hud{flex-direction:column;}
     }
 
@@ -567,20 +714,31 @@
 
     
     <!-- Chat -->
-    <div class="panel collapsible" id="chatPanel">
+    <div id="chatPanel" class="collapsible">
       <header>
-        <div class="title">CHAT</div>
-        <div class="badge" id="chatBadge">—</div>
-        <button class="collapse-btn" data-target="chatPanel">−</button>
+        <div class="titleRow">
+          <div class="title">CHAT</div>
+          <div class="badge" id="chatBadge">0</div>
+        </div>
+    
+        <div class="actions">
+          <div class="chatToggle" id="chatToggle">
+            <button type="button" data-mode="all" class="active">ALL</button>
+            <button type="button" data-mode="team">TEAM</button>
+          </div>
+          <button class="collapse-btn" data-target="chatPanel" type="button">−</button>
+        </div>
       </header>
+    
       <div class="content">
         <div id="chatLog"></div>
-        <form id="chatForm">
-          <input id="chatInput" placeholder="Nhập chat rồi Enter..." />
-          <button type="submit">Gửi</button>
+        <form id="chatForm" autocomplete="off">
+          <input id="chatInput" placeholder="Enter để chat..." />
+          <button id="chatSend" type="submit">Send</button>
         </form>
       </div>
     </div>
+
 
     <!-- Inspector -->
     <div id="inspector">
@@ -2194,7 +2352,7 @@ function setStatusUI(){
       }
     }
   }
-  renderChat(s);
+  renderChat();
 }
 
 function sendToServer(msg){
@@ -2779,49 +2937,112 @@ function loadImg(url){
 /* =========================================================
    15) Chat
 ========================================================= */
-if (UI.chatForm && UI.chatInput){
-  UI.chatForm.addEventListener("submit", (ev)=>{
-    ev.preventDefault();
-    const text = (UI.chatInput.value || "").trim();
-    if (!text) return;
-    sendIntent({ type:"chat", text });
-    UI.chatInput.value = "";
-    UI.chatInput.focus();
-  });
+const CHATUI = {
+  mode: "all", // "all" | "team"
+  lastCount: 0,
+};
 
-  UI.chatInput.addEventListener("keydown", (ev)=>{
-    if (ev.key === "Enter" && !ev.shiftKey){
-      ev.preventDefault();
-      UI.chatForm.requestSubmit();
-    }
-  });
+function fmtTime(ts){
+  try{
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2,"0");
+    const mm = String(d.getMinutes()).padStart(2,"0");
+    return `${hh}:${mm}`;
+  }catch(e){
+    return "";
+  }
 }
-  
-function renderChat(state){
-  const items = state.chat || [];
-  if (!UI.chatLog) return;
 
-  UI.chatLog.innerHTML = items.map(m=>{
-    const p = state.players.find(x=>x.id===m.fromId);
-    const name = p ? p.name : "Unknown";
-    const color = p ? COLORS[p.color] : "rgba(233,236,255,.35)";
-    const time = new Date(m.at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-    return `
-      <div class="msg">
-        <div class="dot" style="background:${color}"></div>
-        <div class="bubble">
-          <div class="meta">
-            <span style="font-weight:700;color:rgba(233,236,255,.86)">${escapeHtml(name)}</span>
-            <span style="color:rgba(233,236,255,.45)">${time}</span>
-          </div>
-          <div class="text">${escapeHtml(m.text)}</div>
+function getPlayerById(s, id){
+  return (s.players || []).find(p => p && p.id === id) || null;
+}
+
+function renderChat(){
+  const s = getState();
+  if (!s) return;
+
+  const log = document.getElementById("chatLog");
+  const badge = document.getElementById("chatBadge");
+  if (!log || !badge) return;
+
+  const msgs = (s.chat || []);
+  badge.textContent = String(msgs.length);
+
+  // Nếu bạn muốn TEAM filter thật thì filter ở đây.
+  const visible = msgs; // CHATUI.mode === "team" ? msgs.filter(...) : msgs;
+
+  // Re-render đơn giản (vì max 120 msg vẫn nhẹ)
+  log.innerHTML = "";
+
+  // class age: làm mờ tin nhắn cũ
+  const n = visible.length;
+
+  for (let i = 0; i < n; i++){
+    const m = visible[i];
+    const p = getPlayerById(s, m.fromId);
+    const name = p?.name || "Player";
+    const dot = p ? (COLORS?.[p.color] || "rgba(255,255,255,.55)") : "rgba(255,255,255,.35)";
+    const time = m.at ? fmtTime(m.at) : "";
+
+    let ageCls = "";
+    const age = n - i;
+    if (age > 18) ageCls = "age4";
+    else if (age > 12) ageCls = "age3";
+    else if (age > 7) ageCls = "age2";
+
+    const row = document.createElement("div");
+    row.className = `msg ${ageCls}`;
+    row.innerHTML = `
+      <div class="dot" style="background:${dot}"></div>
+      <div class="bubble">
+        <div class="meta">
+          <span class="name">${escapeHtml(name)}</span>
+          <span class="time">${escapeHtml(time)}</span>
         </div>
+        <div class="text">${escapeHtml(m.text || "")}</div>
       </div>
     `;
-  }).join("");
+    log.appendChild(row);
+  }
 
-  UI.chatLog.scrollTop = UI.chatLog.scrollHeight;
+  // auto scroll khi có tin mới (như LoL)
+  if (msgs.length !== CHATUI.lastCount){
+    log.scrollTop = log.scrollHeight;
+    CHATUI.lastCount = msgs.length;
+  }
 }
+
+// toggle ALL/TEAM
+(function initChatToggle(){
+  const tg = document.getElementById("chatToggle");
+  if (!tg) return;
+  tg.addEventListener("click", (e)=>{
+    const btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    CHATUI.mode = btn.dataset.mode;
+
+    tg.querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn));
+    renderChat();
+  });
+})();
+
+// submit form -> send intent
+(function initChatForm(){
+  const form = document.getElementById("chatForm");
+  const input = document.getElementById("chatInput");
+  if (!form || !input) return;
+
+  form.addEventListener("submit", (e)=>{
+    e.preventDefault();
+    const text = (input.value || "").trim();
+    if (!text) return;
+    input.value = "";
+    sendIntent({ type:"chat", text });
+  });
+
+  // Enter gửi, Shift+Enter xuống dòng (LoL style thường không multiline, nhưng bạn có thể giữ)
+})();
+
 
 /* =========================================================
    16) Input / HitTest / Drag
