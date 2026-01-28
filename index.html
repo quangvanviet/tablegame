@@ -623,6 +623,12 @@ const now     = () => Date.now();
 const uid     = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
 const deepClone = (obj) => (typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj)));
 
+const SCREENS = {
+  auth: document.getElementById("authScreen"),
+  lobby: document.getElementById("lobbyScreen"),
+  match: document.getElementById("matchScreen"),
+};
+
 function escapeHtml(str){
   return (str ?? "").toString()
     .replaceAll("&","&amp;")
