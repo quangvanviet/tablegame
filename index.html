@@ -634,7 +634,7 @@ function escapeHtml(str){
 
 function toast(text, ms=1600){
   const el = document.getElementById("toast");
-  if (!el) return;
+  if (!el) { console.log("[toast]", text); return; } // <-- chống crash
   el.textContent = text;
   el.style.display = "block";
   clearTimeout(el._t);
@@ -807,39 +807,26 @@ const UI = {
    - Bạn đang dùng lẫn: screenAuth/screenLobby/screenMatch và authScreen/lobbyScreen/matchScreen
    - FIX: Tự detect cái nào tồn tại
 ========================================================= */
-function pickScreenEl(a, b){
-  return document.getElementById(a) || document.getElementById(b) || null;
-}
-let SCREENS = {};
-
-window.addEventListener("DOMContentLoaded", () => {
-  SCREENS = {
-    auth:  pickScreenEl("screenAuth","authScreen"),
-    lobby: pickScreenEl("screenLobby","lobbyScreen"),
-    match: pickScreenEl("screenMatch","matchScreen"),
-  };
-
-  console.log("SCREENS READY:", SCREENS);
-});
+const SCREENS = {
+  auth:  document.getElementById("authScreen"),
+  lobby: document.getElementById("lobbyScreen"),
+  match: document.getElementById("matchScreen"),
+};
 
 function setScreen(name){
-  // nếu bạn chưa tạo wrapper screen thì bỏ qua
-  const keys = Object.keys(SCREENS);
-  const any = keys.some(k => !!SCREENS[k]);
-  if (!any) return;
-
-  for (const k of keys){
-    if (SCREENS[k]) SCREENS[k].classList.remove("active");
+  for (const k in SCREENS){
+    const el = SCREENS[k];
+    if (el) el.classList.remove("active");
   }
   if (SCREENS[name]) SCREENS[name].classList.add("active");
 }
 
 function goAuth(){ setScreen("auth"); }
 function goLobby(){ setScreen("lobby"); }
-function goMatch(){
-  setScreen("match");
-  try{ resize(); updateCamera(); }catch(e){}
-}
+function goMatch(){ setScreen("match"); try{ resize(); updateCamera(); }catch(e){} }
+
+goAuth();
+
 
 /* =========================================================
    5) Inspector (card inspector popup)
