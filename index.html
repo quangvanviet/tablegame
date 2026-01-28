@@ -1216,12 +1216,6 @@ function makeFreshTableState(roomCode, hostId){
     };
     st.stacks[deckStackId].cardIds.push(id);
   }
-
-  const discardStackId = "stack_discard";
-  const discardX = rects.discard.x + rects.discard.w/2;
-  const discardY = rects.discard.y + rects.discard.h/2;
-  st.stacks[discardStackId] = { id: discardStackId, zone: ZONES.discard, owner: null, x: discardX, y: discardY, cardIds: [] };
-
   return st;
 }
 
@@ -1239,19 +1233,10 @@ function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
 
   // reset cards + reset stacks (giữ discard + deck)
   const keepDeck = st.stacks["stack_deck"];
-  const keepDiscard = st.stacks["stack_discard"];
 
   st.cards = {};
   st.stacks = {
     stack_deck: {...keepDeck, x:deckX, y:deckY, zone:ZONES.deck, owner:null, cardIds:[]},
-    stack_discard: keepDiscard ? keepDiscard : {
-      id:"stack_discard",
-      zone:ZONES.discard,
-      owner:null,
-      x: rects.discard.x + rects.discard.w/2,
-      y: rects.discard.y + rects.discard.h/2,
-      cardIds:[]
-    }
   };
 
   // build deck cards
@@ -1288,9 +1273,6 @@ function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
     const a = st.stacks.stack_deck.cardIds;
     [a[i], a[j]] = [a[j], a[i]];
   }
-
-  // discard rỗng
-  st.stacks.stack_discard.cardIds = [];
 
   // bump
   st.version = (st.version||0) + 1;
@@ -1401,7 +1383,7 @@ class HostController {
       if (!stack) { c.stackId = null; return; }
       stack.cardIds = (stack.cardIds||[]).filter(id=>id!==cardId);
       c.stackId = null;
-      if ((stack.cardIds?.length||0) === 0 && stack.id !== "stack_deck" && stack.id !== "stack_discard"){
+      if ((stack.cardIds?.length||0) === 0 && stack.id !== "stack_deck"){
         delete st.stacks[stack.id];
       }
     };
@@ -1591,39 +1573,49 @@ class HostController {
 
       case "discard": {
         const {targetType, id} = action;
-        const discard = st.stacks["stack_discard"];
-        if (!discard) return {ok:false, reason:"Missing discard"};
-
+        const rects = zoneRects();
+        const r = rects.discard;
+      
+        const placeInDiscard = (c) => {
+          if (!c) return;
+          // nếu card đang nằm trong stack nào đó thì tách ra
+          if (c.stackId) detachFromStack(c.id);
+      
+          c.zone = ZONES.discard;
+          c.owner = null;          // ai cũng thao tác
+          c.faceUp = true;
+          c.stackId = null;
+      
+          // ✅ bay vào vùng discard (rải thoải mái)
+          c.x = r.x + randInt(30, Math.max(30, r.w - 30));
+          c.y = r.y + randInt(30, Math.max(30, r.h - 30));
+          // ✅ giữ ownerId để còn màu
+          // c.ownerId giữ nguyên, không đụng
+        };
+      
         if (targetType === "card"){
           const c = ensureCard(id);
           if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
-
-          attachToStackTop(id, discard.id);
-          discard.zone = ZONES.discard;
-          discard.owner = null;
-
-          c.zone = ZONES.discard;
-          c.owner = null;
-          c.faceUp = true;
+          placeInDiscard(c);
         } else {
           const s = ensureStack(id);
           if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
-
-          const cards = [...(s.cardIds||[])];
-          for (const cid of cards.reverse()){
-            attachToStackTop(cid, discard.id);
+      
+          const ids = [...(s.cardIds||[])];
+          for (const cid of ids){
             const c = ensureCard(cid);
             if (!c) continue;
-            c.faceUp = true;
-            c.owner = null;
-            c.zone = ZONES.discard;
+            placeInDiscard(c);
           }
-          if (s.id !== "stack_deck" && s.id !== "stack_discard") delete st.stacks[s.id];
+      
+          // xóa stack sau khi bung ra
+          if (s.id !== "stack_deck") delete st.stacks[s.id];
         }
-
+      
         this.bumpVersion();
         return {ok:true};
       }
+
 
       case "stack": {
         const {dragTargetType, dragId, dropOnType, dropOnId} = action;
@@ -1650,8 +1642,8 @@ class HostController {
           if (!c2) return {ok:false, reason:"Missing drop card"};
         
           // ✅ chặn gom lên card thuộc DECK/DISCARD
-          if (c2.stackId === "stack_deck" || c2.stackId === "stack_discard"){
-            return {ok:false, reason:"Cannot stack onto deck/discard"};
+          if (c2.stackId === "stack_deck"){
+            return {ok:false, reason:"Cannot stack onto deck"};
           }
         
           dropStackId = c2.stackId || createStackFromCard(c2.id);
@@ -1660,8 +1652,8 @@ class HostController {
           if (!s2) return {ok:false, reason:"Missing drop stack"};
         
           // ✅ chặn gom lên DECK/DISCARD cố định
-          if (s2.id === "stack_deck" || s2.id === "stack_discard"){
-            return {ok:false, reason:"Cannot stack onto deck/discard"};
+          if (s2.id === "stack_deck"){
+            return {ok:false, reason:"Cannot stack onto deck"};
           }
         
           dropStackId = s2.id;
@@ -1679,7 +1671,7 @@ class HostController {
 
         if (dragTargetType === "stack"){
           const s = ensureStack(dragId);
-          if (s && s.id !== "stack_deck" && s.id !== "stack_discard") delete st.stacks[s.id];
+          if (s && s.id !== "stack_deck") delete st.stacks[s.id];
         } else {
           detachFromStack(dragId);
         }
@@ -2653,17 +2645,18 @@ function mousePos(ev){
 function cardZ(c){
   let z = 10;
   if (c.zone === ZONES.table) z = 50;
+  if (c.zone === ZONES.discard) z = 50;
   if (c.zone === ZONES.hand) z = 80;
   if (c.zone === ZONES.deck) z = 40;
-  if (c.zone === ZONES.discard) z = 45;
   return z + (c.order||0)*0.001;
 }
+  
 function stackZ(s){
   let z = 12;
   if (s.zone === ZONES.table) z = 55;
   if (s.zone === ZONES.hand) z = 85;
   if (s.zone === ZONES.deck) z = 42;
-  if (s.zone === ZONES.discard) z = 47;
+  if (s.zone === ZONES.discard) z = 55;
   return z + (s.cardIds?.length||0)*0.01;
 }
 
