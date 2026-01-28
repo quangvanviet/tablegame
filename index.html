@@ -801,6 +801,8 @@ const UI = {
   applyDeckBtn: document.getElementById("applyDeckBtn"),
 };
 
+  
+
 /* =========================================================
    4) Screens Router
    - Bạn đang dùng lẫn: screenAuth/screenLobby/screenMatch và authScreen/lobbyScreen/matchScreen
@@ -2389,6 +2391,24 @@ function loadImg(url){
 /* =========================================================
    15) Chat
 ========================================================= */
+if (UI.chatForm && UI.chatInput){
+  UI.chatForm.addEventListener("submit", (ev)=>{
+    ev.preventDefault();
+    const text = (UI.chatInput.value || "").trim();
+    if (!text) return;
+    sendIntent({ type:"chat", text });
+    UI.chatInput.value = "";
+    UI.chatInput.focus();
+  });
+
+  UI.chatInput.addEventListener("keydown", (ev)=>{
+    if (ev.key === "Enter" && !ev.shiftKey){
+      ev.preventDefault();
+      UI.chatForm.requestSubmit();
+    }
+  });
+}
+  
 function renderChat(state){
   const items = state.chat || [];
   if (!UI.chatLog) return;
