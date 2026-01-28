@@ -316,7 +316,50 @@
     #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
     #matchScreen{ position:relative; width:100%; height:100%; }
 
-    
+    #statsOverlay{
+      position:absolute; inset:0;
+      z-index:12;
+      pointer-events:none; /* chỉ input bật pointer */
+    }
+    .statBox{
+      position:absolute;
+      pointer-events:auto;
+      display:flex;
+      gap:6px;
+      align-items:center;
+      padding:6px 8px;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.18);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      font-size:12px;
+    }
+    .statBox .dot{
+      width:10px;height:10px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 0 0 3px rgba(0,0,0,.12);
+    }
+    .statBox .name{
+      max-width: 110px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      color: rgba(233,236,255,.9);
+      font-weight:700;
+    }
+    .statBox input{
+      width:52px;
+      padding:6px 8px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.22);
+      color: rgba(233,236,255,.95);
+    }
+    .statBox label{
+      font-size:11px;
+      color: rgba(233,236,255,.55);
+      margin-right:2px;
+    }
+
   </style>
 </head>
 <body>
@@ -438,6 +481,7 @@
 <div id="matchScreen" class="screen">
   <div id="app">
     <canvas id="c"></canvas>
+    <div id="statsOverlay"></div>
     <div id="toast"></div>
 
     <div class="hud">
@@ -1853,8 +1897,14 @@ class FirebaseTransport extends NetTransport {
     this._intentsCb = null;
     this._connectedRef = FB.db.ref(".info/connected");
     this._connectedCb = null;
-
     this.onStatus({connected:true, mode:"firebase"});
+
+    this.usersRef = this.roomRef.child("users");
+    this._usersCb = null;
+    listenUsers(onUsers){
+      this._usersCb = (snap)=> onUsers(snap.val() || {});
+      this.usersRef.on("value", this._usersCb);
+    }
   }
 
   async attachPresence(){
@@ -1895,6 +1945,7 @@ class FirebaseTransport extends NetTransport {
       if (this._stateCb) this.stateRef.off("value", this._stateCb);
       if (this._intentsCb) this.intentsRef.off("child_added", this._intentsCb);
       if (this._connectedCb) this._connectedRef.off("value", this._connectedCb);
+      if (this._usersCb) this.usersRef.off("value", this._usersCb);
       this.presRef.remove();
     }catch(e){}
     this.onStatus({connected:false, mode:"firebase"});
@@ -2261,6 +2312,11 @@ async function createRoomAsHost_Firebase(){
 
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
+  t.listenUsers((users)=>{
+    // nhét vào authoritative để overlay đọc được
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._users = users;
+  });
   await t.attachPresence();
 
   t.listenIntentsAsHost(async (msg, intentKey)=>{
@@ -2318,6 +2374,13 @@ async function joinRoomAsClient_Firebase(){
 
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
+
+  t.listenUsers((users)=>{
+    // nhét vào authoritative để overlay đọc được
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._users = users;
+  });
+  
   await t.attachPresence();
 
   await t.sendIntent({ type: "join" });
@@ -2846,7 +2909,7 @@ function rr(x,y,w,h,r){
   ctx.closePath();
 }
 
-function drawZone(rect, label, subtitle="", highlight=false){
+function drawZone(rect, label, subtitle="", highlight=false, tint=null){
   const s0 = toScreen({x:rect.x, y:rect.y});
   const s1 = toScreen({x:rect.x+rect.w, y:rect.y+rect.h});
   const x = s0.x, y = s0.y, w = (s1.x-s0.x), h = (s1.y-s0.y);
@@ -2854,9 +2917,18 @@ function drawZone(rect, label, subtitle="", highlight=false){
   ctx.save();
 
   rr(x,y,w,h,18);
+
+  // base
   ctx.globalAlpha = highlight ? 0.85 : 0.35;
   ctx.fillStyle = highlight ? "rgba(122,162,255,.22)" : "rgba(0,0,0,.10)";
   ctx.fill();
+
+  // tint color for player zone
+  if (tint){
+    ctx.globalAlpha = highlight ? 0.18 : 0.10;
+    ctx.fillStyle = tint;
+    ctx.fill();
+  }
 
   ctx.globalAlpha = 0.9;
   ctx.strokeStyle = "rgba(255,255,255,.10)";
@@ -2984,15 +3056,18 @@ function draw(){
 
   drawZone(rects.table, "TABLE", "", false);
 
-  const me = s.players.find(p=>p.id===client.selfId);
-  const mySeat = me ? me.seat : -1;
-
-  drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0);
-  drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2);
-  drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1);
-  drawZone(rects.handBottomRight, "Người chơi 4", seatName(3), mySeat===3);
-  drawZone(rects.handRightTop,    "Người chơi 5", seatName(4), mySeat===4);
-  drawZone(rects.handRightBottom, "Người chơi 6", seatName(5), mySeat===5);
+  const playerBySeat = (seat)=> s.players.find(pp=>pp.seat===seat) || null;
+  const tintBySeat = (seat)=>{
+    const p = playerBySeat(seat);
+    return p ? COLORS[p.color] : null;
+  };
+  
+  drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0, tintBySeat(0));
+  drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2, tintBySeat(2));
+  drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1, tintBySeat(1));
+  drawZone(rects.handBottomRight, "Người chơi 4", seatName(3), mySeat===3, tintBySeat(3));
+  drawZone(rects.handRightTop,    "Người chơi 5", seatName(4), mySeat===4, tintBySeat(4));
+  drawZone(rects.handRightBottom, "Người chơi 6", seatName(5), mySeat===5, tintBySeat(5));
 
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
@@ -3051,10 +3126,139 @@ function draw(){
       }
     }
   }
-
+  updateStatsOverlay();
   requestAnimationFrame(draw);
 }
 requestAnimationFrame(draw);
+
+const STATS_UI = { root: document.getElementById("statsOverlay") };
+const _statInputs = new Map(); // key: uid
+
+function seatRectKey(seat){
+  switch (seat){
+    case 0: return "handTopLeft";
+    case 1: return "handBottomLeft";
+    case 2: return "handTopRight";
+    case 3: return "handBottomRight";
+    case 4: return "handRightTop";
+    case 5: return "handRightBottom";
+    default: return null;
+  }
+}
+
+function ensureStatBoxForUser(userId){
+  if (_statInputs.has(userId)) return _statInputs.get(userId);
+
+  const box = document.createElement("div");
+  box.className = "statBox";
+
+  const dot = document.createElement("div");
+  dot.className = "dot";
+
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = "Player";
+
+  const mkField = (labelText)=>{
+    const wrap = document.createElement("div");
+    const lab = document.createElement("label");
+    lab.textContent = labelText;
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.step = "1";
+    inp.value = "0";
+    wrap.appendChild(lab);
+    wrap.appendChild(inp);
+    return {wrap, inp};
+  };
+
+  const atk = mkField("ATK");
+  const def = mkField("DEF");
+  const hp  = mkField("HP");
+
+  box.appendChild(dot);
+  box.appendChild(name);
+  box.appendChild(atk.wrap);
+  box.appendChild(def.wrap);
+  box.appendChild(hp.wrap);
+
+  // realtime update to RTDB (ai cũng sửa)
+  const commit = async (uid, patch)=>{
+    if (!(client.transport instanceof FirebaseTransport)) return;
+    if (!client.roomId) return;
+    try{
+      await FB.db.ref(`AllRoom/${client.roomId}/users/${uid}`).update(patch);
+    }catch(e){}
+  };
+
+  const bind = (inp, key)=> {
+    inp.addEventListener("change", ()=>{
+      const v = parseInt(inp.value,10);
+      commit(userId, {[key]: Number.isFinite(v) ? v : 0});
+    });
+    inp.addEventListener("keydown", (e)=>{
+      if (e.key === "Enter"){
+        e.preventDefault();
+        inp.blur();
+      }
+    });
+  };
+
+  bind(atk.inp, "atk");
+  bind(def.inp, "def");
+  bind(hp.inp,  "hp");
+
+  STATS_UI.root && STATS_UI.root.appendChild(box);
+
+  const obj = { box, dot, name, atk: atk.inp, def: def.inp, hp: hp.inp };
+  _statInputs.set(userId, obj);
+  return obj;
+}
+
+function updateStatsOverlay(){
+  const root = STATS_UI.root;
+  if (!root) return;
+
+  const s = getState();
+  if (!s){
+    root.style.display = "none";
+    return;
+  }
+  root.style.display = "block";
+
+  const rects = zoneRects();
+
+  // lấy data realtime users (firebase) nếu có, không thì fallback players
+  const users = (client.transport instanceof FirebaseTransport)
+    ? (client.authoritative?._users || null) // (mình sẽ hướng dẫn set ở phần dưới)
+    : null;
+
+  for (const p of (s.players||[])){
+    const key = seatRectKey(p.seat);
+    const r = key ? rects[key] : null;
+    if (!r) continue;
+
+    const ui = ensureStatBoxForUser(p.id);
+
+    ui.dot.style.background = COLORS[p.color] || "rgba(233,236,255,.35)";
+    ui.name.textContent = p.name || "Player";
+
+    // set value from RTDB users if present
+    const u = users?.[p.id] || null;
+    if (u){
+      ui.atk.value = String(u.atk ?? 0);
+      ui.def.value = String(u.def ?? 0);
+      ui.hp.value  = String(u.hp  ?? 0);
+    }
+
+    // position: góc phải trên vùng hand của người đó
+    const sp0 = toScreen({x:r.x, y:r.y});
+    const sp1 = toScreen({x:r.x+r.w, y:r.y+r.h});
+
+    ui.box.style.left = (sp1.x - 260) + "px";
+    ui.box.style.top  = (sp0.y + 8) + "px";
+  }
+}
 
 /* =========================================================
    19) UI bindings (bind 1 lần)
