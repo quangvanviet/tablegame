@@ -46,9 +46,8 @@
 
     .hud{
       position:absolute;
-      top:12px; left:12px;
       display:flex;
-      gap:12px;
+      gap:5px;
       align-items:flex-start;
       z-index:10;
       pointer-events:auto; /* let canvas interactions through */
@@ -454,10 +453,6 @@
     .card-url-row{
       display:flex; gap:5px; align-items:center;
     }
-
-
-    /* Make HUD smaller + collapsible */
-    .hud{ gap:10px; }
     
     /* Optional: minimize buttons row */
     .hud .panel header{ cursor:default; }
@@ -525,7 +520,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
 }
 
 /* ========= TOPBAR 15% ========= */
@@ -642,13 +637,12 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   box-sizing: border-box;
   height: 70%;
   display:flex;
-  gap: 8px;
+  gap: 5px;
 }
 
 /* Sidebar 20% */
 #lobbyScreen .lobby-sidebar{
-  flex: 0 0 20%;
-  max-width: 20%;
+  width: 20%;
   height: 100%;
   min-height: 0;
   overflow: auto;
@@ -658,23 +652,18 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   border-radius: 18px;
   box-shadow: 0 18px 44px rgba(0,0,0,.45);
   backdrop-filter: blur(12px);
-  padding: 10px;
   display:flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 /* Main 80% */
 #lobbyScreen .lobby-main{
-  flex: 1 1 80%;
-  min-width: 0;             /* CHỐT: để flex không co theo content */
+  width: 80%;             /* CHỐT: để flex không co theo content */
   height: 100%;
   min-height: 0;
-  overflow: auto;
-
   display:flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
 }
 
 /* Tabs must stretch full width */
@@ -685,8 +674,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 #lobbyScreen .nav-item{
   display:flex; align-items:center; gap: 10px;
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 6px 8px;
   border: 1px solid transparent;
   background: transparent;
   color: rgba(231,226,216,.88);
@@ -709,12 +697,6 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   height: 1px;
   margin: 6px 6px;
   background: linear-gradient(90deg, transparent, rgba(199,166,101,.25), transparent);
-}
-#lobbyScreen .sidebar-footer{
-  margin-top:auto;
-  padding: 10px 10px 2px;
-  opacity:.65;
-  font-size: 12px;
 }
 
 /* ========= DOCK 15% ========= */
@@ -1047,9 +1029,6 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 @media (max-width: 920px){
   body{ overflow: auto; } /* mobile cho phép scroll nếu cần */
 
-  #lobbyScreen .hud{
-    padding: 12px;
-  }
   #lobbyScreen .lobby-shell{
     flex-direction: column;
   }
@@ -1284,37 +1263,38 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <div class="lobby-shell">
       <!-- Sidebar navigation -->
       <aside class="lobby-sidebar">
-        <button class="nav-item active" data-tab="tabRoom">
-          <span class="nav-ico">🏠</span><span class="nav-txt">Tạo / Tìm phòng</span>
-        </button>
-        <button class="nav-item" data-tab="tabCustomize">
-          <span class="nav-ico">🎛️</span><span class="nav-txt">Tùy chỉnh</span>
-        </button>
-        <button class="nav-item" data-tab="tabInventory">
-          <span class="nav-ico">🧰</span><span class="nav-txt">Tủ đồ</span>
-        </button>
-        <button class="nav-item" data-tab="tabShop">
-          <span class="nav-ico">🛒</span><span class="nav-txt">Cửa hàng</span>
-        </button>
-        <button class="nav-item" data-tab="tabNotifications">
-          <span class="nav-ico">🔔</span><span class="nav-txt">Thông báo</span>
-        </button>
-
-        <div class="sidebar-divider"></div>
-
-        <!-- Mục sáng tạo thêm -->
-        <button class="nav-item" data-tab="tabQuickPlay">
-          <span class="nav-ico">⚡</span><span class="nav-txt">Quick Play</span>
-        </button>
-        <button class="nav-item" data-tab="tabTutorial">
-          <span class="nav-ico">📘</span><span class="nav-txt">Hướng dẫn</span>
-        </button>
-        <button class="nav-item" data-tab="tabPatchNotes">
-          <span class="nav-ico">🧾</span><span class="nav-txt">Patch notes</span>
-        </button>
-
-        <div class="sidebar-footer">
-          <div class="small">v0.1 • Host authoritative</div>
+        <div style="display: flex;
+          padding: 5px 5px;
+          gap: 5px;
+          flex-direction: column;">
+          <button class="nav-item active" data-tab="tabRoom">
+            <span class="nav-ico">🏠</span><span class="nav-txt">Tạo / Tìm phòng</span>
+          </button>
+          <button class="nav-item" data-tab="tabCustomize">
+            <span class="nav-ico">🎛️</span><span class="nav-txt">Tùy chỉnh</span>
+          </button>
+          <button class="nav-item" data-tab="tabInventory">
+            <span class="nav-ico">🧰</span><span class="nav-txt">Tủ đồ</span>
+          </button>
+          <button class="nav-item" data-tab="tabShop">
+            <span class="nav-ico">🛒</span><span class="nav-txt">Cửa hàng</span>
+          </button>
+          <button class="nav-item" data-tab="tabNotifications">
+            <span class="nav-ico">🔔</span><span class="nav-txt">Thông báo</span>
+          </button>
+  
+          <div class="sidebar-divider"></div>
+  
+          <!-- Mục sáng tạo thêm -->
+          <button class="nav-item" data-tab="tabQuickPlay">
+            <span class="nav-ico">⚡</span><span class="nav-txt">Quick Play</span>
+          </button>
+          <button class="nav-item" data-tab="tabTutorial">
+            <span class="nav-ico">📘</span><span class="nav-txt">Hướng dẫn</span>
+          </button>
+          <button class="nav-item" data-tab="tabPatchNotes">
+            <span class="nav-ico">🧾</span><span class="nav-txt">Patch notes</span>
+          </button>
         </div>
       </aside>
 
@@ -1737,29 +1717,27 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           </div>
         </section>
       </main>
-
-      <!-- Bottom dock: nút liên quan / tiện ích nhanh -->
-      <div class="lobby-dock">
-        <div class="dock-left">
-          <button class="secondary" id="dockRoomBtn">Phòng</button>
-          <button class="secondary" id="dockBrowserBtn">Browser</button>
-          <button class="secondary" id="dockDeckBtn">Deck</button>
-        </div>
-      
-        <div class="dock-mid">
-          <div class="dock-pill">
-            <span class="dot"></span>
-            <span class="txt" id="dockHint">Tip: Local mode mở 4 tab</span>
-          </div>
-        </div>
-      
-        <div class="dock-right">
-          <button class="secondary" id="dockCopyBtn">Copy link</button>
-          <button class="danger" id="dockResetBtn">Reset</button>
-          <button id="dockJoinBtn">Join</button>
+    </div>
+    <!-- Bottom dock: nút liên quan / tiện ích nhanh -->
+    <div class="lobby-dock">
+      <div class="dock-left">
+        <button class="secondary" id="dockRoomBtn">Phòng</button>
+        <button class="secondary" id="dockBrowserBtn">Browser</button>
+        <button class="secondary" id="dockDeckBtn">Deck</button>
+      </div>
+    
+      <div class="dock-mid">
+        <div class="dock-pill">
+          <span class="dot"></span>
+          <span class="txt" id="dockHint">Tip: Local mode mở 4 tab</span>
         </div>
       </div>
-
+    
+      <div class="dock-right">
+        <button class="secondary" id="dockCopyBtn">Copy link</button>
+        <button class="danger" id="dockResetBtn">Reset</button>
+        <button id="dockJoinBtn">Join</button>
+      </div>
     </div>
   </div>
 </div>
