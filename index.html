@@ -478,7 +478,13 @@
     }
     
     /* keep your request */
-    #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
+    #lobbyScreen .hud{
+      padding:12px;
+      display:grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 12px;
+      min-height: 100vh;
+    }
     
     /* background */
     #lobbyScreen .lobby-bg{
@@ -505,22 +511,21 @@
     
     /* shell layout */
     #lobbyScreen .lobby-shell{
+      width:100%;
+      max-width: 1240px;
+      margin: 0 auto;
+    
       display:grid;
       grid-template-columns: 260px 1fr;
       gap: 14px;
-      max-width: 1240px;
-      margin: 0 auto;
-      padding: 10px 6px 18px;
+    
+      align-items: start;
     }
     
     #lobbyScreen .lobby-topbar{
+      width:100%;
       max-width: 1240px;
       margin: 0 auto;
-      padding: 12px 6px 0;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 12px;
     }
     
     #lobbyScreen .brand{
@@ -869,7 +874,14 @@
     
     /* Option: hide duplicate logout in room panel if you want it only on topbar */
     #roomPanel #logoutBtn{ display:none; }
-
+    #roomPanel .row .nav-item{
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(199,166,101,.20);
+      background: rgba(10,14,22,.35);
+    }
+    #roomPanel .row .nav-item .nav-txt{ font-size: 12px; }
+    
     #lobbyScreen .rb-list{
       display:flex;
       flex-direction:column;
@@ -934,6 +946,79 @@
       min-width: 86px;
     }
 
+    #lobbyScreen .lobby-dock{
+      grid-column: 1 / -1;
+      width:100%;
+    
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+    
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(199,166,101,.20);
+      background: rgba(8, 11, 18, .55);
+      box-shadow: 0 18px 44px rgba(0,0,0,.45);
+      backdrop-filter: blur(12px);
+    }
+    
+    #lobbyScreen .dock-left,
+    #lobbyScreen .dock-right{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    #lobbyScreen .dock-mid{
+      flex:1;
+      display:flex;
+      justify-content:center;
+      min-width: 220px;
+    }
+    
+    #lobbyScreen .dock-pill{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(199,166,101,.18);
+      background: rgba(0,0,0,.18);
+      max-width: 520px;
+      width: 100%;
+      overflow:hidden;
+    }
+    
+    #lobbyScreen .dock-pill .dot{
+      width: 8px; height: 8px; border-radius: 999px;
+      background: rgba(199,166,101,.90);
+      box-shadow: 0 0 0 3px rgba(199,166,101,.14);
+      flex: 0 0 auto;
+    }
+    
+    #lobbyScreen .dock-pill .txt{
+      font-size: 12px;
+      opacity:.85;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    
+    /* Responsive */
+    @media (max-width: 920px){
+      #lobbyScreen .lobby-shell{
+        grid-template-columns: 1fr;
+      }
+      #lobbyScreen .lobby-dock{
+        flex-direction: column;
+        align-items: stretch;
+      }
+      #lobbyScreen .dock-mid{
+        width:100%;
+      }
+    }
     
     /* Status board (LoL-ish compact) */
     #statusBoard{
@@ -1201,18 +1286,6 @@
             <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
 
             <div class="content col">
-              <div class="row">
-                <div class="content col" style="flex:1; min-width:220px">
-                  <label>Front folder (host)</label>
-                  <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
-                </div>
-                <div class="col" style="flex:1; min-width:220px">
-                  <label>Back image URL</label>
-                  <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
-                </div>
-                <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
-              </div>
-
               <div class="col">
                 <div class="row">
                   <div class="col" style="flex:1; min-width:150px">
@@ -1655,6 +1728,29 @@
           </div>
         </section>
       </main>
+
+      <!-- Bottom dock: nút liên quan / tiện ích nhanh -->
+      <div class="lobby-dock">
+        <div class="dock-left">
+          <button class="secondary" id="dockRoomBtn">Phòng</button>
+          <button class="secondary" id="dockBrowserBtn">Browser</button>
+          <button class="secondary" id="dockDeckBtn">Deck</button>
+        </div>
+      
+        <div class="dock-mid">
+          <div class="dock-pill">
+            <span class="dot"></span>
+            <span class="txt" id="dockHint">Tip: Local mode mở 4 tab</span>
+          </div>
+        </div>
+      
+        <div class="dock-right">
+          <button class="secondary" id="dockCopyBtn">Copy link</button>
+          <button class="danger" id="dockResetBtn">Reset</button>
+          <button id="dockJoinBtn">Join</button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -5050,6 +5146,57 @@ if (leaveMatchBtn){
   }
 })();
 
+(function initLobbyDock(){
+  const byId = (id)=> document.getElementById(id);
+
+  const dockRoomBtn = byId("dockRoomBtn");
+  const dockBrowserBtn = byId("dockBrowserBtn");
+  const dockDeckBtn = byId("dockDeckBtn");
+
+  const dockCopyBtn = byId("dockCopyBtn");
+  const dockResetBtn = byId("dockResetBtn");
+  const dockJoinBtn = byId("dockJoinBtn");
+
+  const copyLinkBtn = byId("copyLinkBtn");
+  const resetBtn = byId("resetBtn");
+  const joinBtn = byId("joinBtn");
+  const openDeckBtn = byId("openDeckBtn");
+
+  // Tab switch helper: dùng đúng cơ chế data-tab bạn đã dùng
+  function showTab(tabId){
+    const root = byId("lobbyScreen");
+    if(!root) return;
+    root.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.id === tabId));
+    root.querySelectorAll(".nav-item").forEach(b=> b.classList.toggle("active", b.dataset.tab === tabId));
+  }
+
+  dockRoomBtn?.addEventListener("click", ()=> showTab("tabRoom"));
+  dockBrowserBtn?.addEventListener("click", ()=> showTab("tabRoomBrowser"));
+  dockDeckBtn?.addEventListener("click", ()=> openDeckBtn?.click());
+
+  dockCopyBtn?.addEventListener("click", ()=> copyLinkBtn?.click());
+  dockResetBtn?.addEventListener("click", ()=> resetBtn?.click());
+  dockJoinBtn?.addEventListener("click", ()=> joinBtn?.click());
+
+  // Hint đổi theo tab (optional)
+  const hint = byId("dockHint");
+  if(hint){
+    const map = {
+      tabRoom: "Tạo phòng hoặc nhập mã để vào phòng.",
+      tabRoomBrowser: "Browser: lọc theo tag/preset rồi Join nhanh.",
+      tabInventory: "Tủ đồ: preset deck / cosmetics.",
+      tabCustomize: "Tùy chỉnh: theme / sound / fps.",
+      tabShop: "Cửa hàng: cosmetics (không ảnh hưởng gameplay).",
+      tabNotifications: "Thông báo: tips & system.",
+    };
+    document.querySelectorAll('#lobbyScreen .nav-item[data-tab]').forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const t = btn.dataset.tab;
+        if(map[t]) hint.textContent = map[t];
+      });
+    });
+  }
+})();
 
   
 /* =========================================================
