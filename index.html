@@ -63,7 +63,7 @@
       min-width: 280px;
     }
     .panel header{
-      padding:10px 12px;
+      padding:8px 10px;
       background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
       border-bottom:1px solid rgba(255,255,255,.06);
       display:flex;
@@ -338,7 +338,7 @@
       left:12px;
       bottom:12px;
       z-index:10;
-      width:min(520px, 56vw);
+      min-width: 355px;
       pointer-events:auto;
     }
     #help .panel{pointer-events:auto}
@@ -1857,12 +1857,12 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           </div>
 
           <div class="row" style="justify-content:space-between">
-            <button id="btnFlip" class="secondary" style="flex:1">Flip</button>
-            <button id="btnDiscard" class="danger" style="flex:1">Discard</button>
+            <button id="btnFlip" class="secondary" style="flex:1">(W)Flip</button>
+            <button id="btnDiscard" class="danger" style="flex:1">(T)Discard</button>
           </div>
           <div class="row" style="justify-content:space-between">
-            <button id="btnUnstack" class="secondary" style="flex:1">Unstack</button>
-            <button id="btnShuffle" class="secondary" style="flex:1">Shuffle</button>
+            <button id="btnUnstack" class="secondary" style="flex:1">(R)Unstack</button>
+            <button id="btnShuffle" class="secondary" style="flex:1">(E)Shuffle</button>
           </div>
         </div>
       </div>
