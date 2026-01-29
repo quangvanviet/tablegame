@@ -452,9 +452,8 @@
       padding: 10px;
     }
     .card-url-row{
-      display:flex; gap:8px; align-items:center;
+      display:flex; gap:5px; align-items:center;
     }
-    .card-url-row input{ flex:1; }
 
 
     /* Make HUD smaller + collapsible */
@@ -892,8 +891,8 @@
         display: flex;
         flex-direction: column;
         gap: 5px;
-        min-height: 80vh;
-        max-height: 80vh;
+        min-height: 85vh;
+        max-height: 85vh;
     ">
       <header style="padding: 10px 12px;background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
             border-bottom: 1px solid rgba(255,255,255,.06);display: flex;align-items: center;justify-content: space-between;
@@ -930,7 +929,12 @@
           <button id="saveSetBtn">Lưu set</button>
         </div>
       </div>
-
+      <div style="justify-content: space-between;display: flex;gap: 8px;padding: 8px;background: #cae6ff0d;border-radius: 8px;width: 100%;font-family: inherit;font-size: 13px;align-items: center;margin-bottom: -8px;">
+        <div style=" width: 25%;">Tên lá bài</div>
+        <div style="width: 25%; ">URL hình ảnh</div>
+        <div >Số lượng</div>
+        <div style="width: 5%;"></div>
+      </div>
       <div id="cardUrlList" class="col" style="gap:8px; max-height:240px; overflow:auto; padding-right:6px"></div>
     </div>
   </div>
@@ -2807,18 +2811,20 @@ function makeCardTypeRow({frontUrl="", count=1, name=""} = {}){
   inpName.className = "mono";
   inpName.placeholder = "Tên loại (optional)";
   inpName.value = name;
+  inpName.style.width = "40%";
 
   const inpUrl = document.createElement("input");
   inpUrl.className = "mono";
   inpUrl.placeholder = "https://.../front.png";
   inpUrl.value = frontUrl;
+  inpUrl.style.width = "40%";
 
   const inpCount = document.createElement("input");
   inpCount.type = "number";
   inpCount.min = "1";
   inpCount.step = "1";
   inpCount.value = String(Math.max(1, parseInt(count,10)||1));
-  inpCount.style.width = "86px";
+  inpCount.style.width = "8%";
 
   const del = document.createElement("button");
   del.className = "danger";
