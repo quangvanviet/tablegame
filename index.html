@@ -466,9 +466,475 @@
     .screen{ display:none; width:100%; height:100%; }
     .screen.active{ display:block; }
     #authScreen{align-items:flex-start; justify-content:center; }
-    #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
     #matchScreen{ position:relative; width:100%; height:100%; }
 
+    /* ===== Lobby Theme (LoL-like) ===== */
+    #lobbyScreen.lobby{
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+      color: #e7e2d8;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    
+    /* keep your request */
+    #lobbyScreen .hud{ position:relative; top:auto; left:auto; padding:12px; }
+    
+    /* background */
+    #lobbyScreen .lobby-bg{
+      position:absolute; inset:-40px;
+      background:
+        radial-gradient(1200px 600px at 20% 20%, rgba(199,166,101,.18), transparent 60%),
+        radial-gradient(900px 500px at 80% 30%, rgba(80,140,255,.10), transparent 55%),
+        radial-gradient(900px 500px at 50% 90%, rgba(40,220,170,.08), transparent 60%),
+        linear-gradient(180deg, #0b0f16, #070a10 60%, #05070c);
+      filter: saturate(1.08);
+    }
+    #lobbyScreen .lobby-vignette{
+      position:absolute; inset:0;
+      background: radial-gradient(1200px 700px at 50% 10%, transparent 35%, rgba(0,0,0,.65) 80%);
+      pointer-events:none;
+    }
+    #lobbyScreen .lobby-noise{
+      position:absolute; inset:0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.25'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: .08;
+      pointer-events:none;
+    }
+    
+    /* shell layout */
+    #lobbyScreen .lobby-shell{
+      display:grid;
+      grid-template-columns: 260px 1fr;
+      gap: 14px;
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 10px 6px 18px;
+    }
+    
+    #lobbyScreen .lobby-topbar{
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 12px 6px 0;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+    }
+    
+    #lobbyScreen .brand{
+      display:flex; align-items:center; gap: 12px;
+    }
+    #lobbyScreen .brand-logo{
+      width: 42px; height: 42px;
+      border-radius: 14px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,225,160,.9), rgba(199,166,101,.25) 45%, rgba(0,0,0,.0) 70%),
+        linear-gradient(135deg, rgba(199,166,101,.35), rgba(120,170,255,.10));
+      border: 1px solid rgba(199,166,101,.35);
+      box-shadow: 0 10px 24px rgba(0,0,0,.45);
+    }
+    #lobbyScreen .brand-title{
+      font-weight: 700;
+      letter-spacing: .14em;
+      font-size: 13px;
+      color: #f3efe7;
+    }
+    #lobbyScreen .brand-sub{
+      font-size: 12px;
+      opacity: .75;
+      margin-top: 2px;
+    }
+    
+    #lobbyScreen .top-actions{ display:flex; align-items:center; gap: 10px; }
+    
+    #lobbyScreen .top-pill{
+      display:flex; align-items:center; gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(10, 14, 22, .55);
+      border: 1px solid rgba(199,166,101,.22);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      backdrop-filter: blur(10px);
+    }
+    #lobbyScreen .top-pill .dot{
+      width: 8px; height: 8px; border-radius: 999px;
+      background: #a64b4b;
+      box-shadow: 0 0 0 3px rgba(166,75,75,.15);
+    }
+    #lobbyScreen .top-pill.online .dot{
+      background: #42d392;
+      box-shadow: 0 0 0 3px rgba(66,211,146,.18);
+    }
+    #lobbyScreen .top-pill .txt{ font-size: 12px; letter-spacing:.04em; opacity:.9; }
+    
+    #lobbyScreen .icon-btn{
+      position: relative;
+      height: 38px; width: 38px;
+      border-radius: 12px;
+      border: 1px solid rgba(199,166,101,.22);
+      background: rgba(10, 14, 22, .55);
+      color: #f3efe7;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      cursor: pointer;
+    }
+    #lobbyScreen .icon-btn:hover{
+      border-color: rgba(199,166,101,.45);
+      transform: translateY(-1px);
+    }
+    #lobbyScreen .icon-btn .bubble{
+      position:absolute; top:-6px; right:-6px;
+      background: rgba(199,166,101,.95);
+      color:#15110b;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 11px;
+      border: 1px solid rgba(255,255,255,.25);
+    }
+    
+    #lobbyScreen .top-logout{ height: 38px; border-radius: 12px; }
+    
+    /* sidebar */
+    #lobbyScreen .lobby-sidebar{
+      background: rgba(8, 11, 18, .55);
+      border: 1px solid rgba(199,166,101,.20);
+      border-radius: 18px;
+      box-shadow: 0 18px 44px rgba(0,0,0,.45);
+      backdrop-filter: blur(12px);
+      padding: 10px;
+      display:flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    #lobbyScreen .nav-item{
+      display:flex; align-items:center; gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: rgba(231,226,216,.88);
+      cursor: pointer;
+      text-align:left;
+    }
+    #lobbyScreen .nav-item:hover{
+      background: rgba(199,166,101,.10);
+      border-color: rgba(199,166,101,.22);
+    }
+    #lobbyScreen .nav-item.active{
+      background: rgba(199,166,101,.14);
+      border-color: rgba(199,166,101,.40);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
+    #lobbyScreen .nav-ico{ width: 22px; text-align:center; opacity:.95; }
+    #lobbyScreen .nav-txt{ font-size: 13px; letter-spacing:.02em; }
+    
+    #lobbyScreen .sidebar-divider{
+      height: 1px;
+      margin: 6px 6px;
+      background: linear-gradient(90deg, transparent, rgba(199,166,101,.25), transparent);
+    }
+    #lobbyScreen .sidebar-footer{
+      margin-top:auto;
+      padding: 10px 10px 2px;
+      opacity:.65;
+      font-size: 12px;
+    }
+    
+    /* main */
+    #lobbyScreen .lobby-main{
+      display:flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #lobbyScreen .tab{ display:none; }
+    #lobbyScreen .tab.active{ display:block; }
+    
+    /* panel polish */
+    #lobbyScreen .panel{
+      background: rgba(8, 11, 18, .55) !important;
+      border: 1px solid rgba(199,166,101,.20) !important;
+      border-radius: 18px !important;
+      box-shadow: 0 18px 44px rgba(0,0,0,.45) !important;
+      backdrop-filter: blur(12px);
+      overflow:hidden;
+    }
+    #lobbyScreen .panel header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(199,166,101,.14);
+      background: linear-gradient(180deg, rgba(199,166,101,.10), rgba(0,0,0,0));
+    }
+    #lobbyScreen .panel header .title{
+      font-weight: 800;
+      letter-spacing: .12em;
+      font-size: 12px;
+      color: rgba(243,239,231,.95);
+    }
+    #lobbyScreen .panel .content{ padding: 12px 14px; }
+    #lobbyScreen .panel .hint{ opacity:.75; font-size: 12px; }
+    
+    /* soft panels (new) */
+    #lobbyScreen .panel.soft header.soft-header{
+      display:block;
+    }
+    #lobbyScreen .soft-header .title{ font-size: 12px; letter-spacing:.14em; }
+    #lobbyScreen .soft-header .sub{
+      margin-top: 4px;
+      font-size: 12px;
+      opacity:.72;
+    }
+    
+    /* inputs/buttons refinement without breaking your ids */
+    #lobbyScreen input, #lobbyScreen select{
+      background: rgba(0,0,0,.22);
+      border: 1px solid rgba(199,166,101,.18);
+      border-radius: 12px;
+      color: rgba(243,239,231,.92);
+      padding: 10px 10px;
+      outline: none;
+    }
+    #lobbyScreen input:focus, #lobbyScreen select:focus{
+      border-color: rgba(199,166,101,.45);
+      box-shadow: 0 0 0 3px rgba(199,166,101,.12);
+    }
+    
+    #lobbyScreen button{
+      border-radius: 12px;
+      border: 1px solid rgba(199,166,101,.25);
+      background: rgba(199,166,101,.18);
+      color: rgba(243,239,231,.95);
+      padding: 10px 12px;
+      cursor:pointer;
+    }
+    #lobbyScreen button.secondary{
+      background: rgba(10,14,22,.35);
+      border-color: rgba(199,166,101,.20);
+    }
+    #lobbyScreen button.danger{
+      background: rgba(166,75,75,.20);
+      border-color: rgba(166,75,75,.35);
+    }
+    #lobbyScreen button:hover{
+      border-color: rgba(199,166,101,.45);
+      transform: translateY(-1px);
+    }
+    #lobbyScreen button:active{
+      transform: translateY(0);
+    }
+    
+    /* grids */
+    #lobbyScreen .grid-2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 920px){
+      #lobbyScreen .lobby-shell{ grid-template-columns: 1fr; }
+      #lobbyScreen .grid-2{ grid-template-columns: 1fr; }
+    }
+    
+    /* mini panels */
+    #lobbyScreen .panel.mini{
+      border-radius: 16px !important;
+    }
+    #lobbyScreen .mini-header{
+      padding: 10px 12px !important;
+    }
+    #lobbyScreen .mini-header .title{
+      font-weight: 800;
+      letter-spacing:.08em;
+      font-size: 12px;
+    }
+    #lobbyScreen .mini-header .sub{
+      font-size: 12px;
+      opacity:.7;
+      margin-top: 2px;
+    }
+    #lobbyScreen .mono-note{ opacity:.75; font-size: 12px; }
+    
+    /* Shop cards */
+    #lobbyScreen .shop-grid{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 1100px){ #lobbyScreen .shop-grid{ grid-template-columns: 1fr; } }
+    
+    #lobbyScreen .shop-card{
+      border-radius: 16px;
+      border: 1px solid rgba(199,166,101,.18);
+      background: rgba(0,0,0,.18);
+      padding: 12px;
+    }
+    #lobbyScreen .shop-img{
+      height: 90px;
+      border-radius: 14px;
+      border: 1px solid rgba(199,166,101,.20);
+      background:
+        radial-gradient(circle at 30% 30%, rgba(199,166,101,.35), transparent 55%),
+        linear-gradient(135deg, rgba(70,120,255,.12), rgba(0,0,0,.0));
+      margin-bottom: 10px;
+    }
+    #lobbyScreen .shop-img.alt{
+      background:
+        radial-gradient(circle at 30% 30%, rgba(120,220,190,.28), transparent 55%),
+        linear-gradient(135deg, rgba(199,166,101,.10), rgba(0,0,0,.0));
+    }
+    #lobbyScreen .shop-img.alt2{
+      background:
+        radial-gradient(circle at 30% 30%, rgba(240,120,120,.25), transparent 55%),
+        linear-gradient(135deg, rgba(199,166,101,.10), rgba(0,0,0,.0));
+    }
+    #lobbyScreen .shop-title{ font-weight: 800; letter-spacing:.04em; }
+    #lobbyScreen .shop-sub{ opacity:.7; font-size: 12px; margin-top: 2px; }
+    #lobbyScreen .shop-row{ display:flex; align-items:center; justify-content:space-between; gap: 8px; margin-top: 10px; }
+    #lobbyScreen .price{
+      font-weight: 900;
+      letter-spacing:.06em;
+      color: rgba(199,166,101,.95);
+    }
+    
+    /* Notifications */
+    #lobbyScreen .notif-item{
+      display:flex; gap: 10px; align-items:flex-start;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(199,166,101,.18);
+      background: rgba(0,0,0,.16);
+    }
+    #lobbyScreen .notif-dot{
+      width: 10px; height: 10px; border-radius: 999px;
+      margin-top: 4px;
+      background: rgba(199,166,101,.85);
+    }
+    #lobbyScreen .notif-dot.warn{ background: rgba(240,120,120,.85); }
+    #lobbyScreen .notif-title{ font-weight: 800; }
+    #lobbyScreen .notif-sub{ opacity:.75; font-size: 12px; margin-top: 2px; }
+    
+    /* quick play */
+    #lobbyScreen .quick-grid{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 980px){ #lobbyScreen .quick-grid{ grid-template-columns: 1fr; } }
+    #lobbyScreen .quick-card{
+      text-align:left;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(199,166,101,.20);
+      background: rgba(0,0,0,.16);
+    }
+    #lobbyScreen .q-title{ font-weight: 900; letter-spacing:.06em; }
+    #lobbyScreen .q-sub{ opacity:.72; font-size: 12px; margin-top: 2px; }
+    
+    /* tutorial */
+    #lobbyScreen .tutorial-grid{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 980px){ #lobbyScreen .tutorial-grid{ grid-template-columns: 1fr; } }
+    #lobbyScreen .tut-card{
+      border-radius: 16px;
+      border: 1px solid rgba(199,166,101,.18);
+      background: rgba(0,0,0,.14);
+      padding: 12px;
+    }
+    #lobbyScreen .tut-title{ font-weight: 900; }
+    #lobbyScreen .tut-sub{ opacity:.72; font-size: 12px; margin-top: 2px; }
+    
+    /* patch */
+    #lobbyScreen .patch{ margin: 0; padding-left: 18px; }
+    #lobbyScreen .patch li{ margin: 8px 0; opacity:.9; }
+    #lobbyScreen .tag{
+      display:inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-right: 8px;
+      border: 1px solid rgba(199,166,101,.25);
+      background: rgba(199,166,101,.12);
+    }
+    #lobbyScreen .tag.new{ border-color: rgba(120,220,190,.35); background: rgba(120,220,190,.12); }
+    #lobbyScreen .tag.imp{ border-color: rgba(199,166,101,.40); background: rgba(199,166,101,.16); }
+    #lobbyScreen .tag.todo{ border-color: rgba(240,120,120,.35); background: rgba(240,120,120,.10); }
+    
+    /* Option: hide duplicate logout in room panel if you want it only on topbar */
+    #roomPanel #logoutBtn{ display:none; }
+
+    #lobbyScreen .rb-list{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    
+    #lobbyScreen .rb-card{
+      display:flex;
+      gap: 12px;
+      align-items:stretch;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(199,166,101,.18);
+      background: rgba(0,0,0,.14);
+    }
+    
+    #lobbyScreen .rb-emblem{
+      width: 54px;
+      border-radius: 14px;
+      border: 1px solid rgba(199,166,101,.22);
+      background:
+        radial-gradient(circle at 30% 30%, rgba(199,166,101,.28), transparent 55%),
+        linear-gradient(135deg, rgba(70,120,255,.10), rgba(0,0,0,0));
+      flex: 0 0 54px;
+    }
+    
+    #lobbyScreen .rb-main{ flex:1; min-width: 240px; }
+    #lobbyScreen .rb-top{ display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+    #lobbyScreen .rb-name{ font-weight: 900; letter-spacing:.04em; }
+    #lobbyScreen .rb-meta{ opacity:.72; font-size: 12px; margin-top: 2px; }
+    #lobbyScreen .rb-tags{ display:flex; gap: 6px; flex-wrap:wrap; margin-top: 8px; }
+    
+    #lobbyScreen .rb-chip{
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(199,166,101,.20);
+      background: rgba(199,166,101,.10);
+      opacity: .92;
+    }
+    
+    #lobbyScreen .rb-side{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap: 8px;
+      min-width: 160px;
+    }
+    
+    #lobbyScreen .rb-stats{
+      display:flex;
+      gap: 10px;
+      opacity:.8;
+      font-size: 12px;
+    }
+    #lobbyScreen .rb-stat b{ opacity: 1; color: rgba(199,166,101,.95); }
+    
+    #lobbyScreen .rb-actions{ display:flex; gap: 8px; }
+    #lobbyScreen .rb-join{
+      min-width: 86px;
+    }
+
+    
     /* Status board (LoL-ish compact) */
     #statusBoard{
       position:absolute;
@@ -641,80 +1107,557 @@
   Dùng lại roomPanel làm "Sảnh chờ"
   (Không đổi id roomPanel để JS/CSS khỏi vỡ)
 ========================= -->
-<div id="lobbyScreen" class="screen">
+<div id="lobbyScreen" class="screen lobby">
+  <!-- Background layers -->
+  <div class="lobby-bg"></div>
+  <div class="lobby-vignette"></div>
+  <div class="lobby-noise"></div>
+
   <div class="hud">
-    <div class="panel collapsible" id="roomPanel">
-      <header>
-        <div class="title">PHÒNG CHƠI</div>
-        <div class="row" style="gap:8px">
-          <div class="badge" id="netBadge">OFFLINE</div>
-        </div>
-        <button class="collapse-btn" data-target="roomPanel">−</button>
-      </header>
-
-      <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
-
-      <div class="content col">
-        <div class="row">
-          <div class="content col" style="flex:1; min-width:220px">
-            <label>Front folder (host)</label>
-            <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
-          </div>
-          <div class="col" style="flex:1; min-width:220px">
-            <label>Back image URL</label>
-            <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
-          </div>
-          <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
-        </div>
-
-        <div class="col">
-          <div class="row">
-            <div class="col" style="flex:1; min-width:150px">
-              <label>Tên hiển thị</label>
-              <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
-            </div>
-            <div class="col" style="min-width:120px">
-              <label>Chế độ</label>
-              <select id="modeSelect">
-                <option value="firebase">Firebase RTDB</option>
-                <option value="local">Local (4 tab)</option>
-                <option value="ws">WebSocket</option>
-              </select>
-            </div>
-          </div>
-
-          <div id="wsRow" class="row" style="display:none">
-            <div class="col" style="flex:1; min-width:200px">
-              <label>WebSocket URL</label>
-              <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="col" style="flex:1; min-width:160px">
-              <label>Mã phòng</label>
-              <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
-            </div>
-            <button id="createBtn">Tạo phòng (Host)</button>
-            <button id="joinBtn" class="secondary">Vào phòng</button>
-          </div>
-
-          <div class="row">
-            <button id="copyLinkBtn" class="secondary">Copy link</button>
-            <button id="resetBtn" class="danger">Reset bàn (Host)</button>
-            <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button>
-          </div>
-
-          <div class="hint">
-            - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
-            - Server authoritative: Host giữ state, client chỉ gửi intent.
-          </div>
+    <!-- Top bar -->
+    <div class="lobby-topbar">
+      <div class="brand">
+        <div class="brand-logo"></div>
+        <div class="brand-text">
+          <div class="brand-title">CARD ARENA</div>
+          <div class="brand-sub">Sandbox Tabletop • 4 Players</div>
         </div>
       </div>
+
+      <div class="top-actions">
+        <div class="top-pill" id="netPill">
+          <span class="dot" id="netDot"></span>
+          <span class="txt" id="netTxt">OFFLINE</span>
+          <!-- giữ nguyên badge gốc -->
+          <div class="badge" id="netBadge" style="display:none">OFFLINE</div>
+        </div>
+
+        <button class="icon-btn" data-tab="tabNotifications" title="Thông báo">
+          <span class="ico">🔔</span>
+          <span class="bubble" id="notifBubble" style="display:none">1</span>
+        </button>
+        <button class="icon-btn" data-tab="tabShop" title="Cửa hàng">
+          <span class="ico">🛒</span>
+        </button>
+
+        <!-- giữ nguyên nút logout của bạn (id=logoutBtn) nhưng “đặt lên top bar” -->
+        <button id="logoutBtn" class="danger top-logout">Đăng xuất</button>
+      </div>
+    </div>
+
+    <div class="lobby-shell">
+      <!-- Sidebar navigation -->
+      <aside class="lobby-sidebar">
+        <button class="nav-item active" data-tab="tabRoom">
+          <span class="nav-ico">🏠</span><span class="nav-txt">Tạo / Tìm phòng</span>
+        </button>
+        <button class="nav-item" data-tab="tabCustomize">
+          <span class="nav-ico">🎛️</span><span class="nav-txt">Tùy chỉnh</span>
+        </button>
+        <button class="nav-item" data-tab="tabInventory">
+          <span class="nav-ico">🧰</span><span class="nav-txt">Tủ đồ</span>
+        </button>
+        <button class="nav-item" data-tab="tabShop">
+          <span class="nav-ico">🛒</span><span class="nav-txt">Cửa hàng</span>
+        </button>
+        <button class="nav-item" data-tab="tabNotifications">
+          <span class="nav-ico">🔔</span><span class="nav-txt">Thông báo</span>
+        </button>
+
+        <div class="sidebar-divider"></div>
+
+        <!-- Mục sáng tạo thêm -->
+        <button class="nav-item" data-tab="tabQuickPlay">
+          <span class="nav-ico">⚡</span><span class="nav-txt">Quick Play</span>
+        </button>
+        <button class="nav-item" data-tab="tabTutorial">
+          <span class="nav-ico">📘</span><span class="nav-txt">Hướng dẫn</span>
+        </button>
+        <button class="nav-item" data-tab="tabPatchNotes">
+          <span class="nav-ico">🧾</span><span class="nav-txt">Patch notes</span>
+        </button>
+
+        <div class="sidebar-footer">
+          <div class="small">v0.1 • Host authoritative</div>
+        </div>
+      </aside>
+
+      <!-- Main content -->
+      <main class="lobby-main">
+        <!-- TAB: Room -->
+        <section class="tab active" id="tabRoom">
+          <!-- GIỮ NGUYÊN roomPanel của bạn -->
+          <div class="panel collapsible" id="roomPanel">
+            <header>
+              <div class="title">PHÒNG CHƠI</div>
+              <div class="row" style="gap:8px">
+                <!-- netBadge đã được đưa lên topbar, ở đây có thể giữ lại/ẩn đi -->
+                <div class="badge" id="netBadge">OFFLINE</div>
+              </div>
+              <button class="collapse-btn" data-target="roomPanel">−</button>
+            </header>
+
+            <!-- Nút Deck / SetCard vẫn giữ nguyên id, nhưng ở tab Inventory sẽ dùng lại UI -->
+            <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
+
+            <div class="content col">
+              <div class="row">
+                <div class="content col" style="flex:1; min-width:220px">
+                  <label>Front folder (host)</label>
+                  <input id="frontBaseInput" class="mono" placeholder="VD: ./cards/" />
+                </div>
+                <div class="col" style="flex:1; min-width:220px">
+                  <label>Back image URL</label>
+                  <input id="backUrlInput" class="mono" placeholder="VD: ./cards/BACK.png" />
+                </div>
+                <button id="applyDeckBtn" class="secondary">Apply deck images (Host)</button>
+              </div>
+
+              <div class="col">
+                <div class="row">
+                  <div class="col" style="flex:1; min-width:150px">
+                    <label>Tên hiển thị</label>
+                    <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
+                  </div>
+                  <div class="col" style="min-width:120px">
+                    <label>Chế độ</label>
+                    <select id="modeSelect">
+                      <option value="firebase">Firebase RTDB</option>
+                      <option value="local">Local (4 tab)</option>
+                      <option value="ws">WebSocket</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div id="wsRow" class="row" style="display:none">
+                  <div class="col" style="flex:1; min-width:200px">
+                    <label>WebSocket URL</label>
+                    <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col" style="flex:1; min-width:160px">
+                    <label>Mã phòng</label>
+                    <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
+                  </div>
+                  <button id="createBtn">Tạo phòng (Host)</button>
+                  <button id="joinBtn" class="secondary">Vào phòng</button>
+                  <button class="nav-item" data-tab="tabRoomBrowser">
+                    <span class="nav-ico">🌐</span><span class="nav-txt">Room Browser</span>
+                  </button>
+                </div>
+
+                <div class="row">
+                  <button id="copyLinkBtn" class="secondary">Copy link</button>
+                  <button id="resetBtn" class="danger">Reset bàn (Host)</button>
+                  <!-- logoutBtn đã đặt lên topbar, có thể giữ ở đây nếu bạn muốn (hoặc ẩn bằng CSS) -->
+                  <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button>
+                </div>
+
+                <div class="hint">
+                  - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
+                  - Server authoritative: Host giữ state, client chỉ gửi intent.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- “Tìm phòng nhanh” (sáng tạo) -->
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">TÌM PHÒNG NHANH</div>
+              <div class="sub">Gợi ý cho người chơi mới: join theo mã hoặc link</div>
+            </header>
+            <div class="content">
+              <div class="row">
+                <input class="mono" id="quickRoomSearch" placeholder="Nhập mã phòng để highlight + paste nhanh..." />
+                <button class="secondary" id="pasteRoomBtn">Paste</button>
+                <button id="focusRoomBtn">Focus</button>
+              </div>
+              <div class="hint">Mẹo: “Copy link” sẽ tự kèm mã phòng để bạn share cho bạn bè.</div>
+            </div>
+          </div>
+        </section>
+        <section class="tab" id="tabRoomBrowser">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">ROOM BROWSER</div>
+              <div class="sub">Tìm phòng công khai theo tag / preset / mode</div>
+            </header>
+        
+            <div class="content col">
+              <div class="grid-2">
+                <div class="field">
+                  <label>Từ khóa</label>
+                  <input id="rbQuery" placeholder="VD: draft, poker, hic..." />
+                </div>
+        
+                <div class="field">
+                  <label>Tag</label>
+                  <input id="rbTag" placeholder="VD: casual, ranked, test..." />
+                </div>
+        
+                <div class="field">
+                  <label>Chế độ</label>
+                  <select id="rbMode">
+                    <option value="">All</option>
+                    <option value="firebase">Firebase RTDB</option>
+                    <option value="ws">WebSocket</option>
+                    <option value="local">Local</option>
+                  </select>
+                </div>
+        
+                <div class="field">
+                  <label>Preset</label>
+                  <input id="rbPreset" placeholder="VD: Draft 60 / Poker 52..." />
+                </div>
+        
+                <div class="field">
+                  <label>Sắp xếp</label>
+                  <select id="rbSort">
+                    <option value="pop">Phổ biến</option>
+                    <option value="new">Mới nhất</option>
+                    <option value="players">Nhiều người</option>
+                    <option value="ping">Ping thấp</option>
+                  </select>
+                </div>
+        
+                <div class="field">
+                  <label>Chỉ hiển thị phòng còn chỗ</label>
+                  <label class="chk" style="margin-top:8px">
+                    <input type="checkbox" id="rbOnlyOpen" checked />
+                    <span>Open slots</span>
+                  </label>
+                </div>
+              </div>
+        
+              <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+                <div class="hint" id="rbStatus">—</div>
+                <div class="row" style="gap:10px">
+                  <button class="secondary" id="rbRefreshBtn">Refresh</button>
+                  <button id="rbAutoBtn" class="secondary">Auto: ON</button>
+                </div>
+              </div>
+        
+              <div class="rb-list" id="rbList"></div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- TAB: Customize -->
+        <section class="tab" id="tabCustomize">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">TÙY CHỈNH</div>
+              <div class="sub">Cá nhân hóa trải nghiệm sảnh & bàn chơi</div>
+            </header>
+
+            <div class="content col">
+              <div class="grid-2">
+                <div class="field">
+                  <label>Theme</label>
+                  <select id="uiThemeSelect">
+                    <option value="gold">Gold Noir (LoL-like)</option>
+                    <option value="emerald">Emerald</option>
+                    <option value="crimson">Crimson</option>
+                    <option value="ice">Ice</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Lobby motion</label>
+                  <select id="uiMotionSelect">
+                    <option value="full">Full</option>
+                    <option value="reduced">Reduced</option>
+                    <option value="off">Off</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Sound</label>
+                  <div class="row">
+                    <input type="range" id="uiSfx" min="0" max="100" value="40" />
+                    <span class="mono" id="uiSfxTxt">40%</span>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label>FPS cap</label>
+                  <select id="uiFpsSelect">
+                    <option value="60">60</option>
+                    <option value="90">90</option>
+                    <option value="120">120</option>
+                    <option value="uncapped">Uncapped</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="panel mini">
+                <header class="mini-header">
+                  <div class="title">Profile</div>
+                  <div class="sub">Tên hiển thị & tag</div>
+                </header>
+                <div class="content">
+                  <div class="row">
+                    <!-- dùng lại nameInput gốc -->
+                    <div style="flex:1">
+                      <label>Tên hiển thị (đã có)</label>
+                      <div class="mono-note">Bạn chỉnh trực tiếp ở tab Tạo/Tìm phòng (nameInput).</div>
+                    </div>
+                    <div style="min-width:220px">
+                      <label>Clan tag</label>
+                      <input id="clanTagInput" class="mono" placeholder="VD: HIC" maxlength="6"/>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row" style="justify-content:flex-end; gap:10px">
+                <button class="secondary" id="customResetBtn">Reset settings</button>
+                <button id="customSaveBtn">Save</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: Inventory -->
+        <section class="tab" id="tabInventory">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">TỦ ĐỒ</div>
+              <div class="sub">Deck / SetCard • Back card • Cosmetics</div>
+            </header>
+
+            <div class="content col">
+              <div class="row" style="align-items:flex-end">
+                <div class="col" style="flex:1">
+                  <label>Deck / SetCard</label>
+                  <div class="hint">Mở cấu hình bộ bài và set số lượng từng loại</div>
+                </div>
+                <!-- dùng đúng id openDeckBtn đã có: nếu bạn muốn nó “chỉ nằm ở đây”
+                     thì dùng CSS ẩn trong roomPanel và hiện trong tab này bằng cách move DOM bằng JS (ở dưới) -->
+                <button class="secondary" id="invOpenDeckBtn">Mở Deck / SetCard</button>
+              </div>
+
+              <div class="grid-2">
+                <div class="panel mini">
+                  <header class="mini-header">
+                    <div class="title">Deck images</div>
+                    <div class="sub">Front folder + Back image</div>
+                  </header>
+                  <div class="content">
+                    <div class="hint">Bạn chỉnh trực tiếp ở tab Tạo/Tìm phòng (frontBaseInput, backUrlInput) để host apply.</div>
+                    <div class="row" style="justify-content:flex-end">
+                      <button class="secondary" id="invApplyDeckBtn">Apply deck images</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel mini">
+                  <header class="mini-header">
+                    <div class="title">Cosmetics</div>
+                    <div class="sub">Viền bài, hiệu ứng kéo thả</div>
+                  </header>
+                  <div class="content">
+                    <div class="row">
+                      <label class="chk">
+                        <input type="checkbox" id="cosGlow" checked />
+                        <span>Card glow on hover</span>
+                      </label>
+                    </div>
+                    <div class="row">
+                      <label class="chk">
+                        <input type="checkbox" id="cosTrail" />
+                        <span>Drag trail</span>
+                      </label>
+                    </div>
+                    <div class="row">
+                      <label class="chk">
+                        <input type="checkbox" id="cosRareFx" />
+                        <span>Rare sparkle (host only)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel mini">
+                <header class="mini-header">
+                  <div class="title">Presets</div>
+                  <div class="sub">Lưu / tải nhanh deck preset</div>
+                </header>
+                <div class="content">
+                  <div class="row">
+                    <input id="presetName" placeholder="Tên preset..." />
+                    <button class="secondary" id="presetSave">Save preset</button>
+                    <button class="secondary" id="presetLoad">Load preset</button>
+                    <button class="danger" id="presetDelete">Delete</button>
+                  </div>
+                  <div class="hint">Gợi ý: preset giúp host set sẵn bộ bài theo “mode chơi” (draft / poker / tcg...).</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: Shop -->
+        <section class="tab" id="tabShop">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">CỬA HÀNG</div>
+              <div class="sub">Mua cosmetics (client-side) • Không ảnh hưởng gameplay</div>
+            </header>
+
+            <div class="content">
+              <div class="shop-grid">
+                <div class="shop-card">
+                  <div class="shop-img"></div>
+                  <div class="shop-title">Card Back: Obsidian</div>
+                  <div class="shop-sub">Dark • Minimal • Premium</div>
+                  <div class="shop-row">
+                    <div class="price">1200</div>
+                    <button class="secondary">Xem</button>
+                    <button>Mua</button>
+                  </div>
+                </div>
+
+                <div class="shop-card">
+                  <div class="shop-img alt"></div>
+                  <div class="shop-title">Border: Gold Line</div>
+                  <div class="shop-sub">LoL-ish golden edge</div>
+                  <div class="shop-row">
+                    <div class="price">800</div>
+                    <button class="secondary">Xem</button>
+                    <button>Mua</button>
+                  </div>
+                </div>
+
+                <div class="shop-card">
+                  <div class="shop-img alt2"></div>
+                  <div class="shop-title">Emote Pack</div>
+                  <div class="shop-sub">Quick reactions</div>
+                  <div class="shop-row">
+                    <div class="price">500</div>
+                    <button class="secondary">Xem</button>
+                    <button>Mua</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hint">Bạn có thể nối cửa hàng với inventory sau (localStorage / server profile).</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: Notifications -->
+        <section class="tab" id="tabNotifications">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">THÔNG BÁO</div>
+              <div class="sub">System • Room • Friends (future)</div>
+            </header>
+
+            <div class="content col">
+              <div class="notif-item">
+                <div class="notif-dot"></div>
+                <div class="notif-body">
+                  <div class="notif-title">Tip: Local mode</div>
+                  <div class="notif-sub">Mở 4 tab, cùng mã phòng để test 4 người nhanh nhất.</div>
+                </div>
+                <button class="secondary">Đã hiểu</button>
+              </div>
+
+              <div class="notif-item">
+                <div class="notif-dot warn"></div>
+                <div class="notif-body">
+                  <div class="notif-title">Host authoritative</div>
+                  <div class="notif-sub">Nếu host rời phòng, game có thể “pause” (sau sẽ thêm host-migration).</div>
+                </div>
+                <button class="secondary">OK</button>
+              </div>
+
+              <div class="row" style="justify-content:flex-end">
+                <button class="danger" id="clearNotifBtn">Clear all</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: Quick Play (sáng tạo) -->
+        <section class="tab" id="tabQuickPlay">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">QUICK PLAY</div>
+              <div class="sub">Tạo phòng nhanh với cấu hình phổ biến</div>
+            </header>
+            <div class="content">
+              <div class="quick-grid">
+                <button class="quick-card" data-quick="draft">
+                  <div class="q-title">Draft</div>
+                  <div class="q-sub">Deck preset: Draft 60</div>
+                </button>
+                <button class="quick-card" data-quick="poker">
+                  <div class="q-title">Poker</div>
+                  <div class="q-sub">Preset: 52 + Jokers</div>
+                </button>
+                <button class="quick-card" data-quick="tcg">
+                  <div class="q-title">TCG</div>
+                  <div class="q-sub">Preset: 40 • rarity fx</div>
+                </button>
+              </div>
+              <div class="hint">Quick Play chỉ “điền sẵn” setCard/preset và tạo phòng host.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: Tutorial (sáng tạo) -->
+        <section class="tab" id="tabTutorial">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">HƯỚNG DẪN</div>
+              <div class="sub">Phím tắt • thao tác • mẹo</div>
+            </header>
+            <div class="content">
+              <div class="tutorial-grid">
+                <div class="tut-card">
+                  <div class="tut-title">Kéo thả bài</div>
+                  <div class="tut-sub">Drag để di chuyển • Shift để snap (nếu có)</div>
+                </div>
+                <div class="tut-card">
+                  <div class="tut-title">Host tools</div>
+                  <div class="tut-sub">Reset bàn • Apply deck images • SetCard</div>
+                </div>
+                <div class="tut-card">
+                  <div class="tut-title">Sync</div>
+                  <div class="tut-sub">Client gửi intent • host quyết định state</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: Patch Notes (sáng tạo) -->
+        <section class="tab" id="tabPatchNotes">
+          <div class="panel soft">
+            <header class="soft-header">
+              <div class="title">PATCH NOTES</div>
+              <div class="sub">Ghi chú cập nhật • roadmap</div>
+            </header>
+            <div class="content">
+              <ul class="patch">
+                <li><span class="tag new">NEW</span> Lobby modular tabs</li>
+                <li><span class="tag imp">IMP</span> Better visual hierarchy + LoL-like theme</li>
+                <li><span class="tag todo">TODO</span> Host migration, friends list, room browser</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   </div>
 </div>
-
 
 <!-- =========================
   SCREEN: MATCH (ẩn ban đầu)
@@ -4022,6 +4965,93 @@ if (leaveMatchBtn){
   };
 }
 
+// Sảnh chờ////////////////////////////////////////////////
+  ///////////////////
+  (function initLobbyTabs(){
+  const root = document.getElementById("lobbyScreen");
+  if(!root) return;
+
+  const tabs = Array.from(root.querySelectorAll(".tab"));
+  const navs = Array.from(root.querySelectorAll(".nav-item"));
+  const iconNavs = Array.from(root.querySelectorAll(".icon-btn[data-tab]"));
+
+  function showTab(tabId){
+    tabs.forEach(t => t.classList.toggle("active", t.id === tabId));
+    navs.forEach(b => b.classList.toggle("active", b.dataset.tab === tabId));
+  }
+
+  navs.forEach(btn => {
+    btn.addEventListener("click", ()=> showTab(btn.dataset.tab));
+  });
+  iconNavs.forEach(btn => {
+    btn.addEventListener("click", ()=> showTab(btn.dataset.tab));
+  });
+
+  // mirror: Inventory buttons call existing ids (no change to your logic)
+  const invOpen = document.getElementById("invOpenDeckBtn");
+  const openDeckBtn = document.getElementById("openDeckBtn");
+  if(invOpen && openDeckBtn){
+    invOpen.addEventListener("click", ()=> openDeckBtn.click());
+  }
+
+  const invApply = document.getElementById("invApplyDeckBtn");
+  const applyDeckBtn = document.getElementById("applyDeckBtn");
+  if(invApply && applyDeckBtn){
+    invApply.addEventListener("click", ()=> applyDeckBtn.click());
+  }
+
+  // Net pill reflect netBadge text if you keep updating #netBadge elsewhere
+  const netBadge = document.getElementById("netBadge");
+  const netPill = document.getElementById("netPill");
+  const netTxt = document.getElementById("netTxt");
+  const dot = document.getElementById("netDot");
+  if(netBadge && netPill && netTxt){
+    const sync = ()=>{
+      const t = (netBadge.textContent || "").trim().toUpperCase();
+      netTxt.textContent = t || "OFFLINE";
+      const online = t && t !== "OFFLINE";
+      netPill.classList.toggle("online", online);
+      if(dot) dot.style.background = online ? "#42d392" : "#a64b4b";
+    };
+    sync();
+    // nếu bạn có cơ chế update netBadge liên tục, có thể observe:
+    new MutationObserver(sync).observe(netBadge, { childList:true, subtree:true, characterData:true });
+  }
+
+  // Small UX: Paste room code
+  const pasteBtn = document.getElementById("pasteRoomBtn");
+  const quickIn = document.getElementById("quickRoomSearch");
+  const roomInput = document.getElementById("roomInput");
+  const focusBtn = document.getElementById("focusRoomBtn");
+  if(pasteBtn && quickIn){
+    pasteBtn.addEventListener("click", async ()=>{
+      try{
+        const txt = await navigator.clipboard.readText();
+        quickIn.value = (txt || "").trim();
+      }catch(e){}
+    });
+  }
+  if(focusBtn && quickIn && roomInput){
+    focusBtn.addEventListener("click", ()=>{
+      const v = (quickIn.value || "").trim();
+      if(v) roomInput.value = v;
+      showTab("tabRoom");
+      roomInput.focus();
+    });
+  }
+
+  // Customize sliders text
+  const uiSfx = document.getElementById("uiSfx");
+  const uiSfxTxt = document.getElementById("uiSfxTxt");
+  if(uiSfx && uiSfxTxt){
+    const render = ()=> uiSfxTxt.textContent = uiSfx.value + "%";
+    uiSfx.addEventListener("input", render);
+    render();
+  }
+})();
+
+
+  
 /* =========================================================
    21) Deck modal binds
 ========================================================= */
