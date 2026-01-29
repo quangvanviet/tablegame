@@ -469,32 +469,47 @@
     #matchScreen{ position:relative; width:100%; height:100%; }
 
     /* ===== Lobby Theme (LoL-like) ===== */
+    /* ===== FULL SCREEN ROOT ===== */
+    html, body{
+      height: 100%;
+      margin: 0;
+    }
     #lobbyScreen.lobby{
       position: relative;
+      width: 100vw;
+      height: 100vh;              /* ép đúng viewport */
       min-height: 100vh;
       overflow: hidden;
       color: #e7e2d8;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
     }
     
-    /* keep your request */
+    /* ===== HUD = 3 PARTS (15% / 70% / 15%) FULL WIDTH ===== */
     #lobbyScreen .hud{
-      padding:12px;
-      display:grid;
-      grid-template-rows: auto 1fr auto;
-      gap: 12px;
+      position: relative;
+      width: 100%;
+      height: 100%;
       min-height: 100vh;
+    
+      padding: 12px;
+      box-sizing: border-box;
+    
+      display: grid;
+      grid-template-rows: 15vh 1fr 15vh; /* TOP 15% | MID 70% | BOT 15% (an toàn) */
+      gap: 12px;
     }
     
-    /* background */
+    /* ===== Background layers (absolute, not affecting layout) ===== */
     #lobbyScreen .lobby-bg{
-      position:absolute; inset:-40px;
+      position:absolute;
+      inset:-40px;
       background:
         radial-gradient(1200px 600px at 20% 20%, rgba(199,166,101,.18), transparent 60%),
         radial-gradient(900px 500px at 80% 30%, rgba(80,140,255,.10), transparent 55%),
         radial-gradient(900px 500px at 50% 90%, rgba(40,220,170,.08), transparent 60%),
         linear-gradient(180deg, #0b0f16, #070a10 60%, #05070c);
       filter: saturate(1.08);
+      pointer-events:none;
     }
     #lobbyScreen .lobby-vignette{
       position:absolute; inset:0;
@@ -509,27 +524,28 @@
       pointer-events:none;
     }
     
-    /* shell layout */
-    #lobbyScreen .lobby-shell{
-      width:100%;
-      max-width: 1240px;
-      margin: 0 auto;
-    
-      display:grid;
-      grid-template-columns: 260px 1fr;
-      gap: 14px;
-    
-      align-items: start;
-    }
-    
+    /* ===== TOPBAR: height 15% width 100% ===== */
     #lobbyScreen .lobby-topbar{
-      width:100%;
-      max-width: 1240px;
-      margin: 0 auto;
+      width: 100%;
+      height: 100%;        /* đúng hàng 15vh */
+      max-width: none;     /* bỏ giới hạn 1240 */
+      margin: 0;
+    
+      padding: 0 6px;
+    
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+    
+      overflow: hidden;    /* tránh đẩy cao hàng */
     }
     
+    /* brand */
     #lobbyScreen .brand{
-      display:flex; align-items:center; gap: 12px;
+      display:flex;
+      align-items:center;
+      gap: 12px;
     }
     #lobbyScreen .brand-logo{
       width: 42px; height: 42px;
@@ -552,7 +568,13 @@
       margin-top: 2px;
     }
     
-    #lobbyScreen .top-actions{ display:flex; align-items:center; gap: 10px; }
+    /* top actions */
+    #lobbyScreen .top-actions{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      flex-wrap: wrap;   /* tránh tràn */
+    }
     
     #lobbyScreen .top-pill{
       display:flex; align-items:center; gap: 10px;
@@ -598,8 +620,24 @@
       font-size: 11px;
       border: 1px solid rgba(255,255,255,.25);
     }
-    
     #lobbyScreen .top-logout{ height: 38px; border-radius: 12px; }
+    
+    /* ===== MIDDLE: height 70% width 100% / columns 20% + 80% ===== */
+    #lobbyScreen .lobby-shell{
+      width: 100%;
+      height: 100%;            /* đúng hàng giữa (1fr ~ 70vh) */
+      max-width: none;         /* bỏ 1240 */
+      margin: 0;
+    
+      padding: 0 6px;
+    
+      display:grid;
+      grid-template-columns: 20% 80%;
+      gap: 14px;
+      align-items: stretch;
+    
+      min-height: 0;           /* cực quan trọng cho scroll nội bộ */
+    }
     
     /* sidebar */
     #lobbyScreen .lobby-sidebar{
@@ -612,8 +650,26 @@
       display:flex;
       flex-direction: column;
       gap: 8px;
+    
+      height: 100%;
+      min-height: 0;
+      overflow: auto;          /* scroll trong sidebar nếu dài */
     }
     
+    /* main */
+    #lobbyScreen .lobby-main{
+      display:flex;
+      flex-direction: column;
+      gap: 12px;
+    
+      height: 100%;
+      min-height: 0;
+      overflow: auto;          /* scroll trong main nếu dài */
+    }
+    #lobbyScreen .tab{ display:none; }
+    #lobbyScreen .tab.active{ display:block; }
+    
+    /* nav item */
     #lobbyScreen .nav-item{
       display:flex; align-items:center; gap: 10px;
       width: 100%;
@@ -649,16 +705,70 @@
       font-size: 12px;
     }
     
-    /* main */
-    #lobbyScreen .lobby-main{
-      display:flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    #lobbyScreen .tab{ display:none; }
-    #lobbyScreen .tab.active{ display:block; }
+    /* ===== DOCK: height 15% width 100% ===== */
+    #lobbyScreen .lobby-dock{
+      width: 100%;
+      height: 100%;            /* đúng hàng 15vh */
+      max-width: none;
+      margin: 0;
     
-    /* panel polish */
+      padding: 10px 12px;
+      box-sizing: border-box;
+    
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+    
+      border-radius: 18px;
+      border: 1px solid rgba(199,166,101,.20);
+      background: rgba(8, 11, 18, .55);
+      box-shadow: 0 18px 44px rgba(0,0,0,.45);
+      backdrop-filter: blur(12px);
+    
+      overflow: hidden;        /* tránh dock làm cao hơn 15vh */
+    }
+    
+    #lobbyScreen .dock-left,
+    #lobbyScreen .dock-right{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #lobbyScreen .dock-mid{
+      flex:1;
+      display:flex;
+      justify-content:center;
+      min-width: 220px;
+    }
+    #lobbyScreen .dock-pill{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(199,166,101,.18);
+      background: rgba(0,0,0,.18);
+      max-width: 520px;
+      width: 100%;
+      overflow:hidden;
+    }
+    #lobbyScreen .dock-pill .dot{
+      width: 8px; height: 8px; border-radius: 999px;
+      background: rgba(199,166,101,.90);
+      box-shadow: 0 0 0 3px rgba(199,166,101,.14);
+      flex: 0 0 auto;
+    }
+    #lobbyScreen .dock-pill .txt{
+      font-size: 12px;
+      opacity:.85;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    
+    /* ===== Panels / Inputs / Buttons (giữ style cũ) ===== */
     #lobbyScreen .panel{
       background: rgba(8, 11, 18, .55) !important;
       border: 1px solid rgba(199,166,101,.20) !important;
@@ -685,18 +795,10 @@
     #lobbyScreen .panel .content{ padding: 12px 14px; }
     #lobbyScreen .panel .hint{ opacity:.75; font-size: 12px; }
     
-    /* soft panels (new) */
-    #lobbyScreen .panel.soft header.soft-header{
-      display:block;
-    }
+    #lobbyScreen .panel.soft header.soft-header{ display:block; }
     #lobbyScreen .soft-header .title{ font-size: 12px; letter-spacing:.14em; }
-    #lobbyScreen .soft-header .sub{
-      margin-top: 4px;
-      font-size: 12px;
-      opacity:.72;
-    }
+    #lobbyScreen .soft-header .sub{ margin-top: 4px; font-size: 12px; opacity:.72; }
     
-    /* inputs/buttons refinement without breaking your ids */
     #lobbyScreen input, #lobbyScreen select{
       background: rgba(0,0,0,.22);
       border: 1px solid rgba(199,166,101,.18);
@@ -740,38 +842,24 @@
       grid-template-columns: 1fr 1fr;
       gap: 12px;
     }
-    @media (max-width: 920px){
-      #lobbyScreen .lobby-shell{ grid-template-columns: 1fr; }
-      #lobbyScreen .grid-2{ grid-template-columns: 1fr; }
-    }
     
     /* mini panels */
-    #lobbyScreen .panel.mini{
-      border-radius: 16px !important;
-    }
-    #lobbyScreen .mini-header{
-      padding: 10px 12px !important;
-    }
+    #lobbyScreen .panel.mini{ border-radius: 16px !important; }
+    #lobbyScreen .mini-header{ padding: 10px 12px !important; }
     #lobbyScreen .mini-header .title{
       font-weight: 800;
       letter-spacing:.08em;
       font-size: 12px;
     }
-    #lobbyScreen .mini-header .sub{
-      font-size: 12px;
-      opacity:.7;
-      margin-top: 2px;
-    }
+    #lobbyScreen .mini-header .sub{ font-size: 12px; opacity:.7; margin-top: 2px; }
     #lobbyScreen .mono-note{ opacity:.75; font-size: 12px; }
     
-    /* Shop cards */
+    /* shop */
     #lobbyScreen .shop-grid{
       display:grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
     }
-    @media (max-width: 1100px){ #lobbyScreen .shop-grid{ grid-template-columns: 1fr; } }
-    
     #lobbyScreen .shop-card{
       border-radius: 16px;
       border: 1px solid rgba(199,166,101,.18);
@@ -800,13 +888,9 @@
     #lobbyScreen .shop-title{ font-weight: 800; letter-spacing:.04em; }
     #lobbyScreen .shop-sub{ opacity:.7; font-size: 12px; margin-top: 2px; }
     #lobbyScreen .shop-row{ display:flex; align-items:center; justify-content:space-between; gap: 8px; margin-top: 10px; }
-    #lobbyScreen .price{
-      font-weight: 900;
-      letter-spacing:.06em;
-      color: rgba(199,166,101,.95);
-    }
+    #lobbyScreen .price{ font-weight: 900; letter-spacing:.06em; color: rgba(199,166,101,.95); }
     
-    /* Notifications */
+    /* notifications */
     #lobbyScreen .notif-item{
       display:flex; gap: 10px; align-items:flex-start;
       padding: 12px;
@@ -829,7 +913,6 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
     }
-    @media (max-width: 980px){ #lobbyScreen .quick-grid{ grid-template-columns: 1fr; } }
     #lobbyScreen .quick-card{
       text-align:left;
       padding: 14px;
@@ -846,7 +929,6 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
     }
-    @media (max-width: 980px){ #lobbyScreen .tutorial-grid{ grid-template-columns: 1fr; } }
     #lobbyScreen .tut-card{
       border-radius: 16px;
       border: 1px solid rgba(199,166,101,.18);
@@ -872,8 +954,10 @@
     #lobbyScreen .tag.imp{ border-color: rgba(199,166,101,.40); background: rgba(199,166,101,.16); }
     #lobbyScreen .tag.todo{ border-color: rgba(240,120,120,.35); background: rgba(240,120,120,.10); }
     
-    /* Option: hide duplicate logout in room panel if you want it only on topbar */
+    /* hide duplicate logout in room panel (keep your choice) */
     #roomPanel #logoutBtn{ display:none; }
+    
+    /* roomPanel row nav-item override */
     #roomPanel .row .nav-item{
       padding: 10px 12px;
       border-radius: 12px;
@@ -882,13 +966,13 @@
     }
     #roomPanel .row .nav-item .nav-txt{ font-size: 12px; }
     
+    /* room browser list */
     #lobbyScreen .rb-list{
       display:flex;
       flex-direction:column;
       gap: 10px;
       margin-top: 6px;
     }
-    
     #lobbyScreen .rb-card{
       display:flex;
       gap: 12px;
@@ -898,7 +982,6 @@
       border: 1px solid rgba(199,166,101,.18);
       background: rgba(0,0,0,.14);
     }
-    
     #lobbyScreen .rb-emblem{
       width: 54px;
       border-radius: 14px;
@@ -908,13 +991,11 @@
         linear-gradient(135deg, rgba(70,120,255,.10), rgba(0,0,0,0));
       flex: 0 0 54px;
     }
-    
     #lobbyScreen .rb-main{ flex:1; min-width: 240px; }
     #lobbyScreen .rb-top{ display:flex; align-items:center; justify-content:space-between; gap: 10px; }
     #lobbyScreen .rb-name{ font-weight: 900; letter-spacing:.04em; }
     #lobbyScreen .rb-meta{ opacity:.72; font-size: 12px; margin-top: 2px; }
     #lobbyScreen .rb-tags{ display:flex; gap: 6px; flex-wrap:wrap; margin-top: 8px; }
-    
     #lobbyScreen .rb-chip{
       font-size: 11px;
       padding: 3px 8px;
@@ -923,7 +1004,6 @@
       background: rgba(199,166,101,.10);
       opacity: .92;
     }
-    
     #lobbyScreen .rb-side{
       display:flex;
       flex-direction:column;
@@ -932,7 +1012,6 @@
       gap: 8px;
       min-width: 160px;
     }
-    
     #lobbyScreen .rb-stats{
       display:flex;
       gap: 10px;
@@ -940,77 +1019,24 @@
       font-size: 12px;
     }
     #lobbyScreen .rb-stat b{ opacity: 1; color: rgba(199,166,101,.95); }
-    
     #lobbyScreen .rb-actions{ display:flex; gap: 8px; }
-    #lobbyScreen .rb-join{
-      min-width: 86px;
+    #lobbyScreen .rb-join{ min-width: 86px; }
+    
+    /* ===== Responsive (mobile): still full width ===== */
+    @media (max-width: 1100px){
+      #lobbyScreen .shop-grid{ grid-template-columns: 1fr; }
     }
-
-    #lobbyScreen .lobby-dock{
-      grid-column: 1 / -1;
-      width:100%;
-    
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 12px;
-    
-      padding: 10px 12px;
-      border-radius: 18px;
-      border: 1px solid rgba(199,166,101,.20);
-      background: rgba(8, 11, 18, .55);
-      box-shadow: 0 18px 44px rgba(0,0,0,.45);
-      backdrop-filter: blur(12px);
+    @media (max-width: 980px){
+      #lobbyScreen .quick-grid{ grid-template-columns: 1fr; }
+      #lobbyScreen .tutorial-grid{ grid-template-columns: 1fr; }
     }
-    
-    #lobbyScreen .dock-left,
-    #lobbyScreen .dock-right{
-      display:flex;
-      align-items:center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    
-    #lobbyScreen .dock-mid{
-      flex:1;
-      display:flex;
-      justify-content:center;
-      min-width: 220px;
-    }
-    
-    #lobbyScreen .dock-pill{
-      display:flex;
-      align-items:center;
-      gap: 10px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid rgba(199,166,101,.18);
-      background: rgba(0,0,0,.18);
-      max-width: 520px;
-      width: 100%;
-      overflow:hidden;
-    }
-    
-    #lobbyScreen .dock-pill .dot{
-      width: 8px; height: 8px; border-radius: 999px;
-      background: rgba(199,166,101,.90);
-      box-shadow: 0 0 0 3px rgba(199,166,101,.14);
-      flex: 0 0 auto;
-    }
-    
-    #lobbyScreen .dock-pill .txt{
-      font-size: 12px;
-      opacity:.85;
-      white-space: nowrap;
-      overflow:hidden;
-      text-overflow: ellipsis;
-    }
-    
-    /* Responsive */
     @media (max-width: 920px){
+      /* middle becomes 1 column */
       #lobbyScreen .lobby-shell{
         grid-template-columns: 1fr;
       }
+    
+      /* dock stack */
       #lobbyScreen .lobby-dock{
         flex-direction: column;
         align-items: stretch;
@@ -1018,7 +1044,12 @@
       #lobbyScreen .dock-mid{
         width:100%;
       }
+      /* grid-2 to single col */
+      #lobbyScreen .grid-2{
+        grid-template-columns: 1fr;
+      }
     }
+
     
     /* Status board (LoL-ish compact) */
     #statusBoard{
