@@ -137,9 +137,10 @@
       pointer-events:auto;
       border-radius:14px;
       overflow:hidden;
-      background: rgba(10,12,18,.55);
-      border:1px solid rgba(255,255,255,.10);
-      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
     }
     
@@ -459,14 +460,14 @@
       right:12px;
       top:12px;
       z-index:30;
-      width: 360px;
-      border-radius: 12px;
+
       overflow:hidden;
       pointer-events:auto;
-    
-      background: rgba(10,12,18,.55);
-      border: 1px solid rgba(255,255,255,.10);
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
       color: rgba(255,255,255,.92);
       font-family: system-ui, sans-serif;
@@ -850,18 +851,19 @@
     <div class="panel collapsible" id="help">
       <div class="panel">
         <header>
-          <div class="title">PHÍM TẮT / TƯƠNG TÁC</div><div class="badge">Canvas</div>
+          <div class="title">Hướng dẫn</div>
           <button class="collapse-btn" data-target="help">−</button>
         </header>
         <div class="content hint">
           <div>
             <span class="kbd">Kéo thả</span> chuột để di chuyển bài (table / hand).<br/>
-            <span class="kbd">D</span> rút 1 lá từ Deck về Hand của bạn (đứng gần Deck hoặc chọn Deck).<br/>
-            <span class="kbd">F</span> lật lá / chồng (stack).<br/>
-            <span class="kbd">S</span> trộn chồng (deck/stack).<br/>
-            <span class="kbd">U</span> tách 1 lá ra khỏi chồng (lấy top).<br/>
-            <span class="kbd">G</span> gom chồng: thả 1 lá lên lá khác (auto), hoặc nhấn G khi đang kéo để ép gom.<br/>
-            <span class="kbd">Click</span> chọn lá/chồng. <span class="kbd">Esc</span> bỏ chọn.
+            <span class="kbd">Q</span> rút 1 lá từ Deck về Hand của bạn (đứng gần Deck hoặc chọn Deck).<br/>
+            <span class="kbd">W</span> lật lá / chồng (stack).<br/>
+            <span class="kbd">E</span> trộn chồng (deck/stack).<br/>
+            <span class="kbd">R</span> tách 1 lá ra khỏi chồng (lấy top).<br/>
+            <span class="kbd">T</span> bỏ lá bài<br/>
+            <span class="kbd">Click</span> chọn lá/chồng. 
+            <span class="kbd">Esc</span>/<span class="kbd">Click ngoài</span> bỏ chọn.
           </div>
         </div>
       </div>
@@ -3246,7 +3248,7 @@ addEventListener("mouseup", (ev)=>{
 });
 
 /* =========================================================
-   17) Keyboard + Inspector buttons
+   17) Keyboard + Inspector buttons (nút bấm, tương tác)
 ========================================================= */
 if (INS.btnFlip) INS.btnFlip.onclick = ()=>{
   if (!client.selected) return;
@@ -3280,29 +3282,29 @@ addEventListener("keydown", (ev)=>{
     updateInspector();
     return;
   }
-  if (key === "d"){
+  if (key === "q"){
     sendIntent({type:"draw"});
     toast("Draw 1");
     return;
   }
-  if (key === "f"){
+  if (key === "w"){
     const sel = client.selected;
     if (!sel) return;
     sendIntent({type:"flip", targetType: sel.type, id: sel.id});
     return;
   }
-  if (key === "s"){
+  if (key === "e"){
     const sel = client.selected;
     if (sel && sel.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
     else sendIntent({type:"shuffle", stackId:"stack_deck"});
     return;
   }
-  if (key === "u"){
+  if (key === "r"){
     const sel = client.selected;
     if (sel && sel.type==="stack") sendIntent({type:"unstack", stackId: sel.id});
     return;
   }
-  if (key === "x"){
+  if (key === "t"){
     const sel = client.selected;
     if (!sel) return;
     sendIntent({type:"discard", targetType: sel.type, id: sel.id});
