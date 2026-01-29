@@ -1312,94 +1312,25 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               <button class="collapse-btn" data-target="roomPanel">−</button>
             </header>
             
-          <div style="display: flex; ">
+          <div style="display: flex; flex-direction: column;">
             <!-- List phòng -->
             <div style="display:flex; width: 100%">
               <!-- Tìm kiếm phòng -->
               <div style="display:flex; gap: 15px;">
-                <div>
-                  <button class="nav-item">Tìm kiếm</button>
-                  <input placeholder="Ví dụ: ROOM42" maxlength="18" /> 
+                <div style="width: 70%">
+                  <input placeholder="Tìm phòng, ví dụ: ROOM42" maxlength="18" /> 
                 </div>
-                <div>
+                <div style="width: 20%">
                   <button class="nav-item">Tạo phòng</button>
                 </div>
               </div>
               <!-- list -->
-              <div id="listRoom" style="gap:5px; height: 100px; max-height: 100px; overflow: auto;">
+              <div id="listRoom" style="display: flex; flex-direction: column; gap:5px; height: 100px; 
+                max-height: 100px; overflow: auto;">
                 <!-- Nơi load list phòng -->
                 <!-- Mỗi dòng sẽ có [Mã phòng][Tên phòng][Nút vào phòng] -->
               </div>
             </div>
-            
-            <div class="content col"> 
-              <div class="col"> 
-                <div class="row"> 
-                  <div class="col" style="flex:1; min-width:150px"> 
-                    <label>Tên hiển thị</label> 
-                    <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" /> 
-                  </div> <div class="col" style="min-width:120px"> 
-                    <label>Chế độ</label> 
-                    <select id="modeSelect"> 
-                      <option value="firebase">Firebase RTDB</option> 
-                      <option value="local">Local (4 tab)</option> 
-                      <option value="ws">WebSocket</option> 
-                    </select> 
-                  </div> 
-                </div> 
-                <div id="wsRow" class="row" style="display:none"> 
-                  <div class="col" style="flex:1; min-width:200px"> 
-                    <label>WebSocket URL</label> 
-                    <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" /> 
-                  </div> 
-                </div> 
-                <div class="row"> 
-                  <div class="col" style="flex:1; min-width:160px"> 
-                    <label>Mã phòng</label> 
-                    <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" /> 
-                  </div> 
-                  <button id="createBtn">Tạo phòng (Host)</button>
-                  <button id="joinBtn" class="secondary">Vào phòng</button> 
-                  <button class="nav-item" data-tab="tabRoomBrowser"> 
-                    <span class="nav-ico">🌐</span>
-                    <span class="nav-txt">Room Browser</span>
-                  </button> 
-                </div> 
-                <div class="row"> 
-                  <button id="copyLinkBtn" class="secondary">Copy link</button> 
-                  <button id="resetBtn" class="danger">Reset bàn (Host)</button> 
-                  <!-- logoutBtn đã đặt lên topbar, có thể giữ ở đây nếu bạn muốn (hoặc ẩn bằng CSS) --> 
-                  <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button> 
-                </div> 
-                <div class="hint"> 
-                  - Local mode: mở 4 tab, cùng mã phòng để test 4 người.
-                  <br/> - Server authoritative: Host giữ state, client chỉ gửi intent. 
-                </div> 
-              </div>
-            </div>
-            <!-- List phòng -->
-
-            <!-- “Tìm phòng nhanh” -->
-            <div class="panel soft">
-              <header class="soft-header">
-                <div class="title">TÌM PHÒNG NHANH</div>
-                <div class="sub">Gợi ý cho người chơi mới: join theo mã hoặc link</div>
-              </header>
-              <div class="content">
-                <div class="row">
-                  <input class="mono" id="quickRoomSearch" placeholder="Nhập mã phòng để highlight + paste nhanh..." />
-                  <button class="secondary" id="pasteRoomBtn">Paste</button>
-                  <button id="focusRoomBtn">Focus</button>
-                </div>
-                <div class="hint">Mẹo: “Copy link” sẽ tự kèm mã phòng để bạn share cho bạn bè.</div>
-              </div>
-            </div>
-            
-          </div>
-            <!-- Nút Deck / SetCard vẫn giữ nguyên id, nhưng ở tab Inventory sẽ dùng lại UI -->
-            <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
-          </div>
-
         </section>
         <section class="tab" id="tabRoomBrowser">
           <div class="panel soft">
@@ -1968,64 +1899,118 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 </div>
 
 
-<!-- =========================
-  POPUP: Deck / SetCard (giữ nguyên)
-========================= -->
-<div id="deckModal" class="modal" style="display:none;">
-  <div class="modal-card">
-    <div style="
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-        min-height: 85vh;
-        max-height: 85vh;
-    ">
-      <header style="padding: 10px 12px;background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
-            border-bottom: 1px solid rgba(255,255,255,.06);display: flex;align-items: center;justify-content: space-between;
-            gap: 10px;border-radius: 15px;">
-            <div class="title">Tùy chỉnh bộ bài của bạn</div>
-            <button id="closeDeckBtn" class="collapse-btn">×</button>
-        </header>
-      
-    <div class="content col" style="gap:10px;overflow: hidden; display: flex; justify-content: space-between;">
-      <div class="col" style="gap:6px">
-        <label>Bộ đã lưu</label>
-        <div class="row">
-          <select id="setSelect" style="flex:1; min-width:220px"></select>
-          <button id="loadSetBtn" class="secondary">Load</button>
-          <button id="deleteSetBtn" class="danger">Xóa</button>
-          <button style="margin-left:15px;" id="newSetBtn" class="secondary">+ Tạo bộ mới</button>
-        </div>
+<!-- KHU VỰC POPUP --------------------------------------------------------------------------------------------->
+<div style="position: relative;">
+  <!-- POPUP Tạo phòng -->
+  <div id="popupCreateRoom" style="display: none;">
+    <div class="content col"> 
+      <div class="col"> 
+        <div class="row"> 
+          <div class="col" style="flex:1; min-width:150px"> 
+            <label>Tên hiển thị</label> 
+            <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" /> 
+          </div> <div class="col" style="min-width:120px"> 
+            <label>Chế độ</label> 
+            <select id="modeSelect"> 
+              <option value="firebase">Firebase RTDB</option> 
+              <option value="local">Local (4 tab)</option> 
+              <option value="ws">WebSocket</option> 
+            </select> 
+          </div> 
+        </div> 
+        <div id="wsRow" class="row" style="display:none"> 
+          <div class="col" style="flex:1; min-width:200px"> 
+            <label>WebSocket URL</label> 
+            <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" /> 
+          </div> 
+        </div> 
+        <div class="row"> 
+          <div class="col" style="flex:1; min-width:160px"> 
+            <label>Mã phòng</label> 
+            <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" /> 
+          </div> 
+          <button id="createBtn">Tạo phòng (Host)</button>
+          <button id="joinBtn" class="secondary">Vào phòng</button> 
+          <button class="nav-item" data-tab="tabRoomBrowser"> 
+            <span class="nav-ico">🌐</span>
+            <span class="nav-txt">Room Browser</span>
+          </button> 
+        </div> 
+        <div class="row"> 
+          <button id="copyLinkBtn" class="secondary">Copy link</button> 
+          <button id="resetBtn" class="danger">Reset bàn (Host)</button> 
+          <!-- logoutBtn đã đặt lên topbar, có thể giữ ở đây nếu bạn muốn (hoặc ẩn bằng CSS) --> 
+          <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button> 
+        </div> 
+        <div class="hint"> 
+          - Local mode: mở 4 tab, cùng mã phòng để test 4 người.
+          <br/> - Server authoritative: Host giữ state, client chỉ gửi intent. 
+        </div> 
       </div>
-
-      <div class="col" style="gap:6px">
-        <label>Tên bộ bài</label>
-        <input id="setNameInput" placeholder="VD: Poker / Game A" />
-      </div>
-
-      <div class="col" style="gap:6px">
-        <label>URL hình ảnh mặt sau lá bài (link ảnh .png .jpg)</label>
-        <input id="setBackUrlInput" class="mono" placeholder="https://.../img.png" />
-      </div>
-
-      <div class="row" style="justify-content:space-between">
-        <div class="hint">URL hình ảnh mặt trước lá bài</div>
-        <div style="display: flex; gap:5px;">
-          <button id="addCardUrlBtn" class="secondary">+ Thêm bài</button>
-          <button id="saveSetBtn">Lưu bộ bài</button>
-        </div>
-      </div>
-      <div style="justify-content: space-between;display: flex;gap: 8px;padding: 6px;background: #cae6ff0d;
-        border-radius: 8px;width: 100%;font-family: inherit;font-size: 13px;align-items: center;margin-bottom: -5px;">
-        <div style=" width: 38%;">Tên lá bài</div>
-        <div style="width: 35%; ">URL hình ảnh</div>
-        <div >Số lượng</div>
-        <div style="width: 5%;"></div>
-      </div>
-      <div id="cardUrlList" class="col" style="gap:8px; max-height:240px; overflow:auto; padding-right:6px"></div>
     </div>
   </div>
+            
+            
+  <!-- =========================
+    POPUP: Deck / SetCard
+  ========================= -->
+  <div id="deckModal" class="modal" style="display:none;">
+    <div class="modal-card">
+      <div style="
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          min-height: 85vh;
+          max-height: 85vh;
+      ">
+        <header style="padding: 10px 12px;background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
+              border-bottom: 1px solid rgba(255,255,255,.06);display: flex;align-items: center;justify-content: space-between;
+              gap: 10px;border-radius: 15px;">
+              <div class="title">Tùy chỉnh bộ bài của bạn</div>
+              <button id="closeDeckBtn" class="collapse-btn">×</button>
+          </header>
+        
+      <div class="content col" style="gap:10px;overflow: hidden; display: flex; justify-content: space-between;">
+        <div class="col" style="gap:6px">
+          <label>Bộ đã lưu</label>
+          <div class="row">
+            <select id="setSelect" style="flex:1; min-width:220px"></select>
+            <button id="loadSetBtn" class="secondary">Load</button>
+            <button id="deleteSetBtn" class="danger">Xóa</button>
+            <button style="margin-left:15px;" id="newSetBtn" class="secondary">+ Tạo bộ mới</button>
+          </div>
+        </div>
+  
+        <div class="col" style="gap:6px">
+          <label>Tên bộ bài</label>
+          <input id="setNameInput" placeholder="VD: Poker / Game A" />
+        </div>
+  
+        <div class="col" style="gap:6px">
+          <label>URL hình ảnh mặt sau lá bài (link ảnh .png .jpg)</label>
+          <input id="setBackUrlInput" class="mono" placeholder="https://.../img.png" />
+        </div>
+  
+        <div class="row" style="justify-content:space-between">
+          <div class="hint">URL hình ảnh mặt trước lá bài</div>
+          <div style="display: flex; gap:5px;">
+            <button id="addCardUrlBtn" class="secondary">+ Thêm bài</button>
+            <button id="saveSetBtn">Lưu bộ bài</button>
+          </div>
+        </div>
+        <div style="justify-content: space-between;display: flex;gap: 8px;padding: 6px;background: #cae6ff0d;
+          border-radius: 8px;width: 100%;font-family: inherit;font-size: 13px;align-items: center;margin-bottom: -5px;">
+          <div style=" width: 38%;">Tên lá bài</div>
+          <div style="width: 35%; ">URL hình ảnh</div>
+          <div >Số lượng</div>
+          <div style="width: 5%;"></div>
+        </div>
+        <div id="cardUrlList" class="col" style="gap:8px; max-height:240px; overflow:auto; padding-right:6px"></div>
+      </div>
+    </div>  
+  </div>
 </div>
+<!-- HẾT PHẦN POPUP -->
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database-compat.js"></script> 
