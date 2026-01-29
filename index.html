@@ -1314,23 +1314,22 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
             
           <div style="display: flex; ">
             <!-- List phòng -->
-            <div style="display:flex; width: 70%">
+            <div style="display:flex; width: 100%">
               <!-- Tìm kiếm phòng -->
-              <div style="display:flex;">
-                <button class="nav-item">Tìm kiếm</button>
-                <input placeholder="Ví dụ: ROOM42" maxlength="18" /> 
+              <div style="display:flex; gap: 15px;">
+                <div>
+                  <button class="nav-item">Tìm kiếm</button>
+                  <input placeholder="Ví dụ: ROOM42" maxlength="18" /> 
+                </div>
+                <div>
+                  <button class="nav-item">Tạo phòng</button>
+                </div>
               </div>
               <!-- list -->
-              <div>
-                <!-- Nơi input list phòng -->
+              <div id="listRoom" style="gap:5px; height: 100px; max-height: 100px; overflow: auto;">
+                <!-- Nơi load list phòng -->
+                <!-- Mỗi dòng sẽ có [Mã phòng][Tên phòng][Nút vào phòng] -->
               </div>
-            </div>
-
-            <!-- Bên nút bấm -->
-            <div style="display: flex; width: 30%; gap: 5px;">
-              <button class="nav-item">Tạo phòng</button>
-              <button class="nav-item">Vào phòng</button>
-              <button class="nav-item">Vào nhanh</button>
             </div>
             
             <div class="content col"> 
