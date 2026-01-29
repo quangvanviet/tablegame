@@ -458,7 +458,6 @@
 
     /* Make HUD smaller + collapsible */
     .hud{ gap:10px; }
-    .panel{ max-width: 360px; }
     
     /* Optional: minimize buttons row */
     .hud .panel header{ cursor:default; }
@@ -638,21 +637,18 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
 /* ========= MIDDLE 70% ========= */
 #lobbyScreen .lobby-shell{
-  flex: 1 1 auto;           /* chiếm phần giữa */
   min-height: 0;            /* CHỐT: cho phép scroll nội bộ */
   width: 100%;
   box-sizing: border-box;
-
+  height: 70%;
   display:flex;
-  gap: 14px;
+  gap: 8px;
 }
 
 /* Sidebar 20% */
 #lobbyScreen .lobby-sidebar{
   flex: 0 0 20%;
-  min-width: 260px;         /* tránh quá bé */
-  max-width: 360px;         /* tránh quá to khi màn hình siêu rộng */
-
+  max-width: 20%;
   height: 100%;
   min-height: 0;
   overflow: auto;
@@ -1326,7 +1322,6 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       <main class="lobby-main">
         <!-- TAB: Room -->
         <section class="tab active" id="tabRoom">
-          <!-- GIỮ NGUYÊN roomPanel của bạn -->
           <div class="panel collapsible" id="roomPanel">
             <header>
               <div class="title">PHÒNG CHƠI</div>
@@ -1336,76 +1331,35 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               </div>
               <button class="collapse-btn" data-target="roomPanel">−</button>
             </header>
+          <div>
+            <!-- List phòng -->
 
+            <
+
+
+
+            
+            <!-- “Tìm phòng nhanh” -->
+            <div class="panel soft">
+              <header class="soft-header">
+                <div class="title">TÌM PHÒNG NHANH</div>
+                <div class="sub">Gợi ý cho người chơi mới: join theo mã hoặc link</div>
+              </header>
+              <div class="content">
+                <div class="row">
+                  <input class="mono" id="quickRoomSearch" placeholder="Nhập mã phòng để highlight + paste nhanh..." />
+                  <button class="secondary" id="pasteRoomBtn">Paste</button>
+                  <button id="focusRoomBtn">Focus</button>
+                </div>
+                <div class="hint">Mẹo: “Copy link” sẽ tự kèm mã phòng để bạn share cho bạn bè.</div>
+              </div>
+            </div>
+            
+          </div>
             <!-- Nút Deck / SetCard vẫn giữ nguyên id, nhưng ở tab Inventory sẽ dùng lại UI -->
             <button id="openDeckBtn" class="secondary">Deck / SetCard</button>
-
-            <div class="content col">
-              <div class="col">
-                <div class="row">
-                  <div class="col" style="flex:1; min-width:150px">
-                    <label>Tên hiển thị</label>
-                    <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" />
-                  </div>
-                  <div class="col" style="min-width:120px">
-                    <label>Chế độ</label>
-                    <select id="modeSelect">
-                      <option value="firebase">Firebase RTDB</option>
-                      <option value="local">Local (4 tab)</option>
-                      <option value="ws">WebSocket</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div id="wsRow" class="row" style="display:none">
-                  <div class="col" style="flex:1; min-width:200px">
-                    <label>WebSocket URL</label>
-                    <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" />
-                  </div>
-                </div>
-
-                <div class="row">
-                  <div class="col" style="flex:1; min-width:160px">
-                    <label>Mã phòng</label>
-                    <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" />
-                  </div>
-                  <button id="createBtn">Tạo phòng (Host)</button>
-                  <button id="joinBtn" class="secondary">Vào phòng</button>
-                  <button class="nav-item" data-tab="tabRoomBrowser">
-                    <span class="nav-ico">🌐</span><span class="nav-txt">Room Browser</span>
-                  </button>
-                </div>
-
-                <div class="row">
-                  <button id="copyLinkBtn" class="secondary">Copy link</button>
-                  <button id="resetBtn" class="danger">Reset bàn (Host)</button>
-                  <!-- logoutBtn đã đặt lên topbar, có thể giữ ở đây nếu bạn muốn (hoặc ẩn bằng CSS) -->
-                  <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button>
-                </div>
-
-                <div class="hint">
-                  - Local mode: mở 4 tab, cùng mã phòng để test 4 người.<br/>
-                  - Server authoritative: Host giữ state, client chỉ gửi intent.
-                </div>
-              </div>
-            </div>
           </div>
 
-          <!-- “Tìm phòng nhanh” (sáng tạo) -->
-          <div class="panel soft">
-            <header class="soft-header">
-              <div class="title">TÌM PHÒNG NHANH</div>
-              <div class="sub">Gợi ý cho người chơi mới: join theo mã hoặc link</div>
-            </header>
-            <div class="content">
-              <div class="row">
-                <input class="mono" id="quickRoomSearch" placeholder="Nhập mã phòng để highlight + paste nhanh..." />
-                <button class="secondary" id="pasteRoomBtn">Paste</button>
-                <button id="focusRoomBtn">Focus</button>
-              </div>
-              <div class="hint">Mẹo: “Copy link” sẽ tự kèm mã phòng để bạn share cho bạn bè.</div>
-            </div>
-          </div>
         </section>
         <section class="tab" id="tabRoomBrowser">
           <div class="panel soft">
