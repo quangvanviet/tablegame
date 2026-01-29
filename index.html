@@ -95,11 +95,11 @@
     label{font-size:12px; color:var(--muted);}
     input,button,select{
       font-family:inherit;
-      border-radius: 12px;
+      border-radius: 8px;
       border:1px solid rgba(255,255,255,.14);
       background: rgba(0,0,0,.18);
       color: var(--text);
-      padding:10px 12px;
+      padding:5px 10px;
       outline:none;
     }
     input::placeholder{color:rgba(233,236,255,.45)}
@@ -626,15 +626,11 @@
       <input id="authPassword" type="password" placeholder="Mật khẩu" />
       <input id="authUsername" placeholder="Tên hiển thị (khi đăng ký)" />
 
-      <div class="row">
+      <div class="row" style="display: flex;justify-content: center;">
         <button id="loginBtn">Đăng nhập</button>
         <button id="registerBtn" class="secondary">Đăng ký</button>
+        <button id="playAnonBtn" class="secondary" style="flex:1">Chơi thử</button>
       </div>
-
-      <div class="row">
-        <button id="playAnonBtn" class="secondary" style="flex:1">Chơi thử (Anonymous)</button>
-      </div>
-
       <div id="authStatus" style="font-size:12px;color:var(--muted)"></div>
     </div>
   </div>
@@ -906,7 +902,7 @@
             <button id="closeDeckBtn" class="collapse-btn">×</button>
         </header>
       
-    <div class="content col" style="gap:10px;height: 85vh;overflow: auto;">
+    <div class="content col" style="gap:10px;height: 85vh;overflow: auto; display: flex; justify-content: space-between;">
       <div class="col" style="gap:6px">
         <label>Bộ đã lưu</label>
         <div class="row">
@@ -916,8 +912,6 @@
           <button id="newSetBtn" class="secondary">+ Tạo mới</button>
         </div>
       </div>
-
-      <hr style="border:0;border-top:1px solid rgba(255,255,255,.08);width:100%">
 
       <div class="col" style="gap:6px">
         <label>Tên bộ bài</label>
@@ -931,14 +925,13 @@
 
       <div class="row" style="justify-content:space-between">
         <div class="hint">URL hình ảnh mặt trước lá bài</div>
-        <button id="addCardUrlBtn" class="secondary">+ Thêm</button>
+        <div style="display: flex; gap:5px;">
+          <button id="addCardUrlBtn" class="secondary">+ Thêm</button>
+          <button id="saveSetBtn">Lưu set</button>
+        </div>
       </div>
 
       <div id="cardUrlList" class="col" style="gap:8px; max-height:240px; overflow:auto; padding-right:6px"></div>
-
-      <div class="row" style="justify-content:flex-end">
-        <button id="saveSetBtn">Lưu set</button>
-      </div>
     </div>
   </div>
 </div>
