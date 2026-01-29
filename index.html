@@ -901,14 +901,14 @@
             <button id="closeDeckBtn" class="collapse-btn">×</button>
         </header>
       
-    <div class="content col" style="gap:10px;height: 85vh;overflow: auto; display: flex; justify-content: space-between;">
+    <div class="content col" style="gap:10px;overflow: hidden; display: flex; justify-content: space-between;">
       <div class="col" style="gap:6px">
         <label>Bộ đã lưu</label>
         <div class="row">
           <select id="setSelect" style="flex:1; min-width:220px"></select>
           <button id="loadSetBtn" class="secondary">Load</button>
           <button id="deleteSetBtn" class="danger">Xóa</button>
-          <button id="newSetBtn" class="secondary">+ Tạo mới</button>
+          <button style="margin-left:15px;" id="newSetBtn" class="secondary">+ Tạo bộ mới</button>
         </div>
       </div>
 
@@ -925,13 +925,14 @@
       <div class="row" style="justify-content:space-between">
         <div class="hint">URL hình ảnh mặt trước lá bài</div>
         <div style="display: flex; gap:5px;">
-          <button id="addCardUrlBtn" class="secondary">+ Thêm</button>
-          <button id="saveSetBtn">Lưu set</button>
+          <button id="addCardUrlBtn" class="secondary">+ Thêm bài</button>
+          <button id="saveSetBtn">Lưu bộ bài</button>
         </div>
       </div>
-      <div style="justify-content: space-between;display: flex;gap: 8px;padding: 8px;background: #cae6ff0d;border-radius: 8px;width: 100%;font-family: inherit;font-size: 13px;align-items: center;margin-bottom: -8px;">
-        <div style=" width: 25%;">Tên lá bài</div>
-        <div style="width: 25%; ">URL hình ảnh</div>
+      <div style="justify-content: space-between;display: flex;gap: 8px;padding: 6px;background: #cae6ff0d;
+        border-radius: 8px;width: 100%;font-family: inherit;font-size: 13px;align-items: center;margin-bottom: -5px;">
+        <div style=" width: 38%;">Tên lá bài</div>
+        <div style="width: 35%; ">URL hình ảnh</div>
         <div >Số lượng</div>
         <div style="width: 5%;"></div>
       </div>
@@ -2809,7 +2810,7 @@ function makeCardTypeRow({frontUrl="", count=1, name=""} = {}){
 
   const inpName = document.createElement("input");
   inpName.className = "mono";
-  inpName.placeholder = "Tên loại (optional)";
+  inpName.placeholder = "Tên lá bài";
   inpName.value = name;
   inpName.style.width = "40%";
 
