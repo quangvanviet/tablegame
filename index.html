@@ -1907,62 +1907,36 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 <!-- KHU VỰC POPUP --------------------------------------------------------------------------------------------->
 <div style="">
   <!-- POPUP Tạo phòng -->
-  <div id="popupCreateRoom" class="modal" style="display: none;">
-    <div class="modal-card content col"> 
-      <header style="padding: 10px 12px;background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
-            border-bottom: 1px solid rgba(255,255,255,.06);display: flex;align-items: center;justify-content: space-between;
-            gap: 10px;border-radius: 15px;">
-            <div class="title">Tạo phòng</div>
-            <button id="closeCreateRoomBtn" class="collapse-btn">×</button>
-        </header>
-      
-      <div class="col"> 
-        <div class="row"> 
-          <div class="col" style="flex:1; min-width:150px"> 
-            <label>Tên phòng</label> 
-            <input id="nameInput" placeholder="VD: Phòng 1" maxlength="38" /> 
-          </div> <div class="col" style="min-width:120px"> 
-            <label>Chế độ</label> 
-            <select id="modeSelect"> 
-              <option value="firebase">Firebase RTDB</option> 
-              <option value="local">Local (4 tab)</option> 
-              <option value="ws">WebSocket</option> 
-            </select> 
-          </div> 
-        </div> 
-        <div id="wsRow" class="row" style="display:none"> 
-          <div class="col" style="flex:1; min-width:200px"> 
-            <label>WebSocket URL</label> 
-            <input id="wsUrlInput" class="mono" placeholder="ws://localhost:8080" /> 
-          </div> 
-        </div> 
-        <div class="row"> 
-          <div class="col" style="flex:1; min-width:160px"> 
-            <label>Mã phòng</label> 
-            <input id="roomInput" class="mono" placeholder="Tự tạo / nhập" /> 
-          </div> 
-          <button id="createBtn">Tạo phòng (Host)</button>
-          <button id="joinBtn" class="secondary">Vào phòng</button> 
-          <button class="nav-item" data-tab="tabRoomBrowser"> 
-            <span class="nav-ico">🌐</span>
-            <span class="nav-txt">Room Browser</span>
-          </button> 
-        </div> 
-        <div class="row"> 
-          <button id="copyLinkBtn" class="secondary">Copy link</button> 
-          <button id="resetBtn" class="danger">Reset bàn (Host)</button> 
-          <!-- logoutBtn đã đặt lên topbar, có thể giữ ở đây nếu bạn muốn (hoặc ẩn bằng CSS) --> 
-          <button id="logoutBtn" class="danger" style="margin-left:auto">Đăng xuất</button> 
-        </div> 
-        <div class="hint"> 
-          - Local mode: mở 4 tab, cùng mã phòng để test 4 người.
-          <br/> - Server authoritative: Host giữ state, client chỉ gửi intent. 
-        </div> 
+  <div id="popupCreateRoom" class="modal" style="display:none;">
+    <div class="modal-card content col" style="max-width:520px;">
+      <header style="padding:10px 12px;background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
+        border-bottom: 1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;
+        gap:10px;border-radius:15px;">
+        <div class="title">Tạo phòng</div>
+        <button id="closeCreateRoomBtn" class="collapse-btn" type="button">×</button>
+      </header>
+  
+      <div class="col" style="padding:12px; gap:10px;">
+        <div class="col">
+          <label>Tên phòng</label>
+          <input id="createRoomNameInput" placeholder="VD: Phòng của Hi" maxlength="38"/>
+        </div>
+  
+        <div class="col">
+          <label>Mật khẩu phòng (tuỳ chọn)</label>
+          <input id="createRoomPassInput" type="password" placeholder="Để trống nếu không đặt" maxlength="32"/>
+          <div style="opacity:.65;font-size:12px;margin-top:6px;">
+            Nếu đặt mật khẩu, người vào phòng phải nhập đúng mới join được.
+          </div>
+        </div>
+  
+        <div class="row" style="gap:10px; justify-content:flex-end;">
+          <button id="doCreateRoomBtn" type="button">Tạo phòng</button>
+        </div>
       </div>
     </div>
   </div>
-            
-            
+          
   <!-- =========================
     POPUP: Deck / SetCard
   ========================= -->
@@ -2189,6 +2163,9 @@ const UI = {
   hostRefreshSetsBtn: document.getElementById("hostRefreshSetsBtn"),
   hostLoadDeckBtn: document.getElementById("hostLoadDeckBtn"),
   startGameBtn: document.getElementById("startGameBtn"),
+  createRoomNameInput: document.getElementById("createRoomNameInput"),
+  createRoomPassInput: document.getElementById("createRoomPassInput"),
+  doCreateRoomBtn: document.getElementById("doCreateRoomBtn"),
 };
 
 /* =========================================================
@@ -2267,14 +2244,24 @@ async function refreshHostSetSelect(){
 }
 
 async function hostLoadSelectedSetToRoom_FromSaved(){
-  if (!window.client) throw new Error("client chưa tồn tại");
+  // ✅ client phải tồn tại trong scope module; nếu chưa có thì do thứ tự script
+  if (typeof client === "undefined") {
+    throw new Error("client chưa được khởi tạo (đặt code này SAU đoạn const client = {...})");
+  }
+
+  // phải ở firebase & host
   if (!client.isHost) return toast("Chỉ host mới load deck");
+  if (!(client.transport instanceof FirebaseTransport)) return toast("Chức năng này chỉ dùng trong Firebase");
 
   await fbEnsureAuth();
+
+  if (!client.roomId) return toast("Chưa vào phòng / roomId trống");
+  if (!client.host?.state) return toast("Host state chưa sẵn sàng");
 
   const setId = UI.hostSetSelect?.value || "";
   if (!setId) return toast("Chưa chọn set");
 
+  // đảm bảo cache
   if (!_hostSetsCache[setId]) await refreshHostSetSelect();
   const data = _hostSetsCache[setId];
   if (!data) return toast("Set không tồn tại");
@@ -2292,9 +2279,10 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
 
   const backUrl = (data.backUrl || "").trim();
 
-  const roomRef = getRoomRef(client.roomId);
+  // ✅ roomRef chuẩn (không cần getRoomRef nếu bạn chưa định nghĩa)
+  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
 
-  // meta cho cả phòng
+  // meta cho cả phòng (để người khác thấy deck info)
   await roomRef.child("meta").update({
     deckSource: { uid: FB.uid, setId },
     deckBackUrl: backUrl,
@@ -2304,26 +2292,20 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   });
 
   // build deck vào authoritative state của host
-  if (client.host?.state){
-    const st = client.host.state;
+  const st = client.host.state;
+  st.assets = st.assets || { frontBase:"", backUrl:"" };
+  st.assets.backUrl = backUrl;
 
-    st.assets = st.assets || { frontBase:"", backUrl:"" };
-    st.assets.backUrl = backUrl;
-
-    if (typeof window.buildPhysicalDeckFromTypes === "function"){
-      buildPhysicalDeckFromTypes(st, types, "stack_deck");
-    }else{
-      console.warn("buildPhysicalDeckFromTypes chưa tồn tại");
-    }
-
-    if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
-
-    if (client.transport?.writeState){
-      await client.transport.writeState(st);
-    }else{
-      await roomRef.child("state").set(st);
-    }
+  if (typeof buildPhysicalDeckFromTypes !== "function"){
+    throw new Error("buildPhysicalDeckFromTypes chưa tồn tại (bạn đặt function này ở đâu?)");
   }
+
+  buildPhysicalDeckFromTypes(st, types, "stack_deck");
+
+  if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
+
+  // ✅ ghi state qua transport (chuẩn)
+  await client.transport.writeState(st);
 
   toast(`Loaded deck: ${types.length} loại / ${total} lá`);
 }
@@ -2338,10 +2320,17 @@ if (UI.hostRefreshSetsBtn){
   };
 }
 
+// =========================
+// Host: Load setCard -> build deck vào room (Firebase-only)
+// =========================
 if (UI.hostLoadDeckBtn){
   UI.hostLoadDeckBtn.onclick = async ()=>{
-    try{ await hostLoadSelectedSetToRoom_FromSaved(); }
-    catch(e){ console.error(e); toast(e?.message || e); }
+    try{
+      await hostLoadSelectedSetToRoom_FromSaved();
+    }catch(e){
+      console.error(e);
+      toast(e?.message || e);
+    }
   };
 }
 
@@ -3374,6 +3363,7 @@ const client = {
   selected: null,
   dragging: null,
 };
+window.client = client;
 
 function setNetBadge(text, color=null){
   if (!UI.netBadge) return;
@@ -3556,10 +3546,15 @@ function closePopUpCreateRoom(){ document.getElementById("popupCreateRoom").styl
 closeCreateRoomBtn.addEventListener("click", ()=>{
     closePopUpCreateRoom();
 });
-  
+
+async function sha256Hex(text){
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
 async function createRoomAsHost_Firebase(){
-  await fbEnsureAuth();              // ✅ PHẢI CÓ TRƯỚC
-  if (!FB.db) throw new Error("FB.db missing (ensureAuth failed)");
+  await fbEnsureAuth();
 
   client.selfId = FB.uid;
   client.selfName = FB.username;
@@ -3571,6 +3566,14 @@ async function createRoomAsHost_Firebase(){
   client.roomCode = roomId.toUpperCase();
   if (UI.roomInput) UI.roomInput.value = client.roomCode;
 
+  // ✅ lấy tên phòng + pass từ popup
+  const roomName = (UI.createRoomNameInput?.value || "").trim().slice(0,38) || `Room ${roomNo}`;
+  const passRaw  = (UI.createRoomPassInput?.value || "").trim().slice(0,32);
+
+  // ✅ hash pass nếu có
+  const passSalt = uid().slice(0,8); // salt ngắn đủ dùng
+  const passHash = passRaw ? await sha256Hex(`${passSalt}:${passRaw}`) : "";
+
   client.isHost = true;
   client.host = new HostController(client.roomCode, FB.uid);
   client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username });
@@ -3580,14 +3583,17 @@ async function createRoomAsHost_Firebase(){
     meta: {
       roomNo,
       roomId,
+      roomName,                 // ✅ NEW
+      hasPassword: !!passRaw,   // ✅ NEW
+      passSalt: passRaw ? passSalt : "", // ✅ NEW
+      passHash: passRaw ? passHash : "", // ✅ NEW (không lưu plain)
+
       hostUid: FB.uid,
       status: "active",
       createdAt: Date.now(),
-      maxPlayers: 4,
+      maxPlayers: 6,
       deckSource: null,
       deckBackUrl: "",
-      deckTotal: 0,
-      deckTypes: 0,
     },
     presence: {},
     users: {},
@@ -3595,68 +3601,51 @@ async function createRoomAsHost_Firebase(){
     state: client.host.state,
   });
 
-  // users node (phục vụ lobby/overlay)
-  await roomRef.child(`users/${FB.uid}`).set({ uid: FB.uid, username: FB.username, seat: 0, at: now() });
+  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: 0, atk: 0, def: 0, hp: 20 });
 
-  // transport
+  client.authoritative = redactStateForViewer(client.host.state, FB.uid);
+  client.lastVersion = client.authoritative.version;
+  setStatusUI();
+
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
-  await t.attachPresence();
-
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users;
   });
+  await t.attachPresence();
 
-  // host: xử lý intents -> apply -> writeState -> ack
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
-    try{
-      const action = msg?.action || null;
-      const fromId = msg?.fromId || msg?.fromUid || null;
-      const fromName = msg?.fromName || msg?.fromName || "Player";
-      if (!action || !fromId) {
-        await t.ackIntent(intentRef || FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`));
-        return;
-      }
+    const action = msg.action;
+    const fromId = msg.fromId; // ✅ dùng fromId theo transport mình đã chuẩn hoá
 
-      // đảm bảo player có mặt trong state
-      client.host.addOrUpdatePlayer({ id: fromId, name: fromName });
+    client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
 
-      const r = client.host.applyIntent(fromId, action);
-      if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
+    const r = client.host.applyIntent(fromId, action);
+    if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
 
-      await t.writeState(client.host.state);
-      await t.ackIntent(intentRef || FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`));
-    }catch(e){
-      console.error(e);
-      // vẫn cố ack để khỏi kẹt queue
-      try{ await t.ackIntent(intentRef || FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`)); }catch(_){}
-    }
+    await t.writeState(client.host.state);
+    await t.ackIntent(intentRef);
   });
 
-  // host: listen state (để UI cập nhật nếu state bị write từ chính host)
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
     if (client.isHost && client.host){
-      client.host.state = st; // sync
+      client.host.state = st;
       client.authoritative = redactStateForViewer(st, FB.uid);
-    }else{
+    } else {
       client.authoritative = redactStateForViewer(st, FB.uid);
     }
     client.lastVersion = st.version || client.lastVersion;
     setStatusUI();
   });
 
-  // init local view ngay
-  client.authoritative = redactStateForViewer(client.host.state, FB.uid);
-  client.lastVersion = client.authoritative?.version || 0;
-  setStatusUI();
-
   toast(`Đã tạo room: ${roomId}`);
   client.roomMeta = { roomNo, roomId };
 
   installFirebaseRoomCleanupAsHost(client.roomId, roomNo);
 
+  toggleCreateRoomPopup(false); // ✅ đóng popup
   goMatch();
 }
 
@@ -3667,33 +3656,43 @@ async function joinRoomAsClient_Firebase(){
   client.selfName = FB.username;
 
   readInputs();
-
-  client.roomId = (client.roomCode || "").toLowerCase();
-  if (!client.roomId.startsWith("room")){
-    toast("Nhập room dạng: ROOM1 / room1");
-    return;
-  }
+  client.roomId = client.roomCode.toLowerCase();
+  if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
 
-  // ghi users node cho host thấy
-  await roomRef.child(`users/${FB.uid}`).set({ uid: FB.uid, username: FB.username, seat: -1, at: now() });
+  const meta = metaSnap.val() || {};
+  if (meta.hasPassword){
+    const pass = prompt("Phòng có mật khẩu. Nhập mật khẩu để vào:");
+    if (pass == null) return; // user cancel
+
+    const salt = meta.passSalt || "";
+    const expected = meta.passHash || "";
+    const got = await sha256Hex(`${salt}:${String(pass).trim()}`);
+
+    if (!salt || !expected || got !== expected){
+      toast("Sai mật khẩu phòng");
+      return;
+    }
+  }
+
+  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: -1, atk: 0, def: 0, hp: 20 });
 
   client.isHost = false;
   client.host = null;
 
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
-  await t.attachPresence();
 
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users;
   });
 
-  // gửi join intent để host add player vào state
+  await t.attachPresence();
+
   await t.sendIntent({ type: "join" });
 
   t.listenState((st)=>{
@@ -3709,6 +3708,17 @@ async function joinRoomAsClient_Firebase(){
   goMatch();
 }
 
+if (UI.doCreateRoomBtn){
+  UI.doCreateRoomBtn.addEventListener("click", async ()=>{
+    try{
+      await createRoomAsHost_Firebase();
+    }catch(e){
+      console.error(e);
+      toast("Create error: " + (e.message || e));
+    }
+  });
+}
+  
 function leaveRoom(){
   // Firebase-only: chỉ đóng transport + xoá local session
   try{
