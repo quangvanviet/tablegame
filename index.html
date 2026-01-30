@@ -680,7 +680,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
 /* Tabs must stretch full width */
 #lobbyScreen .tab{ display:none; width: 100%; }
-#lobbyScreen .tab.active{ display:block; width: 100%; }
+#lobbyScreen .tab.active{ display:block; width: 100%; height: 100%;}
 
 /* Nav item */
 #lobbyScreen .nav-item{
@@ -907,6 +907,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   border-radius: 16px;
   border: 1px solid rgba(199,166,101,.18);
   background: rgba(0,0,0,.16);
+  width: 100%;
 }
 #lobbyScreen .notif-dot{
   width: 10px; height: 10px; border-radius: 999px;
@@ -1626,30 +1627,25 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           <div class="panel soft">
             <header class="soft-header">
               <div class="title">THÔNG BÁO</div>
-              <div class="sub">System • Room • Friends (future)</div>
+              <div class="sub">Thông tin hữu ích dành cho các bài thủ</div>
             </header>
 
             <div class="content col">
               <div class="notif-item">
-                <div class="notif-dot"></div>
-                <div class="notif-body">
-                  <div class="notif-title">Tip: Local mode</div>
-                  <div class="notif-sub">Mở 4 tab, cùng mã phòng để test 4 người nhanh nhất.</div>
+                <div style="width: 80%;">
+                  <div class="notif-dot"></div>
+                  <div class="notif-body">
+                    <div class="notif-title">Tip: Phím tắt Q W E R T</div>
+                    <div class="notif-sub">Dùng phím tắt để thuận tiện hơn khi chơi</div>
+                  </div>
                 </div>
-                <button class="secondary">Đã hiểu</button>
-              </div>
-
-              <div class="notif-item">
-                <div class="notif-dot warn"></div>
-                <div class="notif-body">
-                  <div class="notif-title">Host authoritative</div>
-                  <div class="notif-sub">Nếu host rời phòng, game có thể “pause” (sau sẽ thêm host-migration).</div>
+                <div style="width: 20%;">
+                  <button class="secondary">Đã hiểu</button>
                 </div>
-                <button class="secondary">OK</button>
               </div>
 
               <div class="row" style="justify-content:flex-end">
-                <button class="danger" id="clearNotifBtn">Clear all</button>
+                <button class="danger" id="clearNotifBtn">Xóa hết</button>
               </div>
             </div>
           </div>
@@ -1709,7 +1705,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
         </section>
 
         <!-- TAB: Patch Notes (sáng tạo) -->
-        <section class="tab" id="tabPatchNotes">
+        <section class="tab" id="tabPatchNotes" >
           <div class="panel soft">
             <header class="soft-header">
               <div class="title">PATCH NOTES</div>
