@@ -2818,6 +2818,7 @@ const ensureUIState = (st) => {
   st.ui.statsByPlayer = st.ui.statsByPlayer || {};
 };
 
+const actorId = intent?.actorId || intent?.by || intent?.uid || intent?.playerId || intent?.clientId;
 class HostController {
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
@@ -3188,105 +3189,105 @@ class HostController {
       }
 
       case "stack": {
-  const { dragTargetType, dragId, dropOnType, dropOnId } = action;
-
-  const isOtherHand = (zone, ownerId) =>
-    (zone === ZONES.hand) && ownerId && ownerId !== fromId;
-
-  const getStackTopToBottom = (stackId) => {
-    const s = ensureStack(stackId);
-    return s ? [...(s.cardIds || [])] : [];
-  };
-
-  // ===== 1) Collect moving cardIds (top->bottom) =====
-  let moving = [];
-  let srcStackId = null;
-
-  if (dragTargetType === "card") {
-    const c = ensureCard(dragId);
-    if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
-    if (c.stackId === "stack_deck") return { ok:false, reason:"Cannot stack from deck (use draw)" };
-
-    moving = [dragId];
-    srcStackId = c.stackId || null;
-  } else {
-    const s = ensureStack(dragId);
-    if (!s || !canInteractStack(s, fromId)) return { ok:false, reason:"No access" };
-    if (s.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
-
-    moving = [...(s.cardIds || [])]; // top->bottom
-    srcStackId = s.id;
-  }
-
-  if (moving.length === 0) return { ok:false, reason:"Nothing to stack" };
-
-  // ===== 2) Resolve dropStack =====
-  let dropStackId = null;
-
-  if (dropOnType === "card") {
-    const c2 = ensureCard(dropOnId);
-    if (!c2) return { ok:false, reason:"Missing drop card" };
-    if (c2.stackId === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
-    if (isOtherHand(c2.zone, c2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
-
-    dropStackId = c2.stackId || createStackFromCard(c2.id);
-  } else {
-    const s2 = ensureStack(dropOnId);
-    if (!s2) return { ok:false, reason:"Missing drop stack" };
-    if (s2.id === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
-    if (isOtherHand(s2.zone, s2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
-
-    dropStackId = s2.id;
-  }
-
-  if (!dropStackId) return { ok:false, reason:"No drop stack" };
-  if (srcStackId && srcStackId === dropStackId) return { ok:true };
-
-  const dropStack = ensureStack(dropStackId);
-  if (!dropStack) return { ok:false, reason:"Drop stack missing (race)" };
-  if (!canInteractStack(dropStack, fromId)) return { ok:false, reason:"No access" };
-
-  // ===== 3) Snapshot old drop order (top->bottom) BEFORE we mutate =====
-  const oldDrop = [...(dropStack.cardIds || [])];
-
-  // ===== 4) Remove moving cards from their old places (detach / delete src stack) =====
-  if (dragTargetType === "stack") {
-    const s = ensureStack(dragId);
-    // xóa src stack luôn (trừ deck)
-    if (s && s.id !== "stack_deck") delete st.stacks[s.id];
-  } else {
-    // detach single card khỏi stack nếu có
-    detachFromStack(dragId);
-  }
-
-  // Nếu moving có thể chứa card trùng oldDrop (edge case), lọc tránh duplicate
-  const movingSet = new Set(moving);
-  const rest = oldDrop.filter(cid => !movingSet.has(cid));
-
-  // ===== 5) REBUILD: "mới nhất ở trên" =====
-  // moving là top->bottom của group kéo => giữ nguyên thứ tự group
-  dropStack.cardIds = [...moving, ...rest];
-
-  // ===== 6) Sync each card to stack position/zone/owner (KHÔNG flip) =====
-  for (const cid of dropStack.cardIds){
-    const c = ensureCard(cid);
-    if (!c) continue;
-
-    c.stackId = dropStackId;
-    c.x = dropStack.x;
-    c.y = dropStack.y;
-    c.zone = dropStack.zone;
-
-    // only hand has owner privacy
-    c.owner = (dropStack.zone === ZONES.hand) ? (dropStack.owner ?? null) : null;
-    if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
-
-    // ✅ tuyệt đối không đụng c.faceUp
-  }
-
-  this.bumpVersion();
-  return { ok:true };
-}
+        const { dragTargetType, dragId, dropOnType, dropOnId } = action;
+      
+        const isOtherHand = (zone, ownerId) =>
+          (zone === ZONES.hand) && ownerId && ownerId !== fromId;
+      
+        const getStackTopToBottom = (stackId) => {
+          const s = ensureStack(stackId);
+          return s ? [...(s.cardIds || [])] : [];
+        };
+      
+        // ===== 1) Collect moving cardIds (top->bottom) =====
+        let moving = [];
+        let srcStackId = null;
+      
+        if (dragTargetType === "card") {
+          const c = ensureCard(dragId);
+          if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
+          if (c.stackId === "stack_deck") return { ok:false, reason:"Cannot stack from deck (use draw)" };
+      
+          moving = [dragId];
+          srcStackId = c.stackId || null;
+        } else {
+          const s = ensureStack(dragId);
+          if (!s || !canInteractStack(s, fromId)) return { ok:false, reason:"No access" };
+          if (s.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
+      
+          moving = [...(s.cardIds || [])]; // top->bottom
+          srcStackId = s.id;
+        }
+      
+        if (moving.length === 0) return { ok:false, reason:"Nothing to stack" };
+      
+        // ===== 2) Resolve dropStack =====
+        let dropStackId = null;
+      
+        if (dropOnType === "card") {
+          const c2 = ensureCard(dropOnId);
+          if (!c2) return { ok:false, reason:"Missing drop card" };
+          if (c2.stackId === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
+          if (isOtherHand(c2.zone, c2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
+      
+          dropStackId = c2.stackId || createStackFromCard(c2.id);
+        } else {
+          const s2 = ensureStack(dropOnId);
+          if (!s2) return { ok:false, reason:"Missing drop stack" };
+          if (s2.id === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
+          if (isOtherHand(s2.zone, s2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
+      
+          dropStackId = s2.id;
+        }
+      
+        if (!dropStackId) return { ok:false, reason:"No drop stack" };
+        if (srcStackId && srcStackId === dropStackId) return { ok:true };
+      
+        const dropStack = ensureStack(dropStackId);
+        if (!dropStack) return { ok:false, reason:"Drop stack missing (race)" };
+        if (!canInteractStack(dropStack, fromId)) return { ok:false, reason:"No access" };
+      
+        // ===== 3) Snapshot old drop order (top->bottom) BEFORE we mutate =====
+        const oldDrop = [...(dropStack.cardIds || [])];
+      
+        // ===== 4) Remove moving cards from their old places (detach / delete src stack) =====
+        if (dragTargetType === "stack") {
+          const s = ensureStack(dragId);
+          // xóa src stack luôn (trừ deck)
+          if (s && s.id !== "stack_deck") delete st.stacks[s.id];
+        } else {
+          // detach single card khỏi stack nếu có
+          detachFromStack(dragId);
+        }
+      
+        // Nếu moving có thể chứa card trùng oldDrop (edge case), lọc tránh duplicate
+        const movingSet = new Set(moving);
+        const rest = oldDrop.filter(cid => !movingSet.has(cid));
+      
+        // ===== 5) REBUILD: "mới nhất ở trên" =====
+        // moving là top->bottom của group kéo => giữ nguyên thứ tự group
+        dropStack.cardIds = [...moving, ...rest];
+      
+        // ===== 6) Sync each card to stack position/zone/owner (KHÔNG flip) =====
+        for (const cid of dropStack.cardIds){
+          const c = ensureCard(cid);
+          if (!c) continue;
+      
+          c.stackId = dropStackId;
+          c.x = dropStack.x;
+          c.y = dropStack.y;
+          c.zone = dropStack.zone;
+      
+          // only hand has owner privacy
+          c.owner = (dropStack.zone === ZONES.hand) ? (dropStack.owner ?? null) : null;
+          if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
+      
+          // ✅ tuyệt đối không đụng c.faceUp
+        }
+      
+        this.bumpVersion();
+        return { ok:true };
+      }
 
 
       case "unstack": {
@@ -4374,34 +4375,6 @@ addEventListener("keydown", (ev)=>{
 
   const key = ev.key.toLowerCase();
 
-  // helper: lấy deck stack id từ selection (ưu tiên stack đang chọn)
-  const getSelectedDeckStackId = ()=>{
-    const sel = client.selected;
-
-    // 1) Nếu đang select stack => dùng luôn stack đó (chỉ khi nó là deck)
-    if (sel?.type === "stack") {
-      const stack = st.stacks?.[sel.id] || st.stackById?.[sel.id];
-      if (stack && (stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true)) return sel.id;
-
-      // nếu bạn muốn: vẫn cho draw dù stack không gắn flag deck
-      // return sel.id;
-    }
-
-    // 2) Nếu đang select card và card thuộc stack nào đó
-    if (sel?.type === "card") {
-      const card = st.cards?.[sel.id];
-      if (card?.stackId) {
-        const stack = st.stacks?.[card.stackId] || st.stackById?.[card.stackId];
-        if (stack && (stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true)) return card.stackId;
-      }
-    }
-
-    // 3) fallback deck mặc định
-    if (st.stacks?.["stack_deck"] || st.stackById?.["stack_deck"]) return "stack_deck";
-
-    return null;
-  };
-
   if (key === "escape"){
     client.selected = null;
     hideInspectorPopup();
@@ -4409,43 +4382,28 @@ addEventListener("keydown", (ev)=>{
     return;
   }
 
-  // ===== XÓA HẲN (host sẽ quyết định) =====
-  // Delete / Backspace / X => xóa card hoặc stack đang select khỏi game
+  // ===== Host-only hard delete request =====
   if (key === "delete" || key === "backspace" || key === "x"){
     const sel = client.selected;
     if (!sel) return;
 
     ev.preventDefault();
-    sendIntent({
-      type: "delete",
-      targetType: sel.type,
-      id: sel.id
-    });
-    toast("Delete selected");
+    sendIntent({ type:"delete", targetType: sel.type, id: sel.id });
+    toast("Request delete (host only)");
     return;
   }
 
-  // ===== Q/W/E/R/T =====
-  // Q = draw 1 từ deck stack đang chọn
+  // ===== Q: draw random 1 from SELECTED STACK (bắt buộc phải select stack) =====
   if (key === "q"){
     const sel = client.selected;
-    if (!sel || sel.type !== "stack") return toast("Hãy chọn (select) một Deck trước");
-  
-    const stackId = sel.id;
-    const stack = st.stacks?.[stackId] || st.stackById?.[stackId];
-  
-    // chỉ cho rút nếu đúng deck
-    if (!stack || !(stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true)) {
-      return toast("Stack đang chọn không phải Deck");
-    }
-  
-    sendIntent({ type:"draw", stackId, count: 1, random: true });
+    if (!sel || sel.type !== "stack") return toast("Hãy select 1 stack bài để rút");
+
+    sendIntent({ type:"draw", stackId: sel.id, count: 1, random: true });
     toast("Draw 1 (random)");
     return;
   }
 
-
-  // W = flip entity đang chọn
+  // W: flip entity đang chọn
   if (key === "w"){
     const sel = client.selected;
     if (!sel) return;
@@ -4453,22 +4411,22 @@ addEventListener("keydown", (ev)=>{
     return;
   }
 
-  // E = shuffle deck stack đang chọn (ưu tiên stack đang select)
+  // E: shuffle SELECTED STACK
   if (key === "e"){
-    const deckStackId = getSelectedDeckStackId();
-    if (!deckStackId) return;
-    sendIntent({type:"shuffle", stackId: deckStackId});
+    const sel = client.selected;
+    if (!sel || sel.type !== "stack") return toast("Hãy select 1 stack để shuffle");
+    sendIntent({type:"shuffle", stackId: sel.id});
     return;
   }
 
-  // R = unstack stack đang chọn
+  // R: unstack SELECTED STACK
   if (key === "r"){
     const sel = client.selected;
     if (sel && sel.type==="stack") sendIntent({type:"unstack", stackId: sel.id});
     return;
   }
 
-  // T = discard entity đang chọn
+  // T: discard entity đang chọn
   if (key === "t"){
     const sel = client.selected;
     if (!sel) return;
@@ -4597,9 +4555,11 @@ function drawCardAtScreen(
   } else {
     // fallback
     ctx.fillStyle = "rgba(233,236,255,.92)";
-    ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
+    ctx.font = `${Math.max(10, 11*camera.scale)}px ui-monospace, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(stackCount), x + w - bw/2 - 8*camera.scale, y + bh/2 + 8*camera.scale);
     const label = faceUp && frontSeed ? ("CARD " + String(frontSeed).padStart(2,"0")) : "BACK";
-    ctx.fillText(label, x + 10*camera.scale, y + 18*camera.scale);
   }
   ctx.restore();
 
@@ -4656,7 +4616,6 @@ function drawCardAtScreen(
 
   ctx.restore();
 }
-
 
 function draw(){
   ctx.clearRect(0,0,innerWidth,innerHeight);
@@ -4731,15 +4690,30 @@ function draw(){
     } else {
       const stack = getStackById(s, o.id);
       if (!stack) continue;
-  
+    
       const topId = getStackTopCardId(s, stack);
       const top = topId ? getCardById(s, topId) : null;
-  
+    
       const topOwnerId = (top?.ownerId || top?.owner || stack.owner);
       const owner = s.players?.find(p=>p.id===topOwnerId) || null;
       const accent = owner ? COLORS[owner.color] : null;
-  
+    
+      const count = (stack.cardIds?.length || 0);
+    
       if (top){
+        // ✅ 1) vẽ “bóng” các lá dưới TRƯỚC
+        if (count > 1){
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          for (let i=1; i<Math.min(4, count); i++){
+            const dx = i * 2 * camera.scale;
+            const dy = i * 2 * camera.scale;
+            drawCardAtScreen(sp.x+dx, sp.y+dy, false, 0, null, false, false, 0, "", backUrlDefault);
+          }
+          ctx.restore();
+        }
+    
+        // ✅ 2) vẽ top card SAU (badge sẽ nằm trên cùng)
         const frontUrl = (top.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
         drawCardAtScreen(
           sp.x, sp.y,
@@ -4748,24 +4722,12 @@ function draw(){
           accent,
           isSelected,
           true,
-          (stack.cardIds?.length || 0),
+          count,
           frontUrl,
           backUrlDefault
         );
-  
-        // “bóng” các lá dưới (optional)
-        if ((stack.cardIds?.length || 0) > 1){
-          ctx.save();
-          ctx.globalAlpha = 0.22;
-          for (let i=1; i<Math.min(4, stack.cardIds.length); i++){
-            const dx = i * 2 * camera.scale;
-            const dy = i * 2 * camera.scale;
-            drawCardAtScreen(sp.x+dx, sp.y+dy, false, 0, null, false, false, 0, "", backUrlDefault);
-          }
-          ctx.restore();
-        }
+    
       } else {
-        // stack rỗng: vẽ 1 khung trống
         ctx.save();
         ctx.globalAlpha = 0.25;
         drawCardAtScreen(sp.x, sp.y, false, 0, null, isSelected, false, 0, "", backUrlDefault);
@@ -4780,6 +4742,59 @@ function draw(){
 }
 requestAnimationFrame(draw);
 
+function drawCountBadge(ctx, x, y, w, h, count){
+  if (count == null) return;
+  if (count <= 1) return; // muốn hiện cả "1" thì bỏ dòng này
+
+  const text = String(count);
+
+  // style
+  const padX = 6, padY = 2;
+  const fontSize = 12;
+  ctx.save();
+  ctx.font = `${fontSize}px ui-sans-serif, system-ui, Arial`;
+  const tw = Math.ceil(ctx.measureText(text).width);
+  const bw = tw + padX*2;
+  const bh = fontSize + padY*2;
+
+  // vị trí: góc trên-phải của stack rect
+  const bx = Math.round(x + w - bw - 4);
+  const by = Math.round(y + 4);
+  const r  = 6;
+
+  // nền (đen mờ)
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "rgba(0,0,0,0.75)";
+  roundRect(ctx, bx, by, bw, bh, r);
+  ctx.fill();
+
+  // viền
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, bx+0.5, by+0.5, bw-1, bh-1, r);
+  ctx.stroke();
+
+  // chữ
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, bx + bw/2, by + bh/2 + 0.5);
+
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  const rr = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr, y);
+  ctx.arcTo(x+w, y, x+w, y+h, rr);
+  ctx.arcTo(x+w, y+h, x, y+h, rr);
+  ctx.arcTo(x, y+h, x, y, rr);
+  ctx.arcTo(x, y, x+w, y, rr);
+  ctx.closePath();
+}
+  
 /* =========================================================
    Status Board (giữ logic bạn đang dùng) - chỉ sửa seat 4 người
 ========================================================= */
