@@ -2364,7 +2364,6 @@ if (UI.startGameBtn){
    Inspector (card inspector popup)
 ========================================================= */
 const INS = {
-  badge: document.getElementById("insBadge"),
   preview: document.getElementById("insPreview"),
   btnFlip: document.getElementById("btnFlip"),
   btnDiscard: document.getElementById("btnDiscard"),
@@ -2429,10 +2428,9 @@ function updateInspector(){
   const st = getState?.();
   const sel = client?.selected;
 
-  if (!INS.badge || !INS.preview) return;
+  if (!INS.preview) return;
 
   if (!st || !sel){
-    INS.badge.textContent = "—";
     INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Chọn 1 lá bài...</div>`;
     return;
   }
@@ -2440,7 +2438,6 @@ function updateInspector(){
   // ===== DECK (SPECIAL CASE) =====
   if (sel.type === "stack" && sel.id === "stack_deck"){
     const count = st.stacks?.stack_deck?.cardIds?.length || 0;
-    INS.badge.textContent = "DECK";
     INS.preview.innerHTML = `
       <div style="text-align:center;font-size:13px">
         <div>${count} cards</div>
@@ -2454,7 +2451,6 @@ function updateInspector(){
   // ===== CARD =====
   if (sel.type === "card"){
     const c = st.cards?.[sel.id];
-    INS.badge.textContent = sel.id + (c?.lockedBy ? " (LOCK)" : "");
 
     // ưu tiên frontUrl (setCard), nếu không có thì dùng frontBase+id.png
     const frontUrl = c?.frontUrl
@@ -2475,7 +2471,6 @@ function updateInspector(){
   if (sel.type === "stack"){
     const s = st.stacks?.[sel.id];
     const topId = s?.cardIds?.[0];
-    INS.badge.textContent = `${sel.id} (${s?.cardIds?.length || 0})`;
 
     if (!topId){
       INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Empty stack</div>`;
