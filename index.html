@@ -383,24 +383,37 @@
       .hud{flex-direction:column;}
     }
 
-     #inspector{
+   #inspector{
       position:absolute;
       z-index:30;
       display:none;
       pointer-events:auto;
-      width: 50vh;
+      width: min(52vh, 360px);
     }
     
     #inspector .panel{
       background: var(--panel);
       border:1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: 15px;
       box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
       overflow:hidden;
     }
-
-
+    
+    #insPreview{
+      width:100%;
+      aspect-ratio: 86 / 122;     /* đúng tỉ lệ CARD.w/h của bạn */
+      min-height: 240px;
+      border-radius: 12px;
+      background: rgba(0,0,0,.18);
+    }
+    
+    #insPreview img{
+      width:100%;
+      height:100%;
+      object-fit: contain;
+      display:block;
+    }
     .panel.collapsed .content {
       display: none;
     }
@@ -2884,15 +2897,19 @@ class HostController {
       for (const hz of HAND_ZONES){
         const r = rects[hz.key];
         if (!r) continue;
+    
         const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
         if (!inRect) continue;
-
-        const ownerPlayer = (st.players||[]).find(pp => pp && pp.seat === hz.seat);
-        if (!ownerPlayer) return { zone: ZONES.table, owner: null };
+    
+        const ownerPlayer = st.players.find(pp => pp.seat === hz.seat);
+        if (!ownerPlayer){
+          return { zone: ZONES.table, owner: null };
+        }
         return { zone: ZONES.hand, owner: ownerPlayer.id };
       }
       return { zone: ZONES.table, owner: null };
     }
+
 
     const seatToHandKey = (seat) => {
       switch (seat){
@@ -2918,22 +2935,24 @@ class HostController {
           detachFromStack(id);
 
           const z = normalizeCardZoneFromPos(x, y);
-          c.x = x; c.y = y;
-          c.zone = z.zone;
-
-          if (z.zone === ZONES.hand){
-            const handOwner = z.owner ?? null;
-            if (!handOwner){
-              c.zone = ZONES.table;
+            c.x = x; c.y = y;
+            c.zone = z.zone;
+            
+            if (z.zone === ZONES.hand){
+              const handOwner = z.owner ?? null;
+              if (!handOwner){
+                c.zone = ZONES.table;
+                c.owner = null;
+              } else {
+                // ✅ đổi chủ theo hand đích
+                c.owner = handOwner;
+                c.ownerId = handOwner;
+              }
+            } else {
               c.owner = null;
-            }else{
-              c.owner = handOwner;
-              c.ownerId = handOwner;
             }
-          }else{
-            c.owner = null;
-          }
-          c.stackId = null;
+            // ✅ tuyệt đối không đụng c.faceUp
+            c.stackId = null;
         }
 
         if (targetType === "stack") {
@@ -2943,28 +2962,40 @@ class HostController {
           if (!canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
 
           const z = normalizeCardZoneFromPos(x, y);
-
-          s.x = x;
-          s.y = y;
-
-          const handOwner = (z.zone === ZONES.hand) ? (z.owner ?? null) : null;
-          if (z.zone === ZONES.hand && !handOwner) {
+          
+          s.x = x; s.y = y;
+          
+          if (z.zone === ZONES.hand){
+            const handOwner = z.owner ?? null;
+            if (!handOwner){
+              s.zone = ZONES.table;
+              s.owner = null;
+            } else {
+              s.zone = ZONES.hand;
+              s.owner = handOwner; // ✅ đổi chủ stack theo hand đích
+            }
+          } else {
             s.zone = ZONES.table;
             s.owner = null;
-          } else {
-            s.zone = z.zone;
-            s.owner = handOwner;
           }
-
+          
+          // sync cards (KHÔNG flip)
           for (const cid of (s.cardIds || [])) {
             const c = ensureCard(cid);
             if (!c) continue;
-
+          
             c.x = s.x;
             c.y = s.y;
             c.zone = s.zone;
-            c.owner = (s.zone === ZONES.hand) ? (s.owner ?? null) : null;
-            if (s.zone === ZONES.hand && s.owner) c.ownerId = s.owner;
+          
+            if (s.zone === ZONES.hand && s.owner){
+              c.owner = s.owner;
+              c.ownerId = s.owner;
+            } else {
+              c.owner = null;
+            }
+          
+            // ✅ không đụng c.faceUp
           }
         }
 
