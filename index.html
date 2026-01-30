@@ -1317,7 +1317,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
                   <input placeholder="Tìm phòng, ví dụ: ROOM42" maxlength="18" /> 
                 </div>
                 <div style="width: 30%; display: flex; flex-direction: row; height: 100%; justify-content: flex-end;">
-                  <button class="secondary">Tạo phòng</button>
+                  <button class="secondary" id="openCreateRoomBtn">Tạo phòng</button>
                 </div>
               </div>
               <!-- list -->
@@ -3519,8 +3519,36 @@ function resetClientSession(){
 }
 
 /* =========================================================
-   12) Room: Firebase create/join/leave (Firebase-only)
+   12) Room: Firebase create/join/leave
 ========================================================= */
+//Mở popup tạo phòng
+function toggleCreateRoomPopup(force){
+  const popup = document.getElementById("popupCreateRoom");
+  if (!popup) return;
+
+  // nếu truyền true / false thì set cứng
+  if (typeof force === "boolean"){
+    popup.style.display = force ? "flex" : "none";
+    return;
+  }
+
+  // toggle
+  const isOpen = popup.style.display === "flex";
+  popup.style.display = isOpen ? "none" : "flex";
+}
+
+const openCreateRoomBtn = document.getElementById("openCreateRoomBtn");
+if (openCreateRoomBtn){
+  openCreateRoomBtn.addEventListener("click", ()=>{
+    toggleCreateRoomPopup(true); // mở
+  });
+}
+
+function closePopUpCreateRoom(){ document.getElementById("popupCreateRoom").style.display = "none"; }
+closeCreateRoomBtn.addEventListener("click", ()=>{
+    closePopUpCreateRoom();
+});
+  
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
@@ -4993,7 +5021,7 @@ if (leaveMatchBtn){
   dockRoomBtn?.addEventListener("click", ()=> showTab("tabRoom"));
   dockBrowserBtn?.addEventListener("click", ()=> showTab("tabRoomBrowser"));
   dockDeckBtn?.addEventListener("click", ()=> openDeckBtn?.click());
-
+  
   dockCopyBtn?.addEventListener("click", ()=> copyLinkBtn?.click());
   dockResetBtn?.addEventListener("click", ()=> resetBtn?.click());
   dockJoinBtn?.addEventListener("click", ()=> joinBtn?.click());
