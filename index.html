@@ -3051,32 +3051,94 @@ class HostController {
       }
 
       case "draw": {
-        const p = (st.players||[]).find(pp=>pp && pp.id===fromId);
-        if (!p) return { ok:false, reason:"No player" };
-
-        const handKey = seatToHandKey(p.seat);
-        const handRect = rects[handKey];
-        if (!handRect) return { ok:false, reason:"No hand zone" };
-
-        const deck = st.stacks?.["stack_deck"];
-        if (!deck || (deck.cardIds?.length||0) === 0) return { ok:false, reason:"Deck empty" };
-
-        const cid = deck.cardIds.shift();
-        const c = ensureCard(cid);
-        if (!c) return { ok:false, reason:"Card missing" };
-
-        c.zone = ZONES.hand;
-        c.owner = fromId;
-        c.ownerId = fromId;
-        c.faceUp = true;
-        c.x = handRect.x + handRect.w/2 + randInt(-60,60);
-        c.y = handRect.y + handRect.h/2 + randInt(-20,20);
-        c.stackId = null;
-        c.tintOwner = fromId;
-
-        this.bumpVersion();
-        return { ok:true };
+        const { stackId, count = 1, random = true } = intent || {};
+        if (!stackId) return;
+      
+        const deck = state.stacks?.[stackId] || state.stackById?.[stackId];
+        if (!deck) return;
+      
+        // chỉ xử lý nếu đúng deck
+        if (!(deck.kind==="deck" || deck.zone==="deck" || deck.isDeck===true)) return;
+      
+        deck.cardIds = Array.isArray(deck.cardIds) ? deck.cardIds : [];
+        if (deck.cardIds.length === 0) return;
+      
+        const n = Math.max(1, Math.min(50, count|0));
+      
+        // đảm bảo hand stack của người rút (tuỳ schema bạn)
+        const hand = ensureHandStack(state, actorId); // bạn đã/hoặc sẽ có hàm này
+        hand.cardIds = Array.isArray(hand.cardIds) ? hand.cardIds : [];
+      
+        for (let i = 0; i < n; i++) {
+          if (deck.cardIds.length === 0) break;
+      
+          let pickIndex = deck.cardIds.length - 1; // default top
+          if (random) pickIndex = Math.floor(Math.random() * deck.cardIds.length);
+      
+          const [cid] = deck.cardIds.splice(pickIndex, 1); // ✅ deck mất lá ngay
+          if (!cid) break;
+      
+          const c = state.cards?.[cid];
+          if (c) {
+            c.zone = "hand";
+            c.owner = actorId;
+            c.stackId = hand.id;
+            // tuỳ bạn muốn rút úp/ngửa:
+            // c.faceUp = false;
+          }
+          hand.cardIds.push(cid);
+        }
+      
+        bumpVersion();
+        return;
       }
+
+      case "delete": {
+        // ✅ chỉ host mới được xóa hẳn khỏi game
+        if (actorId !== state.hostId) return;
+      
+        const { targetType, id } = intent || {};
+        if (!targetType || !id) return;
+      
+        if (targetType === "card") {
+          // xóa card khỏi state.cards
+          if (state.cards?.[id]) delete state.cards[id];
+      
+          // xóa card khỏi mọi stack.cardIds
+          const stacks = state.stacks || state.stackById || {};
+          Object.values(stacks).forEach(stk => {
+            if (!stk?.cardIds) return;
+            const idx = stk.cardIds.indexOf(id);
+            if (idx >= 0) stk.cardIds.splice(idx, 1);
+          });
+      
+          bumpVersion();
+          return;
+        }
+      
+        if (targetType === "stack") {
+          const stacks = state.stacks || state.stackById || {};
+          const stk = stacks[id];
+          if (!stk) return;
+      
+          // chọn 1 trong 2 cách:
+          // (A) Xóa stack và xóa luôn tất cả card trong stack
+          if (Array.isArray(stk.cardIds)) {
+            stk.cardIds.forEach(cid => {
+              if (state.cards?.[cid]) delete state.cards[cid];
+            });
+          }
+          delete stacks[id];
+      
+          bumpVersion();
+          return;
+      
+          // (B) Nếu bạn muốn xóa stack nhưng "thả" card ra table thì nói mình, mình đổi.
+        }
+      
+        return;
+      }
+
 
       case "discard": {
         const {targetType, id} = action;
@@ -4296,25 +4358,6 @@ addEventListener("mouseup", (ev)=>{
 /* =========================================================
    17) Keyboard + Inspector buttons (nút bấm, tương tác)
 ========================================================= */
-if (INS.btnFlip) INS.btnFlip.onclick = ()=>{
-  if (!client.selected) return;
-  sendIntent({type:"flip", targetType: client.selected.type, id: client.selected.id});
-};
-if (INS.btnDiscard) INS.btnDiscard.onclick = ()=>{
-  if (!client.selected) return;
-  sendIntent({type:"discard", targetType: client.selected.type, id: client.selected.id});
-};
-if (INS.btnUnstack) INS.btnUnstack.onclick = ()=>{
-  const sel = client.selected;
-  if (!sel || sel.type!=="stack") return;
-  sendIntent({type:"unstack", stackId: sel.id});
-};
-if (INS.btnShuffle) INS.btnShuffle.onclick = ()=>{
-  const sel = client.selected;
-  if (sel?.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
-  else sendIntent({type:"shuffle", stackId:"stack_deck"});
-};
-
 addEventListener("keydown", (ev)=>{
   if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
 
@@ -4322,34 +4365,102 @@ addEventListener("keydown", (ev)=>{
   if (!st) return;
 
   const key = ev.key.toLowerCase();
+
+  // helper: lấy deck stack id từ selection (ưu tiên stack đang chọn)
+  const getSelectedDeckStackId = ()=>{
+    const sel = client.selected;
+
+    // 1) Nếu đang select stack => dùng luôn stack đó (chỉ khi nó là deck)
+    if (sel?.type === "stack") {
+      const stack = st.stacks?.[sel.id] || st.stackById?.[sel.id];
+      if (stack && (stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true)) return sel.id;
+
+      // nếu bạn muốn: vẫn cho draw dù stack không gắn flag deck
+      // return sel.id;
+    }
+
+    // 2) Nếu đang select card và card thuộc stack nào đó
+    if (sel?.type === "card") {
+      const card = st.cards?.[sel.id];
+      if (card?.stackId) {
+        const stack = st.stacks?.[card.stackId] || st.stackById?.[card.stackId];
+        if (stack && (stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true)) return card.stackId;
+      }
+    }
+
+    // 3) fallback deck mặc định
+    if (st.stacks?.["stack_deck"] || st.stackById?.["stack_deck"]) return "stack_deck";
+
+    return null;
+  };
+
   if (key === "escape"){
     client.selected = null;
     hideInspectorPopup();
     updateInspector();
     return;
   }
-  if (key === "q"){
-    sendIntent({type:"draw"});
-    toast("Draw 1");
+
+  // ===== XÓA HẲN (host sẽ quyết định) =====
+  // Delete / Backspace / X => xóa card hoặc stack đang select khỏi game
+  if (key === "delete" || key === "backspace" || key === "x"){
+    const sel = client.selected;
+    if (!sel) return;
+
+    ev.preventDefault();
+    sendIntent({
+      type: "delete",
+      targetType: sel.type,
+      id: sel.id
+    });
+    toast("Delete selected");
     return;
   }
+
+  // ===== Q/W/E/R/T =====
+  // Q = draw 1 từ deck stack đang chọn
+  if (key === "q"){
+    const sel = client.selected;
+    if (!sel || sel.type !== "stack") return toast("Hãy chọn (select) một Deck trước");
+  
+    const stackId = sel.id;
+    const stack = st.stacks?.[stackId] || st.stackById?.[stackId];
+  
+    // chỉ cho rút nếu đúng deck
+    if (!stack || !(stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true)) {
+      return toast("Stack đang chọn không phải Deck");
+    }
+  
+    sendIntent({ type:"draw", stackId, count: 1, random: true });
+    toast("Draw 1 (random)");
+    return;
+  }
+
+
+  // W = flip entity đang chọn
   if (key === "w"){
     const sel = client.selected;
     if (!sel) return;
     sendIntent({type:"flip", targetType: sel.type, id: sel.id});
     return;
   }
+
+  // E = shuffle deck stack đang chọn (ưu tiên stack đang select)
   if (key === "e"){
-    const sel = client.selected;
-    if (sel && sel.type==="stack") sendIntent({type:"shuffle", stackId: sel.id});
-    else sendIntent({type:"shuffle", stackId:"stack_deck"});
+    const deckStackId = getSelectedDeckStackId();
+    if (!deckStackId) return;
+    sendIntent({type:"shuffle", stackId: deckStackId});
     return;
   }
+
+  // R = unstack stack đang chọn
   if (key === "r"){
     const sel = client.selected;
     if (sel && sel.type==="stack") sendIntent({type:"unstack", stackId: sel.id});
     return;
   }
+
+  // T = discard entity đang chọn
   if (key === "t"){
     const sel = client.selected;
     if (!sel) return;
@@ -4358,6 +4469,20 @@ addEventListener("keydown", (ev)=>{
   }
 });
 
+if (INS.btnShuffle) INS.btnShuffle.onclick = ()=>{
+  const st = getState();
+  const sel = client.selected;
+
+  const isDeck = (sid)=>{
+    const stack = st?.stacks?.[sid] || st?.stackById?.[sid];
+    return !!(stack && (stack.kind==="deck" || stack.zone==="deck" || stack.isDeck===true));
+  };
+
+  if (sel?.type==="stack" && isDeck(sel.id)) sendIntent({type:"shuffle", stackId: sel.id});
+  else sendIntent({type:"shuffle", stackId:"stack_deck"});
+};
+
+  
 /* =========================================================
    18) Rendering helpers + main loop
 ========================================================= */
