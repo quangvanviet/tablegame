@@ -3080,12 +3080,10 @@ class HostController {
         let dragCardIds = [];
         let dragStackId = null;
       
-        // 1) Xác định danh sách card đang kéo (giữ thứ tự top->bottom)
+        // 1) Drag list (top->bottom)
         if (dragTargetType === "card") {
           const c = ensureCard(dragId);
           if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
-      
-          // chặn kéo trực tiếp từ deck
           if (c.stackId === "stack_deck") return { ok:false, reason:"Use draw (Q) to take from deck" };
       
           dragCardIds = [dragId];
@@ -3099,7 +3097,7 @@ class HostController {
           dragStackId = s.id;
         }
       
-        // 2) Xác định dropStackId (stack nhận)
+        // 2) Resolve dropStackId
         let dropStackId = null;
       
         if (dropOnType === "card") {
@@ -3107,12 +3105,22 @@ class HostController {
           if (!c2) return { ok:false, reason:"Missing drop card" };
           if (c2.stackId === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
       
-          // nếu card đích đang rời stack -> tạo stack mới từ card đích
+          // ⚠️ OPTIONAL: tránh stack vào HAND của người khác (nếu không muốn “tưởng bị úp” do privacy)
+          if (c2.zone === ZONES.hand && c2.owner && c2.owner !== fromId) {
+            return { ok:false, reason:"Cannot stack into other player's hand" };
+          }
+      
           dropStackId = c2.stackId || createStackFromCard(c2.id);
         } else {
           const s2 = ensureStack(dropOnId);
           if (!s2) return { ok:false, reason:"Missing drop stack" };
           if (s2.id === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
+      
+          // OPTIONAL guard tương tự cho stack ở hand người khác
+          if (s2.zone === ZONES.hand && s2.owner && s2.owner !== fromId) {
+            return { ok:false, reason:"Cannot stack into other player's hand" };
+          }
+      
           dropStackId = s2.id;
         }
       
@@ -3123,7 +3131,7 @@ class HostController {
         if (!dropStack) return { ok:false, reason:"Drop stack missing (race)" };
         if (!canInteractStack(dropStack, fromId)) return { ok:false, reason:"No access" };
       
-        // 3) Bóc nguồn
+        // 3) Detach source
         if (dragTargetType === "stack") {
           const s = ensureStack(dragId);
           if (s && s.id !== "stack_deck") delete st.stacks[s.id];
@@ -3131,16 +3139,17 @@ class HostController {
           detachFromStack(dragId);
         }
       
-        // 4) Attach lên TOP dropStack:
-        // "mới nhất ở trên cùng"
-        // dragCardIds là top->bottom => attach từ bottom->top để top của drag lên top
+        // 4) Attach lên TOP: "mới nhất ở trên"
+        // dragCardIds là top->bottom => attach từ bottom->top để top của drag nằm trên cùng
         for (let i = dragCardIds.length - 1; i >= 0; i--) {
           const cid = dragCardIds[i];
           attachToStackTop(cid, dropStackId);
-          // ✅ KHÔNG ĐỤNG c.faceUp: front/back giữ nguyên từng lá
+      
+          // ✅ QUAN TRỌNG: KHÔNG ĐỤNG c.faceUp => giữ nguyên front/back từng lá
+          // const c = ensureCard(cid); if (c) c.faceUp = c.faceUp;
         }
       
-        // 5) Chuẩn hoá zone/owner theo stack (logic privacy của bạn)
+        // 5) Sync zone/owner theo stack (không đổi faceUp)
         if (dropStack.zone === ZONES.hand) {
           dropStack.owner = dropStack.owner ?? null;
           if (!dropStack.owner) {
@@ -3158,11 +3167,10 @@ class HostController {
           c.x = dropStack.x;
           c.y = dropStack.y;
           c.zone = dropStack.zone;
-      
-          // hand privacy
           c.owner = (dropStack.zone === ZONES.hand) ? dropStack.owner : null;
+      
           if (dropStack.zone === ZONES.hand && dropStack.owner) {
-            c.ownerId = dropStack.owner; // tint theo chủ hand
+            c.ownerId = dropStack.owner;
           }
           // ✅ giữ nguyên c.faceUp
         }
@@ -4308,7 +4316,7 @@ function drawCardAtScreen(
   cx, cy,
   faceUp,
   frontSeed,
-  accent=null,         // màu chủ bài
+  accent=null,
   isSelected=false,
   isStackTop=false,
   stackCount=0,
@@ -4320,89 +4328,85 @@ function drawCardAtScreen(
   const x = cx - w/2, y = cy - h/2;
   const r = CARD.r * camera.scale;
 
-  // ✅ chỉ padding 1px như bạn muốn
   const pad = Math.max(1, 1 * camera.scale);
 
   ctx.save();
 
-  // ===== shadow nhẹ
-  ctx.globalAlpha = 0.28;
+  // shadow
+  ctx.globalAlpha = 0.30;
   rr(x+3*camera.scale, y+5*camera.scale, w, h, r);
   ctx.fillStyle = "rgba(0,0,0,.70)";
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // ===== nền card
+  // card base
   rr(x, y, w, h, r);
-  ctx.fillStyle = "rgba(10,12,18,.80)";
+  ctx.fillStyle = "rgba(10,12,18,.82)";
   ctx.fill();
 
-  // ===== border base
+  // image clip (full card, pad 1px)
+  const url = faceUp ? (frontUrl || "") : (backUrl || "");
+  const img = url ? loadImg(url) : null;
+
+  ctx.save();
+  rr(x+pad, y+pad, w-2*pad, h-2*pad, Math.max(1, r-pad));
+  ctx.clip();
+
+  if (img && img.complete && img.naturalWidth > 0){
+    // ✅ “fill” an toàn: dùng cover nhưng tính toán đơn giản
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const aw = w - 2*pad, ah = h - 2*pad;
+
+    const scale = Math.max(aw/iw, ah/ih);
+    const dw = iw * scale, dh = ih * scale;
+
+    const dx = x + pad + (aw - dw)/2;
+    const dy = y + pad + (ah - dh)/2;
+
+    ctx.drawImage(img, dx, dy, dw, dh);
+  } else {
+    // fallback
+    ctx.fillStyle = "rgba(233,236,255,.92)";
+    ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
+    const label = faceUp && frontSeed ? ("CARD " + String(frontSeed).padStart(2,"0")) : "BACK";
+    ctx.fillText(label, x + 10*camera.scale, y + 18*camera.scale);
+  }
+  ctx.restore();
+
+  // base border
   ctx.lineWidth = Math.max(1, 1.2 * camera.scale);
   ctx.strokeStyle = "rgba(255,255,255,.14)";
+  rr(x, y, w, h, r);
   ctx.stroke();
 
-  // ===== viền màu chủ (accent) + glow nhẹ
+  // ✅ owner border (viền màu)
   if (accent){
     ctx.save();
-    ctx.globalAlpha = 0.75;
-    ctx.lineWidth = Math.max(2, 2.2 * camera.scale);
+    ctx.globalAlpha = 0.78;
+    ctx.lineWidth = Math.max(2, 2.4 * camera.scale);
     ctx.strokeStyle = accent;
     rr(x, y, w, h, r);
     ctx.stroke();
 
-    // glow ngoài 1 chút (nhìn “xịn” hơn)
-    ctx.globalAlpha = 0.22;
-    ctx.lineWidth = Math.max(5, 5 * camera.scale);
+    ctx.globalAlpha = 0.18; // glow nhẹ
+    ctx.lineWidth = Math.max(6, 6 * camera.scale);
     rr(x, y, w, h, r);
     ctx.stroke();
     ctx.restore();
   }
 
-  // ===== selected outline ưu tiên hơn accent
+  // selected outline ưu tiên hơn
   if (isSelected){
     ctx.save();
     ctx.globalAlpha = 1;
-    ctx.lineWidth = Math.max(2, 2.6 * camera.scale);
+    ctx.lineWidth = Math.max(2, 2.8 * camera.scale);
     ctx.strokeStyle = "rgba(122,162,255,.95)";
     rr(x, y, w, h, r);
     ctx.stroke();
     ctx.restore();
   }
 
-  // ===== image full card (padding 1px)
-  const url = faceUp ? (frontUrl || "") : (backUrl || "");
-  const img = url ? loadImg(url) : null;
-
-  if (img && img.complete && img.naturalWidth > 0){
-    ctx.save();
-    rr(x+pad, y+pad, w-2*pad, h-2*pad, Math.max(1, r - pad));
-    ctx.clip();
-
-    // cover full (không méo, không viền dày)
-    const iw = img.naturalWidth, ih = img.naturalHeight;
-    const availW = (w - 2*pad);
-    const availH = (h - 2*pad);
-
-    // ✅ cover: lấp đầy, có thể crop nhẹ
-    const scale = Math.max(availW/iw, availH/ih);
-    const dw = iw * scale, dh = ih * scale;
-
-    const dx = x + pad + (availW - dw)/2;
-    const dy = y + pad + (availH - dh)/2;
-
-    ctx.globalAlpha = 1;
-    ctx.drawImage(img, dx, dy, dw, dh);
-    ctx.restore();
-  } else {
-    // fallback text
-    ctx.fillStyle = "rgba(233,236,255,.90)";
-    ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
-    const label = faceUp && frontSeed ? ("CARD " + String(frontSeed).padStart(2,"0")) : "BACK";
-    ctx.fillText(label, x + 10*camera.scale, y + 18*camera.scale);
-  }
-
-  // ===== badge stack count (nếu là top stack)
+  // stack count badge
   if (isStackTop && stackCount > 1){
     ctx.save();
     ctx.globalAlpha = 0.92;
@@ -4422,6 +4426,7 @@ function drawCardAtScreen(
 
   ctx.restore();
 }
+
 
 function draw(){
   ctx.clearRect(0,0,innerWidth,innerHeight);
