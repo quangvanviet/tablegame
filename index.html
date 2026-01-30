@@ -1907,13 +1907,20 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 <!-- KHU VỰC POPUP --------------------------------------------------------------------------------------------->
 <div style="">
   <!-- POPUP Tạo phòng -->
-  <div id="popupCreateRoom" style="display: none;">
-    <div class="content col"> 
+  <div id="popupCreateRoom" class="modal" style="display: none;">
+    <div class="modal-card content col"> 
+      <header style="padding: 10px 12px;background: linear-gradient(180deg, rgba(255,255,255,.05), transparent);
+            border-bottom: 1px solid rgba(255,255,255,.06);display: flex;align-items: center;justify-content: space-between;
+            gap: 10px;border-radius: 15px;">
+            <div class="title">Tạo phòng</div>
+            <button id="closeCreateRoomBtn" class="collapse-btn">×</button>
+        </header>
+      
       <div class="col"> 
         <div class="row"> 
           <div class="col" style="flex:1; min-width:150px"> 
-            <label>Tên hiển thị</label> 
-            <input id="nameInput" placeholder="VD: HIC / Player" maxlength="18" /> 
+            <label>Tên phòng</label> 
+            <input id="nameInput" placeholder="VD: Phòng 1" maxlength="38" /> 
           </div> <div class="col" style="min-width:120px"> 
             <label>Chế độ</label> 
             <select id="modeSelect"> 
