@@ -4308,7 +4308,7 @@ function drawCardAtScreen(
   cx, cy,
   faceUp,
   frontSeed,
-  accent=null,
+  accent=null,         // màu chủ bài
   isSelected=false,
   isStackTop=false,
   stackCount=0,
@@ -4320,70 +4320,104 @@ function drawCardAtScreen(
   const x = cx - w/2, y = cy - h/2;
   const r = CARD.r * camera.scale;
 
+  // ✅ chỉ padding 1px như bạn muốn
+  const pad = Math.max(1, 1 * camera.scale);
+
   ctx.save();
 
-  ctx.globalAlpha = 0.35;
-  rr(x+4, y+6, w, h, r);
-  ctx.fillStyle = "rgba(0,0,0,.65)";
+  // ===== shadow nhẹ
+  ctx.globalAlpha = 0.28;
+  rr(x+3*camera.scale, y+5*camera.scale, w, h, r);
+  ctx.fillStyle = "rgba(0,0,0,.70)";
   ctx.fill();
   ctx.globalAlpha = 1;
 
+  // ===== nền card
   rr(x, y, w, h, r);
-  ctx.fillStyle = faceUp ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.20)";
+  ctx.fillStyle = "rgba(10,12,18,.80)";
   ctx.fill();
-  ctx.strokeStyle = isSelected ? "rgba(122,162,255,.85)" : "rgba(255,255,255,.14)";
-  ctx.lineWidth = isSelected ? 2 : 1;
+
+  // ===== border base
+  ctx.lineWidth = Math.max(1, 1.2 * camera.scale);
+  ctx.strokeStyle = "rgba(255,255,255,.14)";
   ctx.stroke();
 
+  // ===== viền màu chủ (accent) + glow nhẹ
   if (accent){
+    ctx.save();
     ctx.globalAlpha = 0.75;
-    rr(x+8, y+8, w-16, 14*camera.scale, 9*camera.scale);
-    ctx.fillStyle = accent;
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.lineWidth = Math.max(2, 2.2 * camera.scale);
+    ctx.strokeStyle = accent;
+    rr(x, y, w, h, r);
+    ctx.stroke();
+
+    // glow ngoài 1 chút (nhìn “xịn” hơn)
+    ctx.globalAlpha = 0.22;
+    ctx.lineWidth = Math.max(5, 5 * camera.scale);
+    rr(x, y, w, h, r);
+    ctx.stroke();
+    ctx.restore();
   }
 
+  // ===== selected outline ưu tiên hơn accent
+  if (isSelected){
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = Math.max(2, 2.6 * camera.scale);
+    ctx.strokeStyle = "rgba(122,162,255,.95)";
+    rr(x, y, w, h, r);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ===== image full card (padding 1px)
   const url = faceUp ? (frontUrl || "") : (backUrl || "");
   const img = url ? loadImg(url) : null;
 
   if (img && img.complete && img.naturalWidth > 0){
-    const padX = 6*camera.scale;
-    const topPad = 28*camera.scale;
-    const botPad = 10*camera.scale;
-    rr(x+padX, y+topPad, w-2*padX, h-topPad-botPad, 10*camera.scale);
+    ctx.save();
+    rr(x+pad, y+pad, w-2*pad, h-2*pad, Math.max(1, r - pad));
     ctx.clip();
-    ctx.globalAlpha = 0.95;
 
+    // cover full (không méo, không viền dày)
     const iw = img.naturalWidth, ih = img.naturalHeight;
-    const availW = w-2*padX;
-    const availH = h-topPad-botPad;
-    const scale = Math.min(availW/iw, availH/ih);
-    const dw = iw*scale, dh = ih*scale;
+    const availW = (w - 2*pad);
+    const availH = (h - 2*pad);
 
-    ctx.drawImage(img, x + (w-dw)/2, y + topPad + (availH-dh)/2, dw, dh);
+    // ✅ cover: lấp đầy, có thể crop nhẹ
+    const scale = Math.max(availW/iw, availH/ih);
+    const dw = iw * scale, dh = ih * scale;
+
+    const dx = x + pad + (availW - dw)/2;
+    const dy = y + pad + (availH - dh)/2;
+
     ctx.globalAlpha = 1;
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
   } else {
-    ctx.fillStyle = "rgba(233,236,255,.9)";
+    // fallback text
+    ctx.fillStyle = "rgba(233,236,255,.90)";
     ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
-    if (faceUp && frontSeed){
-      const n = String(frontSeed).padStart(2,"0");
-      ctx.fillText("CARD " + n, x + 12*camera.scale, y + 34*camera.scale);
-    } else {
-      ctx.fillText("BACK", x + 12*camera.scale, y + 34*camera.scale);
-    }
+    const label = faceUp && frontSeed ? ("CARD " + String(frontSeed).padStart(2,"0")) : "BACK";
+    ctx.fillText(label, x + 10*camera.scale, y + 18*camera.scale);
   }
 
-  if (isStackTop && stackCount>1){
-    ctx.globalAlpha = 0.95;
-    rr(x+w-34*camera.scale, y+10*camera.scale, 24*camera.scale, 18*camera.scale, 8*camera.scale);
-    ctx.fillStyle = "rgba(0,0,0,.35)";
+  // ===== badge stack count (nếu là top stack)
+  if (isStackTop && stackCount > 1){
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    const bw = 26*camera.scale, bh = 18*camera.scale;
+    rr(x + w - bw - 8*camera.scale, y + 8*camera.scale, bw, bh, 7*camera.scale);
+    ctx.fillStyle = "rgba(0,0,0,.45)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.14)";
+    ctx.strokeStyle = "rgba(255,255,255,.16)";
+    ctx.lineWidth = Math.max(1, 1*camera.scale);
     ctx.stroke();
-    ctx.fillStyle = "rgba(233,236,255,.86)";
+
+    ctx.fillStyle = "rgba(233,236,255,.92)";
     ctx.font = `${Math.max(10, 11*camera.scale)}px ui-monospace, monospace`;
-    ctx.fillText(String(stackCount), x+w-28*camera.scale, y+24*camera.scale);
-    ctx.globalAlpha = 1;
+    ctx.fillText(String(stackCount), x + w - bw - 2*camera.scale, y + 21*camera.scale);
+    ctx.restore();
   }
 
   ctx.restore();
