@@ -5121,10 +5121,9 @@ if (leaveMatchBtn){
   });
 
   // mirror: Inventory buttons call existing ids (no change to your logic)
-  const invOpen = document.getElementById("invOpenDeckBtn");
   const openDeckBtn = document.getElementById("openDeckBtn");
-  if(invOpen && openDeckBtn){
-    invOpen.addEventListener("click", ()=> openDeckBtn.click());
+  if(openDeckBtn){
+    openDeckBtn.addEventListener("click", ()=> openDeckBtn.click());
   }
 
   const invApply = document.getElementById("invApplyDeckBtn");
