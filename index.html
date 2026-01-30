@@ -2531,7 +2531,7 @@ class FirebaseTransport extends NetTransport {
   constructor(roomId){
     super();
     if (!roomId) throw new Error("Missing roomId");
-    if (!window.FB?.db) throw new Error("FB.db missing (call fbEnsureAuth first)");
+    if (!FB?.db) throw new Error("FB.db missing");
 
     this.roomId = roomId;
 
@@ -3286,38 +3286,46 @@ const firebaseConfig = {
   measurementId: "G-KHWGKGT3GE"
 };
 
-let FB = { app:null, auth:null, db:null, user:null, uid:null, username:null };
+window.FB = window.FB || { app:null, auth:null, db:null, user:null, uid:null, username:null };
+const FB = window.FB;
 
 function fbInitOnce(){
-  if (FB.app) return;
-  FB.app = firebase.initializeApp(firebaseConfig);
+  if (FB.app && FB.auth && FB.db) return;
+
+  FB.app  = firebase.apps?.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
   FB.auth = firebase.auth();
-  FB.db = firebase.database();
+  FB.db   = firebase.database();
 }
 
+// đảm bảo đã login (anon/email) + có profile AllUser
 async function fbEnsureAuth(){
   fbInitOnce();
 
-  if (!FB.auth.currentUser) await FB.auth.signInAnonymously();
+  // nếu chưa login gì cả -> signInAnonymously (chỉ để có uid/db)
+  if (!FB.auth.currentUser){
+    await FB.auth.signInAnonymously();
+  }
 
   FB.user = FB.auth.currentUser;
-  FB.uid = FB.user.uid;
+  FB.uid  = FB.user.uid;
 
-  // ưu tiên nameInput (lobby), nếu rỗng fallback
-  FB.username = ((UI.nameInput?.value || "").trim().slice(0,18)) || "Player";
+  // ưu tiên UI.nameInput nếu có
+  FB.username = ((UI.nameInput?.value || FB.username || "").trim().slice(0,18)) || "Player";
 
   const uref = FB.db.ref(`AllUser/${FB.uid}`);
   const snap = await uref.get();
-
   if (!snap.exists()){
     await uref.set({ username: FB.username, createdAt: Date.now(), setCard:{} });
   }else{
     const cur = snap.val() || {};
-    const patch = {};
-    if ((cur.username||"") !== FB.username) patch.username = FB.username;
-    if (!cur.setCard) patch.setCard = {};
-    if (Object.keys(patch).length) await uref.update(patch);
+    const upd = {};
+    if ((cur.username||"") !== FB.username) upd.username = FB.username;
+    if (!cur.setCard) upd.setCard = {};
+    if (Object.keys(upd).length) await uref.update(upd);
   }
+
+  // ✅ đảm bảo luôn có db
+  if (!FB.db) throw new Error("FB.db still missing after fbInitOnce()");
 }
 
 async function fbAllocateRoomNo(){
@@ -3550,9 +3558,9 @@ closeCreateRoomBtn.addEventListener("click", ()=>{
 });
   
 async function createRoomAsHost_Firebase(){
-  await fbEnsureAuth();
+  await fbEnsureAuth();              // ✅ PHẢI CÓ TRƯỚC
+  if (!FB.db) throw new Error("FB.db missing (ensureAuth failed)");
 
-  // self id/name từ Firebase
   client.selfId = FB.uid;
   client.selfName = FB.username;
 
