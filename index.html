@@ -388,8 +388,7 @@
       z-index:30;
       display:none;
       pointer-events:auto;
-      width: 280px;
-      max-width: min(320px, 40vw);
+      width: 50vh;
     }
     
     #inspector .panel{
@@ -1849,17 +1848,8 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <!-- Inspector -->
     <div id="inspector">
       <div class="panel" style="height:100%; display:flex; flex-direction:column;">
-        <header>
-          <div class="title">CARD INSPECTOR</div>
-          <div class="badge" id="insBadge">—</div>
-        </header>
-
-        <div class="content" style="display:flex; flex-direction:column; gap:10px; height:100%;">
+        <div class="content" style="display:flex; flex-direction:column; gap:3px; height:100%; padding: 5px">
           <div id="insPreview" style="
-            flex:1;
-            border:1px solid rgba(255,255,255,.12);
-            border-radius: 14px;
-            background: rgba(0,0,0,.18);
             display:flex; align-items:center; justify-content:center;
             overflow:hidden;
           ">
