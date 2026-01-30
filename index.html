@@ -2668,32 +2668,6 @@ function makeFreshTableState(roomCode, hostId){
     ui: { statHeaders:["ATK","DEF","HP","COIN"], statsByPlayer:{} },
   };
 
-  const rects = zoneRects();
-
-  // tạo 1 stack table container (không bắt buộc, nhưng tiện)
-  const tableStackId = "stack_table";
-  st.stacks[tableStackId] = {
-    id: tableStackId,
-    zone: ZONES.table,
-    ownerId: null,
-    x: rects.table.x + rects.table.w/2,
-    y: rects.table.y + rects.table.h/2,
-    cardIds: []
-  };
-  st.all.onTable["main"] = { stackId: tableStackId };
-
-  // discard container
-  const discardStackId = "stack_discard";
-  st.stacks[discardStackId] = {
-    id: discardStackId,
-    zone: ZONES.discard,
-    ownerId: null,
-    x: rects.discard.x + rects.discard.w/2,
-    y: rects.discard.y + rects.discard.h/2,
-    cardIds: []
-  };
-  st.all.onDiscard["main"] = { stackId: discardStackId };
-
   return st;
 }
   
