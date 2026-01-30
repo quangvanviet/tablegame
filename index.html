@@ -2792,7 +2792,6 @@ const ensureUIState = (st) => {
   st.ui.statsByPlayer = st.ui.statsByPlayer || {};
 };
 
-const actorId = intent?.actorId || intent?.by || intent?.uid || intent?.playerId || intent?.clientId;
 class HostController {
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
@@ -2831,6 +2830,8 @@ class HostController {
   }
 
   applyIntent(fromId, action){
+
+    const actorId = intent?.actorId || intent?.by || intent?.uid || intent?.playerId || intent?.clientId;
     const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, this.hostId);
     ensureUIState(st);
 
