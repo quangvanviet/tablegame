@@ -2799,86 +2799,133 @@ class HostController {
     this.state = makeFreshTableState(roomCode, hostId);
   }
 
-  bumpVersion(){ this.state.version = (this.state.version||0) + 1; }
+  bumpVersion(){
+    this.state.version = (this.state.version || 0) + 1;
+  }
 
-  addOrUpdatePlayer({id,name}){
+  addOrUpdatePlayer({id, name}){
     if (!Array.isArray(this.state.players)) this.state.players = [];
 
-    let p = this.state.players.find(x=>x && x.id===id);
+    let p = this.state.players.find(x => x && x.id === id);
     if (!p){
-      // ✅ 4 players max
-      if (this.state.players.length >= 4) return {ok:false, reason:"Room full"};
+      if (this.state.players.length >= 4) return { ok:false, reason:"Room full" };
 
       const used = new Set(this.state.players.map(x=>x?.color).filter(Boolean));
       const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % COLOR_ORDER.length];
       const seat = this.state.players.length; // 0..3
-      p = {id, name: name || "Player", color, seat, connectedAt: now()};
+      p = { id, name: name || "Player", color, seat, connectedAt: now() };
       this.state.players.push(p);
 
       ensureUIState(this.state);
       if (!this.state.ui.statsByPlayer[p.id]) this.state.ui.statsByPlayer[p.id] = ["","","",""];
-    }else{
+    } else {
       p.name = name || p.name;
     }
+
     this.bumpVersion();
-    return {ok:true, player:p};
+    return { ok:true, player:p };
   }
 
   removePlayer(id){
-    this.state.players = (this.state.players||[]).filter(p=>p && p.id!==id);
+    this.state.players = (this.state.players || []).filter(p => p && p.id !== id);
     this.bumpVersion();
   }
 
-  applyIntent(fromId, action){
-
+  // ==============================
+  // Helpers (tách ra để dễ bảo trì)
+  // ==============================
+  _ensureState(){
     const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, this.hostId);
     ensureUIState(st);
 
-    const player = (st.players||[]).find(p=>p && p.id===fromId);
-    if (!player && action?.type !== "join") return {ok:false, reason:"Not in room"};
+    // đảm bảo shape tối thiểu
+    st.all = st.all || {};
+    st.all.cards = st.all.cards || {};
+    st.stacks = st.stacks || {};
+
+    return st;
+  }
+
+  _ensureCard(st, id){
+    return (st.all?.cards?.[id]) || (st.cards?.[id]) || null; // tương thích nếu bạn còn st.cards
+  }
+
+  _ensureStack(st, id){
+    return st.stacks?.[id] || null;
+  }
+
+  _removeCardEverywhere(st, cardId){
+    // xóa khỏi all.cards (nguồn chính)
+    if (st.all?.cards?.[cardId]) delete st.all.cards[cardId];
+    // tương thích cũ
+    if (st.cards?.[cardId]) delete st.cards[cardId];
+
+    // xóa khỏi mọi stack.cardIds
+    Object.values(st.stacks || {}).forEach(ss=>{
+      if (!ss?.cardIds) return;
+      const idx = ss.cardIds.indexOf(cardId);
+      if (idx >= 0) ss.cardIds.splice(idx, 1);
+    });
+  }
+
+  _deleteStackHard(st, stackId){
+    const ss = this._ensureStack(st, stackId);
+    if (!ss) return;
+
+    // xóa toàn bộ card trong stack
+    const ids = Array.isArray(ss.cardIds) ? ss.cardIds.slice() : [];
+    for (const cid of ids) this._removeCardEverywhere(st, cid);
+
+    delete st.stacks[stackId];
+  }
+
+  _detachFromStack(st, cardId){
+    const c = this._ensureCard(st, cardId);
+    if (!c || !c.stackId) return;
+
+    const ss = this._ensureStack(st, c.stackId);
+    if (!ss) { c.stackId = null; return; }
+
+    ss.cardIds = (ss.cardIds || []).filter(id => id !== cardId);
+    c.stackId = null;
+
+    // xóa stack rỗng (trừ stack hệ thống nếu bạn muốn giữ)
+    if ((ss.cardIds?.length || 0) === 0 && ss.id !== "stack_deck" && ss.id !== "stack_table" && ss.id !== "stack_discard"){
+      delete st.stacks[ss.id];
+    }
+  }
+
+  _createStackFromCard(st, cardId){
+    const c = this._ensureCard(st, cardId);
+    if (!c) return null;
+
+    const sid = "stack_" + uid().slice(0,8);
+    const zone = c.zone ?? ZONES.table;
+    const owner = (zone === ZONES.hand) ? (c.ownerId ?? c.owner ?? null) : null;
+
+    st.stacks[sid] = { id:sid, zone, owner, x:c.x, y:c.y, cardIds:[cardId] };
+    c.stackId = sid;
+    return sid;
+  }
+
+  _seatToHandKey(seat){
+    switch (seat){
+      case 0: return "handTopLeft";
+      case 1: return "handBottomLeft";
+      case 2: return "handTopRight";
+      case 3: return "handBottomRight";
+      default: return null;
+    }
+  }
+
+  applyIntent(fromId, action){
+    const st = this._ensureState();
+
+    // chỉ allow nếu đã join (trừ action join)
+    const player = (st.players || []).find(p => p && p.id === fromId);
+    if (!player && action?.type !== "join") return { ok:false, reason:"Not in room" };
 
     const rects = zoneRects();
-
-    const ensureCard = (id) => st.cards?.[id];
-    const ensureStack = (id) => st.stacks?.[id];
-
-    const detachFromStack = (cardId) => {
-      const c = ensureCard(cardId);
-      if (!c || !c.stackId) return;
-      const stack = ensureStack(c.stackId);
-      if (!stack) { c.stackId = null; return; }
-      stack.cardIds = (stack.cardIds||[]).filter(id=>id!==cardId);
-      c.stackId = null;
-      if ((stack.cardIds?.length||0) === 0 && stack.id !== "stack_deck"){
-        delete st.stacks[stack.id];
-      }
-    };
-
-    const attachToStackTop = (cardId, stackId) => {
-      const c = ensureCard(cardId);
-      const stack = ensureStack(stackId);
-      if (!c || !stack) return;
-      detachFromStack(cardId);
-      c.stackId = stackId;
-      c.zone = stack.zone;
-      c.owner = (stack.zone === ZONES.hand) ? (stack.owner ?? null) : null;
-      c.x = stack.x; c.y = stack.y;
-      stack.cardIds = stack.cardIds || [];
-      stack.cardIds.unshift(cardId);
-    };
-
-    const createStackFromCard = (cardId) => {
-      const c = ensureCard(cardId);
-      if (!c) return null;
-
-      const sid = "stack_" + uid().slice(0,8);
-      const zone = c.zone ?? ZONES.table;
-      const owner = (zone === ZONES.hand) ? (c.ownerId ?? c.owner ?? null) : null;
-
-      st.stacks[sid] = { id:sid, zone, owner, x:c.x, y:c.y, cardIds:[cardId] };
-      c.stackId = sid;
-      return sid;
-    };
 
     // ✅ 4 hand zones mapping đúng 4 người
     const HAND_ZONES = [
@@ -2888,492 +2935,416 @@ class HostController {
       { key: "handBottomRight", seat: 3 },
     ];
 
-    function normalizeCardZoneFromPos(x, y){
+    const normalizeCardZoneFromPos = (x, y) => {
       for (const hz of HAND_ZONES){
         const r = rects[hz.key];
         if (!r) continue;
-    
+
         const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
         if (!inRect) continue;
-    
-        const ownerPlayer = st.players.find(pp => pp.seat === hz.seat);
-        if (!ownerPlayer){
-          return { zone: ZONES.table, owner: null };
-        }
+
+        const ownerPlayer = st.players.find(pp => pp && pp.seat === hz.seat);
+        if (!ownerPlayer) return { zone: ZONES.table, owner: null };
+
         return { zone: ZONES.hand, owner: ownerPlayer.id };
       }
       return { zone: ZONES.table, owner: null };
-    }
-
-
-    const seatToHandKey = (seat) => {
-      switch (seat){
-        case 0: return "handTopLeft";
-        case 1: return "handBottomLeft";
-        case 2: return "handTopRight";
-        case 3: return "handBottomRight";
-        default: return null;
-      }
     };
 
-    switch(action.type){
+    switch (action.type){
 
       case "move": {
-        const {targetType, id, x, y} = action;
+        const { targetType, id, x, y } = action;
 
         if (targetType === "card"){
-          const c = ensureCard(id);
-          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+          const c = this._ensureCard(st, id);
+          if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
+          if (c.stackId === "stack_deck") return { ok:false, reason:"Use draw to take from deck" };
 
-          if (c.stackId === "stack_deck") return {ok:false, reason:"Use draw (D) to take from deck"};
-
-          detachFromStack(id);
-
-          const z = normalizeCardZoneFromPos(x, y);
-            c.x = x; c.y = y;
-            c.zone = z.zone;
-            
-            if (z.zone === ZONES.hand){
-              const handOwner = z.owner ?? null;
-              if (!handOwner){
-                c.zone = ZONES.table;
-                c.owner = null;
-              } else {
-                // ✅ đổi chủ theo hand đích
-                c.owner = handOwner;
-                c.ownerId = handOwner;
-              }
-            } else {
-              c.owner = null;
-            }
-            // ✅ tuyệt đối không đụng c.faceUp
-            c.stackId = null;
-        }
-
-        if (targetType === "stack") {
-          const s = ensureStack(id);
-          if (!s) return {ok:false, reason:"Missing stack"};
-          if (s.id === "stack_deck") return {ok:false, reason:"Deck fixed"};
-          if (!canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+          this._detachFromStack(st, id);
 
           const z = normalizeCardZoneFromPos(x, y);
-          
-          s.x = x; s.y = y;
-          
+          c.x = x; c.y = y;
+          c.zone = z.zone;
+
           if (z.zone === ZONES.hand){
             const handOwner = z.owner ?? null;
             if (!handOwner){
-              s.zone = ZONES.table;
-              s.owner = null;
+              c.zone = ZONES.table;
+              c.owner = null;
+              c.ownerId = null;
             } else {
-              s.zone = ZONES.hand;
-              s.owner = handOwner; // ✅ đổi chủ stack theo hand đích
+              c.owner = handOwner;
+              c.ownerId = handOwner;
             }
           } else {
-            s.zone = ZONES.table;
-            s.owner = null;
+            c.owner = null;
+            c.ownerId = null;
           }
-          
-          // sync cards (KHÔNG flip)
-          for (const cid of (s.cardIds || [])) {
-            const c = ensureCard(cid);
+
+          c.stackId = null;
+        }
+
+        if (targetType === "stack"){
+          const ss = this._ensureStack(st, id);
+          if (!ss) return { ok:false, reason:"Missing stack" };
+          if (ss.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
+          if (!canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
+
+          const z = normalizeCardZoneFromPos(x, y);
+          ss.x = x; ss.y = y;
+
+          if (z.zone === ZONES.hand){
+            const handOwner = z.owner ?? null;
+            if (!handOwner){
+              ss.zone = ZONES.table;
+              ss.owner = null;
+            } else {
+              ss.zone = ZONES.hand;
+              ss.owner = handOwner;
+            }
+          } else {
+            ss.zone = ZONES.table;
+            ss.owner = null;
+          }
+
+          // sync cards theo stack (KHÔNG flip)
+          for (const cid of (ss.cardIds || [])){
+            const c = this._ensureCard(st, cid);
             if (!c) continue;
-          
-            c.x = s.x;
-            c.y = s.y;
-            c.zone = s.zone;
-          
-            if (s.zone === ZONES.hand && s.owner){
-              c.owner = s.owner;
-              c.ownerId = s.owner;
+
+            c.x = ss.x;
+            c.y = ss.y;
+            c.zone = ss.zone;
+
+            if (ss.zone === ZONES.hand && ss.owner){
+              c.owner = ss.owner;
+              c.ownerId = ss.owner;
             } else {
               c.owner = null;
+              c.ownerId = null;
             }
-          
-            // ✅ không đụng c.faceUp
           }
         }
 
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "flip": {
-        const {targetType, id} = action;
+        const { targetType, id } = action;
 
         if (targetType === "card"){
-          const c = ensureCard(id);
-          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+          const c = this._ensureCard(st, id);
+          if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
           c.faceUp = !c.faceUp;
         } else {
-          const s = ensureStack(id);
-          if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
-          const topId = s.cardIds?.[0];
+          const ss = this._ensureStack(st, id);
+          if (!ss || !canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
+          const topId = ss.cardIds?.[0];
           if (topId){
-            const c = ensureCard(topId);
+            const c = this._ensureCard(st, topId);
             if (c) c.faceUp = !c.faceUp;
           }
         }
 
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "shuffle": {
-        const {stackId} = action;
-        const s = ensureStack(stackId);
-        if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+        const { stackId } = action;
+        const ss = this._ensureStack(st, stackId);
+        if (!ss || !canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
 
-        for(let i=(s.cardIds?.length||0)-1;i>0;i--){
-          const j = randInt(0,i);
-          [s.cardIds[i], s.cardIds[j]] = [s.cardIds[j], s.cardIds[i]];
+        for (let i = (ss.cardIds?.length||0) - 1; i > 0; i--){
+          const j = randInt(0, i);
+          [ss.cardIds[i], ss.cardIds[j]] = [ss.cardIds[j], ss.cardIds[i]];
         }
 
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
+      // ✅ Draw: stack nào được chọn thì coi như deck, rút random, stack mất lá
       case "draw": {
-  const { stackId, count = 1, random = true } = action || {};
-  if (!stackId) return { ok:false, reason:"Missing stackId" };
+        const { stackId, count = 1, random = true } = action || {};
+        if (!stackId) return { ok:false, reason:"Missing stackId" };
 
-  const deck = ensureStack(stackId);
-  if (!deck) return { ok:false, reason:"Missing stack" };
-  if (!canInteractStack(deck, fromId)) return { ok:false, reason:"No access" };
+        const deck = this._ensureStack(st, stackId);
+        if (!deck) return { ok:false, reason:"Missing stack" };
+        if (!canInteractStack(deck, fromId)) return { ok:false, reason:"No access" };
 
-  deck.cardIds = Array.isArray(deck.cardIds) ? deck.cardIds : [];
-  if (deck.cardIds.length === 0) return { ok:false, reason:"Empty stack" };
+        deck.cardIds = Array.isArray(deck.cardIds) ? deck.cardIds : [];
+        if (deck.cardIds.length === 0) return { ok:false, reason:"Empty stack" };
 
-  const n = Math.max(1, Math.min(50, count|0));
+        const n = Math.max(1, Math.min(50, count|0));
 
-  // ✅ ĐÍCH: đưa vào tay người rút (dạng rải bài vào vùng hand của player)
-  // Bạn đang quản lý hand theo zone + owner, không cần ensureHandStack.
-  for (let i = 0; i < n; i++){
-    if (deck.cardIds.length === 0) break;
+        const mySeat = (st.players||[]).find(p => p && p.id === fromId)?.seat ?? -1;
+        const handKey = this._seatToHandKey(mySeat);
+        const hr = handKey ? rects[handKey] : null;
 
-    const pickIndex = random ? randInt(0, deck.cardIds.length - 1) : (deck.cardIds.length - 1);
-    const [cid] = deck.cardIds.splice(pickIndex, 1); // ✅ stack mất lá ngay
-    if (!cid) break;
+        for (let i = 0; i < n; i++){
+          if (deck.cardIds.length === 0) break;
 
-    const c = ensureCard(cid);
-    if (!c) continue;
+          const idx = random ? randInt(0, deck.cardIds.length - 1) : (deck.cardIds.length - 1);
+          const [cid] = deck.cardIds.splice(idx, 1);
+          if (!cid) break;
 
-    // tách khỏi stack cũ (nếu có) rồi gán vào tay
-    c.stackId = null;
-    c.zone = ZONES.hand;
-    c.owner = fromId;
-    c.ownerId = fromId;
+          const c = this._ensureCard(st, cid);
+          if (!c) continue;
 
-    // đặt vị trí rơi vào đúng vùng hand theo seat của player
-    const mySeat = (st.players||[]).find(p=>p && p.id===fromId)?.seat ?? -1;
-    const handKey = seatToHandKey(mySeat);
-    const hr = handKey ? rects[handKey] : null;
+          // ra khỏi stack -> vào hand
+          c.stackId = null;
+          c.zone = ZONES.hand;
+          c.owner = fromId;
+          c.ownerId = fromId;
 
-    if (hr){
-      c.x = hr.x + randInt(40, Math.max(40, hr.w - 40));
-      c.y = hr.y + randInt(40, Math.max(40, hr.h - 40));
-    } else {
-      // fallback: rơi ra bàn
-      c.zone = ZONES.table;
-      c.owner = null;
-      c.ownerId = null;
-      c.x = rects.table.x + rects.table.w/2 + randInt(-120,120);
-      c.y = rects.table.y + rects.table.h/2 + randInt(-80,80);
-    }
-
-    // ✅ không đụng faceUp (giữ như bạn set trong bộ bài)
-    // nếu bạn muốn rút luôn úp: c.faceUp = false;
-  }
-
-  // nếu stack rỗng thì xóa luôn (tùy bạn). Nếu muốn giữ stack rỗng thì bỏ if này.
-  if (deck.id !== "stack_deck" && (deck.cardIds.length === 0)) {
-    delete st.stacks[deck.id];
-  }
-
-  this.bumpVersion();
-  return { ok:true };
-}
-
-
-      case "delete": {
-  // ✅ chỉ host mới được xóa hẳn
-  if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
-
-  const { targetType, id } = action || {};
-  if (!targetType || !id) return { ok:false, reason:"Missing target" };
-
-  if (targetType === "card") {
-    // xóa card khỏi pool
-    if (st.all?.cards?.[id]) delete st.all.cards[id];
-    if (st.cards?.[id]) delete st.cards[id]; // phòng khi bạn còn map cũ
-
-    // xóa card khỏi mọi stack
-    Object.values(st.stacks || {}).forEach(ss=>{
-      if (!ss?.cardIds) return;
-      const idx = ss.cardIds.indexOf(id);
-      if (idx >= 0) ss.cardIds.splice(idx, 1);
-    });
-
-    this.bumpVersion();
-    return { ok:true };
-  }
-
-  if (targetType === "stack") {
-    const ss = ensureStack(id);
-    if (!ss) return { ok:false, reason:"Missing stack" };
-
-    // xóa toàn bộ card trong stack
-    const ids = Array.isArray(ss.cardIds) ? ss.cardIds.slice() : [];
-    for (const cid of ids){
-      if (st.all?.cards?.[cid]) delete st.all.cards[cid];
-      if (st.cards?.[cid]) delete st.cards[cid];
-    }
-
-    // không cho xóa container table/discard nếu bạn muốn giữ
-    if (id === "stack_table" || id === "stack_discard") return { ok:false, reason:"Cannot delete system stack" };
-
-    delete st.stacks[id];
-
-    this.bumpVersion();
-    return { ok:true };
-  }
-
-  return { ok:false, reason:"Bad targetType" };
-}
-
-      
-        if (targetType === "stack") {
-          const stacks = state.stacks || state.stackById || {};
-          const stk = stacks[id];
-          if (!stk) return;
-      
-          // chọn 1 trong 2 cách:
-          // (A) Xóa stack và xóa luôn tất cả card trong stack
-          if (Array.isArray(stk.cardIds)) {
-            stk.cardIds.forEach(cid => {
-              if (state.cards?.[cid]) delete state.cards[cid];
-            });
+          if (hr){
+            c.x = hr.x + randInt(40, Math.max(40, hr.w - 40));
+            c.y = hr.y + randInt(40, Math.max(40, hr.h - 40));
+          } else {
+            // fallback bàn
+            c.zone = ZONES.table;
+            c.owner = null;
+            c.ownerId = null;
+            c.x = rects.table.x + rects.table.w/2 + randInt(-120, 120);
+            c.y = rects.table.y + rects.table.h/2 + randInt(-80, 80);
           }
-          delete stacks[id];
-      
-          bumpVersion();
-          return;
-      
-          // (B) Nếu bạn muốn xóa stack nhưng "thả" card ra table thì nói mình, mình đổi.
         }
-      
-        return;
+
+        // nếu stack rỗng thì xóa (tuỳ bạn)
+        if (deck.id !== "stack_deck" && deck.id !== "stack_table" && deck.id !== "stack_discard" && deck.cardIds.length === 0){
+          delete st.stacks[deck.id];
+        }
+
+        this.bumpVersion();
+        return { ok:true };
       }
 
+      // ✅ Delete: host-only
+      case "delete": {
+        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+
+        const { targetType, id } = action || {};
+        if (!targetType || !id) return { ok:false, reason:"Missing target" };
+
+        if (targetType === "card"){
+          this._removeCardEverywhere(st, id);
+          this.bumpVersion();
+          return { ok:true };
+        }
+
+        if (targetType === "stack"){
+          if (id === "stack_table" || id === "stack_discard") return { ok:false, reason:"Cannot delete system stack" };
+          this._deleteStackHard(st, id);
+          this.bumpVersion();
+          return { ok:true };
+        }
+
+        return { ok:false, reason:"Bad targetType" };
+      }
 
       case "discard": {
-        const {targetType, id} = action;
+        const { targetType, id } = action;
         const r = rects.discard;
 
         const placeInDiscard = (c) => {
           if (!c) return;
-          if (c.stackId) detachFromStack(c.id);
+          if (c.stackId) this._detachFromStack(st, c.id);
 
           c.zone = ZONES.discard;
           c.owner = null;
+          c.ownerId = null;
           c.faceUp = true;
           c.stackId = null;
 
           c.x = r.x + randInt(30, Math.max(30, r.w - 30));
           c.y = r.y + randInt(30, Math.max(30, r.h - 30));
-          // giữ ownerId để tô màu nếu bạn dùng
         };
 
         if (targetType === "card"){
-          const c = ensureCard(id);
-          if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
+          const c = this._ensureCard(st, id);
+          if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
           placeInDiscard(c);
         } else {
-          const s = ensureStack(id);
-          if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
+          const ss = this._ensureStack(st, id);
+          if (!ss || !canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
 
-          const ids = [...(s.cardIds||[])];
+          const ids = [...(ss.cardIds || [])];
           for (const cid of ids){
-            const c = ensureCard(cid);
-            if (!c) continue;
-            placeInDiscard(c);
+            const c = this._ensureCard(st, cid);
+            if (c) placeInDiscard(c);
           }
-          if (s.id !== "stack_deck") delete st.stacks[s.id];
+
+          // xóa stack sau khi discard hết (trừ deck cố định nếu bạn còn dùng)
+          if (ss.id !== "stack_deck" && ss.id !== "stack_table" && ss.id !== "stack_discard"){
+            delete st.stacks[ss.id];
+          }
         }
 
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "stack": {
         const { dragTargetType, dragId, dropOnType, dropOnId } = action;
-      
-        const isOtherHand = (zone, ownerId) =>
-          (zone === ZONES.hand) && ownerId && ownerId !== fromId;
-      
-        const getStackTopToBottom = (stackId) => {
-          const s = ensureStack(stackId);
-          return s ? [...(s.cardIds || [])] : [];
-        };
-      
-        // ===== 1) Collect moving cardIds (top->bottom) =====
+
+        const isOtherHand = (zone, ownerId) => (zone === ZONES.hand) && ownerId && ownerId !== fromId;
+
         let moving = [];
         let srcStackId = null;
-      
-        if (dragTargetType === "card") {
-          const c = ensureCard(dragId);
+
+        if (dragTargetType === "card"){
+          const c = this._ensureCard(st, dragId);
           if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
           if (c.stackId === "stack_deck") return { ok:false, reason:"Cannot stack from deck (use draw)" };
-      
+
           moving = [dragId];
           srcStackId = c.stackId || null;
         } else {
-          const s = ensureStack(dragId);
-          if (!s || !canInteractStack(s, fromId)) return { ok:false, reason:"No access" };
-          if (s.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
-      
-          moving = [...(s.cardIds || [])]; // top->bottom
-          srcStackId = s.id;
+          const ss = this._ensureStack(st, dragId);
+          if (!ss || !canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
+          if (ss.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
+
+          moving = [...(ss.cardIds || [])];
+          srcStackId = ss.id;
         }
-      
+
         if (moving.length === 0) return { ok:false, reason:"Nothing to stack" };
-      
-        // ===== 2) Resolve dropStack =====
+
+        // resolve drop stack
         let dropStackId = null;
-      
-        if (dropOnType === "card") {
-          const c2 = ensureCard(dropOnId);
+
+        if (dropOnType === "card"){
+          const c2 = this._ensureCard(st, dropOnId);
           if (!c2) return { ok:false, reason:"Missing drop card" };
           if (c2.stackId === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
           if (isOtherHand(c2.zone, c2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
-      
-          dropStackId = c2.stackId || createStackFromCard(c2.id);
+
+          dropStackId = c2.stackId || this._createStackFromCard(st, c2.id);
         } else {
-          const s2 = ensureStack(dropOnId);
+          const s2 = this._ensureStack(st, dropOnId);
           if (!s2) return { ok:false, reason:"Missing drop stack" };
           if (s2.id === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
           if (isOtherHand(s2.zone, s2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
-      
+
           dropStackId = s2.id;
         }
-      
+
         if (!dropStackId) return { ok:false, reason:"No drop stack" };
         if (srcStackId && srcStackId === dropStackId) return { ok:true };
-      
-        const dropStack = ensureStack(dropStackId);
-        if (!dropStack) return { ok:false, reason:"Drop stack missing (race)" };
+
+        const dropStack = this._ensureStack(st, dropStackId);
+        if (!dropStack) return { ok:false, reason:"Drop stack missing" };
         if (!canInteractStack(dropStack, fromId)) return { ok:false, reason:"No access" };
-      
-        // ===== 3) Snapshot old drop order (top->bottom) BEFORE we mutate =====
+
         const oldDrop = [...(dropStack.cardIds || [])];
-      
-        // ===== 4) Remove moving cards from their old places (detach / delete src stack) =====
-        if (dragTargetType === "stack") {
-          const s = ensureStack(dragId);
-          // xóa src stack luôn (trừ deck)
-          if (s && s.id !== "stack_deck") delete st.stacks[s.id];
+
+        // remove moving from old places
+        if (dragTargetType === "stack"){
+          const src = this._ensureStack(st, dragId);
+          if (src && src.id !== "stack_deck") delete st.stacks[src.id];
         } else {
-          // detach single card khỏi stack nếu có
-          detachFromStack(dragId);
+          this._detachFromStack(st, dragId);
         }
-      
-        // Nếu moving có thể chứa card trùng oldDrop (edge case), lọc tránh duplicate
+
         const movingSet = new Set(moving);
         const rest = oldDrop.filter(cid => !movingSet.has(cid));
-      
-        // ===== 5) REBUILD: "mới nhất ở trên" =====
-        // moving là top->bottom của group kéo => giữ nguyên thứ tự group
+
+        // newest on top
         dropStack.cardIds = [...moving, ...rest];
-      
-        // ===== 6) Sync each card to stack position/zone/owner (KHÔNG flip) =====
+
+        // sync cards to stack (NO flip)
         for (const cid of dropStack.cardIds){
-          const c = ensureCard(cid);
+          const c = this._ensureCard(st, cid);
           if (!c) continue;
-      
+
           c.stackId = dropStackId;
           c.x = dropStack.x;
           c.y = dropStack.y;
           c.zone = dropStack.zone;
-      
-          // only hand has owner privacy
+
           c.owner = (dropStack.zone === ZONES.hand) ? (dropStack.owner ?? null) : null;
           if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
-      
-          // ✅ tuyệt đối không đụng c.faceUp
+          else c.ownerId = null;
         }
-      
+
         this.bumpVersion();
         return { ok:true };
       }
-
 
       case "unstack": {
         const { stackId } = action;
-        const s = ensureStack(stackId);
-        if (!s || !canInteractStack(s, fromId)) return { ok:false, reason:"No access" };
-        if ((s.cardIds?.length || 0) <= 1) return { ok:true };
-      
-        // ✅ top luôn là phần tử [0]
-        const topId = s.cardIds.shift();
-        const c = ensureCard(topId);
+        const ss = this._ensureStack(st, stackId);
+        if (!ss || !canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
+        if ((ss.cardIds?.length || 0) <= 1) return { ok:true };
+
+        const topId = ss.cardIds.shift(); // top là [0]
+        const c = this._ensureCard(st, topId);
         if (!c) return { ok:false, reason:"Missing card" };
-      
+
         c.stackId = null;
-        c.x = s.x + randInt(-90, 90);
-        c.y = s.y + randInt(-60, 60);
-        c.zone = s.zone;
-      
-        // ✅ chỉ HAND mới có owner; còn lại null để ai cũng thao tác
-        c.owner = (s.zone === ZONES.hand) ? s.owner : null;
-      
-        // ✅ giữ nguyên faceUp (không đụng)
-        // c.faceUp giữ nguyên
-      
+        c.x = ss.x + randInt(-90, 90);
+        c.y = ss.y + randInt(-60, 60);
+        c.zone = ss.zone;
+
+        c.owner = (ss.zone === ZONES.hand) ? ss.owner : null;
+        c.ownerId = (ss.zone === ZONES.hand) ? ss.owner : null;
+
         this.bumpVersion();
         return { ok:true };
       }
 
-
       case "chat": {
         const text = (action.text || "").toString().slice(0, 300);
-        if (!text.trim()) return {ok:true};
-        st.chat.push({id: uid(), at: now(), fromId, text});
+        if (!text.trim()) return { ok:true };
+
+        st.chat = st.chat || [];
+        st.chat.push({ id: uid(), at: now(), fromId, text });
         if (st.chat.length > 120) st.chat.splice(0, st.chat.length - 120);
+
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "reset": {
-        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+
         const keepPlayers = deepClone(st.players);
         this.state = makeFreshTableState(st.roomCode, st.hostId);
         this.state.players = keepPlayers;
         ensureUIState(this.state);
+
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "setAssets": {
-        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
-        st.assets.frontBase = (action.frontBase||"").trim();
-        st.assets.backUrl = (action.backUrl||"").trim();
+        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+
+        st.assets = st.assets || {};
+        st.assets.frontBase = (action.frontBase || "").trim();
+        st.assets.backUrl = (action.backUrl || "").trim();
+
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "join": {
-        // host sẽ gọi addOrUpdatePlayer ở nơi khác, ở đây no-op
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "startGame": {
-        if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
+        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+
         st.game = st.game || {};
         st.game.phase = "playing";
         st.game.startedAt = now();
+
         this.bumpVersion();
-        return {ok:true};
+        return { ok:true };
       }
 
       case "set_stat_header": {
@@ -3412,7 +3383,7 @@ class HostController {
       }
 
       default:
-        return {ok:false, reason:"Unknown action"};
+        return { ok:false, reason:"Unknown action" };
     }
   }
 }
