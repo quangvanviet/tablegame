@@ -2831,7 +2831,6 @@ class HostController {
 
   applyIntent(fromId, action){
 
-    const actorId = intent?.actorId || intent?.by || intent?.uid || intent?.playerId || intent?.clientId;
     const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, this.hostId);
     ensureUIState(st);
 
@@ -3035,70 +3034,113 @@ class HostController {
       }
 
       case "draw": {
-        const { stackId, count = 1, random = true } = intent || {};
-        if (!stackId) return;
-      
-        const deck = state.stacks?.[stackId] || state.stackById?.[stackId];
-        if (!deck) return;
-      
-        // chỉ xử lý nếu đúng deck
-        if (!(deck.kind==="deck" || deck.zone==="deck" || deck.isDeck===true)) return;
-      
-        deck.cardIds = Array.isArray(deck.cardIds) ? deck.cardIds : [];
-        if (deck.cardIds.length === 0) return;
-      
-        const n = Math.max(1, Math.min(50, count|0));
-      
-        // đảm bảo hand stack của người rút (tuỳ schema bạn)
-        const hand = ensureHandStack(state, actorId); // bạn đã/hoặc sẽ có hàm này
-        hand.cardIds = Array.isArray(hand.cardIds) ? hand.cardIds : [];
-      
-        for (let i = 0; i < n; i++) {
-          if (deck.cardIds.length === 0) break;
-      
-          let pickIndex = deck.cardIds.length - 1; // default top
-          if (random) pickIndex = Math.floor(Math.random() * deck.cardIds.length);
-      
-          const [cid] = deck.cardIds.splice(pickIndex, 1); // ✅ deck mất lá ngay
-          if (!cid) break;
-      
-          const c = state.cards?.[cid];
-          if (c) {
-            c.zone = "hand";
-            c.owner = actorId;
-            c.stackId = hand.id;
-            // tuỳ bạn muốn rút úp/ngửa:
-            // c.faceUp = false;
-          }
-          hand.cardIds.push(cid);
-        }
-      
-        bumpVersion();
-        return;
-      }
+  const { stackId, count = 1, random = true } = action || {};
+  if (!stackId) return { ok:false, reason:"Missing stackId" };
+
+  const deck = ensureStack(stackId);
+  if (!deck) return { ok:false, reason:"Missing stack" };
+  if (!canInteractStack(deck, fromId)) return { ok:false, reason:"No access" };
+
+  deck.cardIds = Array.isArray(deck.cardIds) ? deck.cardIds : [];
+  if (deck.cardIds.length === 0) return { ok:false, reason:"Empty stack" };
+
+  const n = Math.max(1, Math.min(50, count|0));
+
+  // ✅ ĐÍCH: đưa vào tay người rút (dạng rải bài vào vùng hand của player)
+  // Bạn đang quản lý hand theo zone + owner, không cần ensureHandStack.
+  for (let i = 0; i < n; i++){
+    if (deck.cardIds.length === 0) break;
+
+    const pickIndex = random ? randInt(0, deck.cardIds.length - 1) : (deck.cardIds.length - 1);
+    const [cid] = deck.cardIds.splice(pickIndex, 1); // ✅ stack mất lá ngay
+    if (!cid) break;
+
+    const c = ensureCard(cid);
+    if (!c) continue;
+
+    // tách khỏi stack cũ (nếu có) rồi gán vào tay
+    c.stackId = null;
+    c.zone = ZONES.hand;
+    c.owner = fromId;
+    c.ownerId = fromId;
+
+    // đặt vị trí rơi vào đúng vùng hand theo seat của player
+    const mySeat = (st.players||[]).find(p=>p && p.id===fromId)?.seat ?? -1;
+    const handKey = seatToHandKey(mySeat);
+    const hr = handKey ? rects[handKey] : null;
+
+    if (hr){
+      c.x = hr.x + randInt(40, Math.max(40, hr.w - 40));
+      c.y = hr.y + randInt(40, Math.max(40, hr.h - 40));
+    } else {
+      // fallback: rơi ra bàn
+      c.zone = ZONES.table;
+      c.owner = null;
+      c.ownerId = null;
+      c.x = rects.table.x + rects.table.w/2 + randInt(-120,120);
+      c.y = rects.table.y + rects.table.h/2 + randInt(-80,80);
+    }
+
+    // ✅ không đụng faceUp (giữ như bạn set trong bộ bài)
+    // nếu bạn muốn rút luôn úp: c.faceUp = false;
+  }
+
+  // nếu stack rỗng thì xóa luôn (tùy bạn). Nếu muốn giữ stack rỗng thì bỏ if này.
+  if (deck.id !== "stack_deck" && (deck.cardIds.length === 0)) {
+    delete st.stacks[deck.id];
+  }
+
+  this.bumpVersion();
+  return { ok:true };
+}
+
 
       case "delete": {
-        // ✅ chỉ host mới được xóa hẳn khỏi game
-        if (actorId !== state.hostId) return;
-      
-        const { targetType, id } = intent || {};
-        if (!targetType || !id) return;
-      
-        if (targetType === "card") {
-          // xóa card khỏi state.cards
-          if (state.cards?.[id]) delete state.cards[id];
-      
-          // xóa card khỏi mọi stack.cardIds
-          const stacks = state.stacks || state.stackById || {};
-          Object.values(stacks).forEach(stk => {
-            if (!stk?.cardIds) return;
-            const idx = stk.cardIds.indexOf(id);
-            if (idx >= 0) stk.cardIds.splice(idx, 1);
-          });
-      
-          bumpVersion();
-          return;
-        }
+  // ✅ chỉ host mới được xóa hẳn
+  if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+
+  const { targetType, id } = action || {};
+  if (!targetType || !id) return { ok:false, reason:"Missing target" };
+
+  if (targetType === "card") {
+    // xóa card khỏi pool
+    if (st.all?.cards?.[id]) delete st.all.cards[id];
+    if (st.cards?.[id]) delete st.cards[id]; // phòng khi bạn còn map cũ
+
+    // xóa card khỏi mọi stack
+    Object.values(st.stacks || {}).forEach(ss=>{
+      if (!ss?.cardIds) return;
+      const idx = ss.cardIds.indexOf(id);
+      if (idx >= 0) ss.cardIds.splice(idx, 1);
+    });
+
+    this.bumpVersion();
+    return { ok:true };
+  }
+
+  if (targetType === "stack") {
+    const ss = ensureStack(id);
+    if (!ss) return { ok:false, reason:"Missing stack" };
+
+    // xóa toàn bộ card trong stack
+    const ids = Array.isArray(ss.cardIds) ? ss.cardIds.slice() : [];
+    for (const cid of ids){
+      if (st.all?.cards?.[cid]) delete st.all.cards[cid];
+      if (st.cards?.[cid]) delete st.cards[cid];
+    }
+
+    // không cho xóa container table/discard nếu bạn muốn giữ
+    if (id === "stack_table" || id === "stack_discard") return { ok:false, reason:"Cannot delete system stack" };
+
+    delete st.stacks[id];
+
+    this.bumpVersion();
+    return { ok:true };
+  }
+
+  return { ok:false, reason:"Bad targetType" };
+}
+
       
         if (targetType === "stack") {
           const stacks = state.stacks || state.stackById || {};
