@@ -1632,14 +1632,22 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
             <div class="content col">
               <div class="notif-item">
-                <div style="width: 80%;">
+                <div style="width: 80%; display: flex;
+                  flex-direction: row;
+                  align-items: flex-start;
+                  gap: 10px;">
                   <div class="notif-dot"></div>
                   <div class="notif-body">
-                    <div class="notif-title">Tip: Phím tắt Q W E R T</div>
-                    <div class="notif-sub">Dùng phím tắt để thuận tiện hơn khi chơi</div>
+                    <div class="notif-title">Tip: Sử dụng phím tắt</div>
+                    <div class="notif-sub">Dùng phím tắt khi chơi để thuận tiện hơn nhé</div>
                   </div>
                 </div>
-                <div style="width: 20%;">
+                <div style="display: flex;
+                  width: 20%;
+                  flex-direction: column;
+                  align-content: center;
+                  justify-content: center;
+                  align-items: center;">
                   <button class="secondary">Đã hiểu</button>
                 </div>
               </div>
