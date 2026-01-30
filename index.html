@@ -2028,15 +2028,23 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-database-compat.js"></script> 
 <script>
 /* =========================================================
-   0) Utils / Core helpers
+   0) Utils / Core helpers (Firebase-only)
 ========================================================= */
 "use strict";
 
-const clamp   = (v, a, b) => Math.max(a, Math.min(b, v));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const randInt = (a, b) => (Math.random() * (b - a + 1) + a) | 0;
 const now     = () => Date.now();
-const uid     = () => (crypto?.randomUUID ? crypto.randomUUID() : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now()));
-const deepClone = (obj) => (typeof structuredClone === "function" ? structuredClone(obj) : JSON.parse(JSON.stringify(obj)));
+const uid     = () => (
+  crypto?.randomUUID
+    ? crypto.randomUUID()
+    : ("id_" + Math.random().toString(16).slice(2) + "_" + Date.now())
+);
+const deepClone = (obj) => (
+  typeof structuredClone === "function"
+    ? structuredClone(obj)
+    : JSON.parse(JSON.stringify(obj))
+);
 
 function escapeHtml(str){
   return (str ?? "").toString()
@@ -2049,7 +2057,7 @@ function escapeHtml(str){
 
 function toast(text, ms=1600){
   const el = document.getElementById("toast");
-  if (!el) { console.log("[toast]", text); return; } // <-- chống crash
+  if (!el) { console.log("[toast]", text); return; }
   el.textContent = text;
   el.style.display = "block";
   clearTimeout(el._t);
@@ -2099,57 +2107,17 @@ function zoneRects(){
   return {
     table: tableRect,
 
-    handTopLeft: {
-      x: tableRect.x,
-      y: m,
-      w: tableRect.w / 2,
-      h: handH
-    },
-    handTopRight: {
-      x: tableRect.x + tableRect.w / 2,
-      y: m,
-      w: tableRect.w / 2,
-      h: handH
-    },
+    handTopLeft: { x: tableRect.x, y: m, w: tableRect.w / 2, h: handH },
+    handTopRight:{ x: tableRect.x + tableRect.w / 2, y: m, w: tableRect.w / 2, h: handH },
 
-    handBottomLeft: {
-      x: tableRect.x,
-      y: tableRect.y + tableRect.h,
-      w: tableRect.w / 2,
-      h: handH
-    },
-    handBottomRight: {
-      x: tableRect.x + tableRect.w / 2,
-      y: tableRect.y + tableRect.h,
-      w: tableRect.w / 2,
-      h: handH
-    },
+    handBottomLeft: { x: tableRect.x, y: tableRect.y + tableRect.h, w: tableRect.w / 2, h: handH },
+    handBottomRight:{ x: tableRect.x + tableRect.w / 2, y: tableRect.y + tableRect.h, w: tableRect.w / 2, h: handH },
 
-    handRightTop: {
-      x: w - m - rightW,
-      y: tableRect.y,
-      w: rightW,
-      h: tableRect.h / 2
-    },
-    handRightBottom: {
-      x: w - m - rightW,
-      y: tableRect.y + tableRect.h / 2,
-      w: rightW,
-      h: tableRect.h / 2
-    },
+    handRightTop:    { x: w - m - rightW, y: tableRect.y, w: rightW, h: tableRect.h / 2 },
+    handRightBottom: { x: w - m - rightW, y: tableRect.y + tableRect.h / 2, w: rightW, h: tableRect.h / 2 },
 
-    deck: {
-      x: m,
-      y: tableRect.y,
-      w: sideW,
-      h: tableRect.h / 2
-    },
-    discard: {
-      x: m,
-      y: tableRect.y + tableRect.h / 2,
-      w: sideW,
-      h: tableRect.h / 2
-    }
+    deck:    { x: m, y: tableRect.y, w: sideW, h: tableRect.h / 2 },
+    discard: { x: m, y: tableRect.y + tableRect.h / 2, w: sideW, h: tableRect.h / 2 }
   };
 }
 
@@ -2191,12 +2159,11 @@ function toWorld(p){
 }
 
 /* =========================================================
-   3) UI refs (giữ nguyên id của bạn)
+   3) UI refs (giữ nguyên id của bạn) - Firebase-only
 ========================================================= */
 const UI = {
-  modeSelect: document.getElementById("modeSelect"),
-  wsRow: document.getElementById("wsRow"),
-  wsUrlInput: document.getElementById("wsUrlInput"),
+  // bỏ modeSelect/wsRow/wsUrlInput (không dùng nữa)
+
   nameInput: document.getElementById("nameInput"),
   roomInput: document.getElementById("roomInput"),
   createBtn: document.getElementById("createBtn"),
@@ -2222,20 +2189,15 @@ const UI = {
   hostRefreshSetsBtn: document.getElementById("hostRefreshSetsBtn"),
   hostLoadDeckBtn: document.getElementById("hostLoadDeckBtn"),
   startGameBtn: document.getElementById("startGameBtn"),
-
 };
-
-  
 
 /* =========================================================
    4) Screens Router
-   - Bạn đang dùng lẫn: screenAuth/screenLobby/screenMatch và authScreen/lobbyScreen/matchScreen
-   - FIX: Tự detect cái nào tồn tại
 ========================================================= */
 const SCREENS = {
-  auth:  document.getElementById("authScreen"),
-  lobby: document.getElementById("lobbyScreen"),
-  match: document.getElementById("matchScreen"),
+  auth:  document.getElementById("authScreen")  || document.getElementById("screenAuth"),
+  lobby: document.getElementById("lobbyScreen") || document.getElementById("screenLobby"),
+  match: document.getElementById("matchScreen") || document.getElementById("screenMatch"),
 };
 
 function setScreen(name){
@@ -2245,14 +2207,35 @@ function setScreen(name){
   }
   if (SCREENS[name]) SCREENS[name].classList.add("active");
 }
-
 function goAuth(){ setScreen("auth"); }
 function goLobby(){ setScreen("lobby"); }
-function goMatch(){ setScreen("match"); try{ resize(); updateCamera(); }catch(e){} }
-
+function goMatch(){
+  setScreen("match");
+  try{ resize(); updateCamera(); }catch(e){}
+}
 goAuth();
 
+/* =========================================================
+   5) Firebase-only helpers
+========================================================= */
+async function fbEnsureAuth(){
+  if (typeof window.fbEnsureAuth === "function" && window.fbEnsureAuth !== fbEnsureAuth){
+    return window.fbEnsureAuth();
+  }
+  if (!window.FB?.db) throw new Error("Firebase chưa khởi tạo (FB.db không tồn tại)");
+  if (window.FB?.uid) return true;
+  throw new Error("Chưa đăng nhập Firebase (FB.uid chưa có). Hãy login trước.");
+}
 
+function getRoomRef(roomId){
+  if (!window.FB?.db) throw new Error("Firebase chưa khởi tạo (FB.db không tồn tại)");
+  if (!roomId) throw new Error("Thiếu roomId");
+  return FB.db.ref(`AllRoom/${roomId}`);
+}
+
+/* =========================================================
+   6) Host setCard -> load vào room (Firebase-only)
+========================================================= */
 let _hostSetsCache = {}; // {setId: data}
 
 async function refreshHostSetSelect(){
@@ -2284,75 +2267,109 @@ async function refreshHostSetSelect(){
 }
 
 async function hostLoadSelectedSetToRoom_FromSaved(){
+  if (!window.client) throw new Error("client chưa tồn tại");
   if (!client.isHost) return toast("Chỉ host mới load deck");
-  if (!(client.transport instanceof FirebaseTransport)) return toast("Chỉ dùng được trong Firebase mode");
+
   await fbEnsureAuth();
 
   const setId = UI.hostSetSelect?.value || "";
   if (!setId) return toast("Chưa chọn set");
 
-  // nếu cache trống thì refresh
   if (!_hostSetsCache[setId]) await refreshHostSetSelect();
   const data = _hostSetsCache[setId];
   if (!data) return toast("Set không tồn tại");
 
-  const types = Object.values(data.cards || {}).map(t=>({
-    name: t?.name || "",
-    frontUrl: (t?.frontUrl || "").trim(),
-    count: Math.max(1, parseInt(t?.count, 10) || 1),
-  })).filter(t => t.frontUrl && t.count > 0);
+  const types = Object.values(data.cards || {})
+    .map(t=>({
+      name: (t?.name || "").trim(),
+      frontUrl: (t?.frontUrl || "").trim(),
+      count: Math.max(1, parseInt(t?.count, 10) || 1),
+    }))
+    .filter(t => t.frontUrl && t.count > 0);
 
-  const total = types.reduce((s,t)=>s + (t.count|0), 0);
-  if (total <= 0) return toast("Set rỗng (chưa có URL)");
+  const total = types.reduce((s,t)=> s + (t.count|0), 0);
+  if (total <= 0) return toast("Set rỗng (chưa có URL / count)");
 
   const backUrl = (data.backUrl || "").trim();
 
-  // update room meta để người khác / host refresh vẫn biết deckSource
-  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+  const roomRef = getRoomRef(client.roomId);
+
+  // meta cho cả phòng
   await roomRef.child("meta").update({
     deckSource: { uid: FB.uid, setId },
     deckBackUrl: backUrl,
-    deckTotal: total
+    deckTotal: total,
+    deckTypes: types.length,
+    updatedAt: now(),
   });
 
-  // build deck vào host state + write state
-  if (client.host && client.host.state){
-    client.host.state.assets = client.host.state.assets || { frontBase:"", backUrl:"" };
-    client.host.state.assets.backUrl = backUrl;
+  // build deck vào authoritative state của host
+  if (client.host?.state){
+    const st = client.host.state;
 
-    buildPhysicalDeckFromTypes(client.host.state, types, "stack_deck");
-    client.host.bumpVersion?.();
-    await client.transport.writeState(client.host.state);
+    st.assets = st.assets || { frontBase:"", backUrl:"" };
+    st.assets.backUrl = backUrl;
+
+    if (typeof window.buildPhysicalDeckFromTypes === "function"){
+      buildPhysicalDeckFromTypes(st, types, "stack_deck");
+    }else{
+      console.warn("buildPhysicalDeckFromTypes chưa tồn tại");
+    }
+
+    if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
+
+    if (client.transport?.writeState){
+      await client.transport.writeState(st);
+    }else{
+      await roomRef.child("state").set(st);
+    }
   }
 
   toast(`Loaded deck: ${types.length} loại / ${total} lá`);
 }
 
+/* =========================================================
+   7) Wire UI buttons
+========================================================= */
 if (UI.hostRefreshSetsBtn){
   UI.hostRefreshSetsBtn.onclick = async ()=>{
     try{ await refreshHostSetSelect(); toast("Đã refresh set"); }
-    catch(e){ console.error(e); toast(e.message || e); }
+    catch(e){ console.error(e); toast(e?.message || e); }
   };
 }
 
 if (UI.hostLoadDeckBtn){
   UI.hostLoadDeckBtn.onclick = async ()=>{
     try{ await hostLoadSelectedSetToRoom_FromSaved(); }
-    catch(e){ console.error(e); toast(e.message || e); }
+    catch(e){ console.error(e); toast(e?.message || e); }
   };
 }
 
 if (UI.startGameBtn){
   UI.startGameBtn.onclick = ()=>{
+    if (!window.client) return toast("client chưa sẵn sàng");
     if (!client.isHost) return toast("Chỉ host mới bắt đầu");
-    sendIntent({ type:"startGame" });
-    toast("Bắt đầu!");
+
+    if (typeof window.sendIntent === "function"){
+      sendIntent({ type:"startGame" });
+      toast("Bắt đầu!");
+      return;
+    }
+
+    // fallback nếu chưa có sendIntent
+    try{
+      const roomRef = getRoomRef(client.roomId);
+      roomRef.child("meta").update({ phase: "match", startedAt: now() });
+      toast("Bắt đầu!");
+    }catch(e){
+      console.error(e);
+      toast(e?.message || e);
+    }
   };
 }
 
-  
 /* =========================================================
-   5) Inspector (card inspector popup)
+   Inspector (card inspector popup)
 ========================================================= */
 const INS = {
   badge: document.getElementById("insBadge"),
@@ -2377,8 +2394,8 @@ function getWorldPosOfTarget(st, target){
 }
 
 function positionInspectorNearTarget(){
-  const st = getState();
-  const sel = client.selected;
+  const st = getState?.();
+  const sel = client?.selected;
   if (!st || !sel) return;
 
   const wp = getWorldPosOfTarget(st, sel);
@@ -2417,8 +2434,8 @@ function hideInspectorPopup(){
 }
 
 function updateInspector(){
-  const st = getState();
-  const sel = client.selected;
+  const st = getState?.();
+  const sel = client?.selected;
 
   if (!INS.badge || !INS.preview) return;
 
@@ -2447,7 +2464,7 @@ function updateInspector(){
     const c = st.cards?.[sel.id];
     INS.badge.textContent = sel.id + (c?.lockedBy ? " (LOCK)" : "");
 
-    // FIX: ưu tiên frontUrl (setCard), nếu không có thì mới dùng frontBase+id.png
+    // ưu tiên frontUrl (setCard), nếu không có thì dùng frontBase+id.png
     const frontUrl = c?.frontUrl
       ? c.frontUrl
       : (st.assets?.frontBase ? (st.assets.frontBase + sel.id + ".png") : "");
@@ -2487,86 +2504,135 @@ function updateInspector(){
 }
 
 /* =========================================================
-   6) Networking Abstraction (Local / WS / Firebase)
+   6) Networking (Firebase Realtime ONLY)
+   - Client gửi intents -> /intents
+   - Host listen intents, apply -> write /state
+   - All clients listen /state
 ========================================================= */
 class NetTransport {
-  constructor(){ this.onMessage = ()=>{}; this.onStatus = ()=>{}; }
-  send(_msg) {}
+  constructor(){
+    this.onState = ()=>{};
+    this.onStatus = ()=>{};
+    this.onIntents = ()=>{}; // host only
+  }
   close() {}
 }
 
-class LocalBroadcastTransport extends NetTransport {
-  constructor(roomCode, selfId){
+class FirebaseTransport extends NetTransport {
+  constructor(roomId, selfId){
     super();
-    this.roomCode = roomCode;
+    if (!window.FB?.db) throw new Error("FB.db missing");
+    if (!roomId) throw new Error("roomId missing");
+    if (!selfId) throw new Error("selfId missing");
+
+    this.roomId = roomId;
     this.selfId = selfId;
-    this.bc = new BroadcastChannel("ttc_" + roomCode);
-    this.bc.onmessage = (ev) => {
-      const msg = ev.data;
-      if (!msg || msg._from === this.selfId) return;
-      this.onMessage(msg);
+
+    this.roomRef = FB.db.ref(`AllRoom/${roomId}`);
+    this.stateRef = this.roomRef.child("state");
+    this.intentsRef = this.roomRef.child("intents");
+    this.metaRef = this.roomRef.child("meta");
+    this.presRef = this.roomRef.child(`presence/${selfId}`);
+
+    this._stateCb = null;
+    this._intentsCb = null;
+    this._connectedCb = null;
+    this._connectedRef = FB.db.ref(".info/connected");
+
+    this._bindPresence();
+    this._bindConnectedBadge();
+  }
+
+  _bindConnectedBadge(){
+    this._connectedCb = (snap)=>{
+      const ok = !!snap.val();
+      this.onStatus({connected: ok, mode:"firebase"});
+      if (ok){
+        // cập nhật presence "online"
+        try{
+          this.presRef.onDisconnect().remove();
+          this.presRef.set({ online:true, at: now() });
+        }catch(e){}
+      }
     };
-    this.onStatus({connected:true, mode:"local"});
-  }
-  send(msg){
-    this.bc.postMessage({...msg, _from:this.selfId});
-  }
-  close(){
-    this.onStatus({connected:false, mode:"local"});
-    this.bc.close();
-  }
-}
-
-class LocalStorageTransport extends NetTransport {
-  constructor(roomCode, selfId){
-    super();
-    this.roomCode = roomCode;
-    this.selfId = selfId;
-    this.key = "ttc_ls_" + roomCode;
-
-    this._onStorage = (ev) => {
-      if (ev.key !== this.key || !ev.newValue) return;
-      try{
-        const msg = JSON.parse(ev.newValue);
-        if (!msg || msg._from === this.selfId) return;
-        this.onMessage(msg);
-      }catch(e){}
-    };
-    window.addEventListener("storage", this._onStorage);
-    this.onStatus({connected:true, mode:"local"});
+    this._connectedRef.on("value", this._connectedCb);
   }
 
-  send(msg){
+  _bindPresence(){
     try{
-      const payload = JSON.stringify({...msg, _from:this.selfId, _t: Date.now()});
-      localStorage.setItem(this.key, payload);
+      this.presRef.onDisconnect().remove();
+      this.presRef.set({ online:true, at: now() });
     }catch(e){}
   }
 
-  close(){
-    window.removeEventListener("storage", this._onStorage);
-    this.onStatus({connected:false, mode:"local"});
-  }
-}
-
-class WebSocketTransport extends NetTransport {
-  constructor(url){
-    super();
-    this.ws = new WebSocket(url);
-    this.ws.onopen = () => this.onStatus({connected:true, mode:"ws"});
-    this.ws.onclose = () => this.onStatus({connected:false, mode:"ws"});
-    this.ws.onerror = () => this.onStatus({connected:false, mode:"ws"});
-    this.ws.onmessage = (ev) => {
-      try{
-        const msg = JSON.parse(ev.data);
-        this.onMessage(msg);
-      }catch(e){}
+  // ===== Client API =====
+  async sendIntent(payload){
+    // payload: {type, ...}
+    const msg = {
+      ...payload,
+      _from: this.selfId,
+      _t: now(),
     };
+    await this.intentsRef.push(msg);
   }
-  send(msg){
-    if (this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
+
+  listenState(){
+    if (this._stateCb) return;
+    this._stateCb = (snap)=>{
+      const st = snap.val();
+      this.onState(st || null);
+    };
+    this.stateRef.on("value", this._stateCb);
   }
-  close(){ try{ this.ws.close(); }catch(e){} }
+
+  stopState(){
+    if (!this._stateCb) return;
+    this.stateRef.off("value", this._stateCb);
+    this._stateCb = null;
+  }
+
+  // ===== Host API =====
+  listenIntents(){
+    // host listen "child_added" để xử lý từng intent
+    if (this._intentsCb) return;
+    this._intentsCb = async (snap)=>{
+      const intent = snap.val();
+      if (!intent) { await snap.ref.remove().catch(()=>{}); return; }
+      this.onIntents(intent, snap.key, snap.ref);
+    };
+    this.intentsRef.on("child_added", this._intentsCb);
+  }
+
+  stopIntents(){
+    if (!this._intentsCb) return;
+    this.intentsRef.off("child_added", this._intentsCb);
+    this._intentsCb = null;
+  }
+
+  async writeState(state){
+    await this.stateRef.set(state);
+  }
+
+  async updateMeta(patch){
+    await this.metaRef.update(patch);
+  }
+
+  async ackIntent(intentRef){
+    // host xóa intent sau khi xử lý
+    if (!intentRef) return;
+    await intentRef.remove().catch(()=>{});
+  }
+
+  close(){
+    try{ this.stopState(); }catch(e){}
+    try{ this.stopIntents(); }catch(e){}
+    try{
+      if (this._connectedCb) this._connectedRef.off("value", this._connectedCb);
+      this._connectedCb = null;
+    }catch(e){}
+    try{ this.presRef.remove(); }catch(e){}
+    this.onStatus({connected:false, mode:"firebase"});
+  }
 }
 
 /* =========================================================
@@ -2582,7 +2648,7 @@ function makeFreshTableState(roomCode, hostId){
     chat: [],
     version: 1,
     assets: { frontBase:"", backUrl:"" },
-    _deckPool: [], // FIX: bạn dùng _deckPool trong draw => phải có sẵn
+    _deckPool: [],
     game: { phase: "setup" },
   };
 
@@ -2614,31 +2680,24 @@ function makeFreshTableState(roomCode, hostId){
 
 function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
   // types: [{name, frontUrl, count}]
-  const deck = st.stacks[deckStackId];
+  const deck = st.stacks?.[deckStackId];
   if (!deck) throw new Error("Missing stack_deck");
 
-  // Xóa các card cũ thuộc deckStack (tùy bạn: hoặc giữ cards khác)
-  // Ở đây mình làm "rebuild sạch": xóa toàn bộ cards và stacks thường,
-  // giữ discard stack + players + assets.
   const rects = zoneRects();
   const deckX = rects.deck.x + rects.deck.w/2;
   const deckY = rects.deck.y + rects.deck.h/2;
 
-  // reset cards + reset stacks (giữ discard + deck)
-  const keepDeck = st.stacks["stack_deck"];
-
+  // rebuild sạch cards + giữ stack_deck
   st.cards = {};
   st.stacks = {
-    stack_deck: {...keepDeck, x:deckX, y:deckY, zone:ZONES.deck, owner:null, cardIds:[]},
+    [deckStackId]: { ...deck, id: deckStackId, x:deckX, y:deckY, zone:ZONES.deck, owner:null, cardIds:[] },
   };
 
-  // build deck cards
   let running = 1;
   for (const t of types){
     const frontUrl = (t.frontUrl||"").trim();
     const count = Math.max(1, parseInt(t.count,10)||1);
     const name = (t.name||"").trim();
-
     if (!frontUrl) continue;
 
     for (let k=0; k<count; k++){
@@ -2649,25 +2708,24 @@ function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
         x: deckX, y: deckY,
         zone: ZONES.deck,
         owner: null,
-        stackId: "stack_deck",
+        stackId: deckStackId,
         order: running,
-        frontSeed: running,       // fallback text
-        frontUrl: frontUrl,       // << IMPORTANT
-        typeName: name            // optional
+        frontSeed: running,
+        frontUrl: frontUrl,   // IMPORTANT
+        typeName: name
       };
-      st.stacks.stack_deck.cardIds.push(id);
+      st.stacks[deckStackId].cardIds.push(id);
       running++;
     }
   }
 
-  // Nếu muốn: auto shuffle ngay khi build
-  for(let i=st.stacks.stack_deck.cardIds.length-1;i>0;i--){
+  // shuffle
+  const a = st.stacks[deckStackId].cardIds;
+  for(let i=a.length-1;i>0;i--){
     const j = randInt(0,i);
-    const a = st.stacks.stack_deck.cardIds;
     [a[i], a[j]] = [a[j], a[i]];
   }
 
-  // bump
   st.version = (st.version||0) + 1;
 }
 
@@ -2684,7 +2742,6 @@ function ensureStateShape(state){
   if (!Array.isArray(s._deckPool)) s._deckPool = [];
   if (typeof s.version !== "number") s.version = 1;
 
-  // ✅ thêm game.phase (setup/playing)
   if (!s.game || typeof s.game !== "object") s.game = { phase: "setup" };
   if (!s.game.phase) s.game.phase = "setup";
 
@@ -2701,6 +2758,7 @@ function redactStateForViewer(state, viewerId){
     const c = s.cards[cardId];
     if (!c) continue;
 
+    // che bài người khác trên tay
     if (c.zone === ZONES.hand && c.owner && c.owner !== viewerId){
       c.faceUp = false;
       c.frontSeed = 0;
@@ -2713,7 +2771,7 @@ function redactStateForViewer(state, viewerId){
 }
 
 /* =========================================================
-   8) Host Controller (Authoritative)
+   8) Host Controller (Authoritative) - Firebase-only
 ========================================================= */
 function canInteract(card, actorId){
   if (!card) return false;
@@ -2730,29 +2788,30 @@ const ensureUIState = (st) => {
   st.ui.statHeaders = st.ui.statHeaders || ["ATK","DEF","HP","COIN"];
   st.ui.statsByPlayer = st.ui.statsByPlayer || {};
 };
-  
+
 class HostController {
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
     this.hostId = hostId;
     this.state = makeFreshTableState(roomCode, hostId);
   }
-  
+
   bumpVersion(){ this.state.version = (this.state.version||0) + 1; }
 
   addOrUpdatePlayer({id,name}){
-    // FIX: chống players undefined
     if (!Array.isArray(this.state.players)) this.state.players = [];
 
     let p = this.state.players.find(x=>x && x.id===id);
     if (!p){
-      if (this.state.players.length >= 6) return {ok:false, reason:"Room full"};
+      // ✅ 4 players max
+      if (this.state.players.length >= 4) return {ok:false, reason:"Room full"};
 
-      const used = new Set(this.state.players.map(x=>x.color).filter(Boolean));
+      const used = new Set(this.state.players.map(x=>x?.color).filter(Boolean));
       const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % COLOR_ORDER.length];
-      const seat = this.state.players.length;
+      const seat = this.state.players.length; // 0..3
       p = {id, name: name || "Player", color, seat, connectedAt: now()};
       this.state.players.push(p);
+
       ensureUIState(this.state);
       if (!this.state.ui.statsByPlayer[p.id]) this.state.ui.statsByPlayer[p.id] = ["","","",""];
     }else{
@@ -2770,12 +2829,14 @@ class HostController {
   applyIntent(fromId, action){
     const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, this.hostId);
     ensureUIState(st);
-    const player = st.players.find(p=>p.id===fromId);
-    if (!player) return {ok:false, reason:"Not in room"};
+
+    const player = (st.players||[]).find(p=>p && p.id===fromId);
+    if (!player && action?.type !== "join") return {ok:false, reason:"Not in room"};
 
     const rects = zoneRects();
-    const ensureCard = (id) => st.cards[id];
-    const ensureStack = (id) => st.stacks[id];
+
+    const ensureCard = (id) => st.cards?.[id];
+    const ensureStack = (id) => st.stacks?.[id];
 
     const detachFromStack = (cardId) => {
       const c = ensureCard(cardId);
@@ -2796,7 +2857,7 @@ class HostController {
       detachFromStack(cardId);
       c.stackId = stackId;
       c.zone = stack.zone;
-      c.owner = (stack.zone === ZONES.hand) ? stack.owner : null; // chỉ hand mới có owner
+      c.owner = (stack.zone === ZONES.hand) ? (stack.owner ?? null) : null;
       c.x = stack.x; c.y = stack.y;
       stack.cardIds = stack.cardIds || [];
       stack.cardIds.unshift(cardId);
@@ -2805,47 +2866,33 @@ class HostController {
     const createStackFromCard = (cardId) => {
       const c = ensureCard(cardId);
       if (!c) return null;
-    
+
       const sid = "stack_" + uid().slice(0,8);
-    
       const zone = c.zone ?? ZONES.table;
       const owner = (zone === ZONES.hand) ? (c.ownerId ?? c.owner ?? null) : null;
-    
-      st.stacks[sid] = {
-        id: sid,
-        zone,
-        owner,      // luôn string hoặc null
-        x: c.x,
-        y: c.y,
-        cardIds: [cardId],
-      };
-    
+
+      st.stacks[sid] = { id:sid, zone, owner, x:c.x, y:c.y, cardIds:[cardId] };
       c.stackId = sid;
       return sid;
     };
 
-
+    // ✅ 4 hand zones mapping đúng 4 người
     const HAND_ZONES = [
       { key: "handTopLeft", seat: 0 },
       { key: "handBottomLeft", seat: 1 },
       { key: "handTopRight", seat: 2 },
       { key: "handBottomRight", seat: 3 },
-      { key: "handRightTop", seat: 4 },
-      { key: "handRightBottom", seat: 5 },
     ];
 
     function normalizeCardZoneFromPos(x, y){
       for (const hz of HAND_ZONES){
         const r = rects[hz.key];
         if (!r) continue;
-
         const inRect = (x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h);
         if (!inRect) continue;
 
-        const ownerPlayer = st.players.find(pp => pp.seat === hz.seat);
-        if (!ownerPlayer){
-          return { zone: ZONES.table, owner: null };
-        }
+        const ownerPlayer = (st.players||[]).find(pp => pp && pp.seat === hz.seat);
+        if (!ownerPlayer) return { zone: ZONES.table, owner: null };
         return { zone: ZONES.hand, owner: ownerPlayer.id };
       }
       return { zone: ZONES.table, owner: null };
@@ -2857,13 +2904,12 @@ class HostController {
         case 1: return "handBottomLeft";
         case 2: return "handTopRight";
         case 3: return "handBottomRight";
-        case 4: return "handRightTop";
-        case 5: return "handRightBottom";
         default: return null;
       }
     };
 
     switch(action.type){
+
       case "move": {
         const {targetType, id, x, y} = action;
 
@@ -2871,7 +2917,6 @@ class HostController {
           const c = ensureCard(id);
           if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
 
-          // chặn kéo card trực tiếp từ deck
           if (c.stackId === "stack_deck") return {ok:false, reason:"Use draw (D) to take from deck"};
 
           detachFromStack(id);
@@ -2879,17 +2924,17 @@ class HostController {
           const z = normalizeCardZoneFromPos(x, y);
           c.x = x; c.y = y;
           c.zone = z.zone;
-          
+
           if (z.zone === ZONES.hand){
             const handOwner = z.owner ?? null;
-            if (!handOwner) {
+            if (!handOwner){
               c.zone = ZONES.table;
               c.owner = null;
-            } else {
+            }else{
               c.owner = handOwner;
               c.ownerId = handOwner;
             }
-          } else {
+          }else{
             c.owner = null;
           }
           c.stackId = null;
@@ -2900,12 +2945,12 @@ class HostController {
           if (!s) return {ok:false, reason:"Missing stack"};
           if (s.id === "stack_deck") return {ok:false, reason:"Deck fixed"};
           if (!canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
-        
+
           const z = normalizeCardZoneFromPos(x, y);
-        
-          s.x = x; 
+
+          s.x = x;
           s.y = y;
-        
+
           const handOwner = (z.zone === ZONES.hand) ? (z.owner ?? null) : null;
           if (z.zone === ZONES.hand && !handOwner) {
             s.zone = ZONES.table;
@@ -2914,20 +2959,18 @@ class HostController {
             s.zone = z.zone;
             s.owner = handOwner;
           }
-        
+
           for (const cid of (s.cardIds || [])) {
             const c = ensureCard(cid);
             if (!c) continue;
-        
+
             c.x = s.x;
             c.y = s.y;
             c.zone = s.zone;
-            c.owner = (s.zone === ZONES.hand) ? s.owner : null;
-        
+            c.owner = (s.zone === ZONES.hand) ? (s.owner ?? null) : null;
             if (s.zone === ZONES.hand && s.owner) c.ownerId = s.owner;
           }
         }
-
 
         this.bumpVersion();
         return {ok:true};
@@ -2969,21 +3012,20 @@ class HostController {
       }
 
       case "draw": {
-        const player = st.players.find(p=>p.id===fromId);
-        if (!player) return { ok:false, reason:"No player" };
-      
-        const handKey = seatToHandKey(player.seat);
+        const p = (st.players||[]).find(pp=>pp && pp.id===fromId);
+        if (!p) return { ok:false, reason:"No player" };
+
+        const handKey = seatToHandKey(p.seat);
         const handRect = rects[handKey];
         if (!handRect) return { ok:false, reason:"No hand zone" };
-      
-        const deck = st.stacks["stack_deck"];
-        if (!deck || deck.cardIds.length === 0)
-          return { ok:false, reason:"Deck empty" };
-      
-        const cid = deck.cardIds.shift();     // rút 1 lá khỏi bộ bài
+
+        const deck = st.stacks?.["stack_deck"];
+        if (!deck || (deck.cardIds?.length||0) === 0) return { ok:false, reason:"Deck empty" };
+
+        const cid = deck.cardIds.shift();
         const c = ensureCard(cid);
         if (!c) return { ok:false, reason:"Card missing" };
-      
+
         c.zone = ZONES.hand;
         c.owner = fromId;
         c.ownerId = fromId;
@@ -2992,34 +3034,29 @@ class HostController {
         c.y = handRect.y + handRect.h/2 + randInt(-20,20);
         c.stackId = null;
         c.tintOwner = fromId;
-      
+
         this.bumpVersion();
         return { ok:true };
       }
 
-
       case "discard": {
         const {targetType, id} = action;
-        const rects = zoneRects();
         const r = rects.discard;
-      
+
         const placeInDiscard = (c) => {
           if (!c) return;
-          // nếu card đang nằm trong stack nào đó thì tách ra
           if (c.stackId) detachFromStack(c.id);
-      
+
           c.zone = ZONES.discard;
-          c.owner = null;          // ai cũng thao tác
+          c.owner = null;
           c.faceUp = true;
           c.stackId = null;
-      
-          // ✅ bay vào vùng discard (rải thoải mái)
+
           c.x = r.x + randInt(30, Math.max(30, r.w - 30));
           c.y = r.y + randInt(30, Math.max(30, r.h - 30));
-          // ✅ giữ ownerId để còn màu
-          // c.ownerId giữ nguyên, không đụng
+          // giữ ownerId để tô màu nếu bạn dùng
         };
-      
+
         if (targetType === "card"){
           const c = ensureCard(id);
           if (!c || !canInteract(c, fromId)) return {ok:false, reason:"No access"};
@@ -3027,126 +3064,93 @@ class HostController {
         } else {
           const s = ensureStack(id);
           if (!s || !canInteractStack(s, fromId)) return {ok:false, reason:"No access"};
-      
+
           const ids = [...(s.cardIds||[])];
           for (const cid of ids){
             const c = ensureCard(cid);
             if (!c) continue;
             placeInDiscard(c);
           }
-      
-          // xóa stack sau khi bung ra
           if (s.id !== "stack_deck") delete st.stacks[s.id];
         }
-      
+
         this.bumpVersion();
         return {ok:true};
       }
 
-
       case "stack": {
         const { dragTargetType, dragId, dropOnType, dropOnId } = action;
-      
+
         let dragCardIds = [];
         let dragStackId = null;
-      
-        // 1) Xác định các card đang kéo
+
         if (dragTargetType === "card") {
           const c = ensureCard(dragId);
           if (!c || !canInteract(c, fromId)) return { ok: false, reason: "No access" };
           dragCardIds = [dragId];
-          dragStackId = c.stackId; // có thể null nếu card đang rời stack
+          dragStackId = c.stackId;
         } else {
           const s = ensureStack(dragId);
           if (!s || !canInteractStack(s, fromId)) return { ok: false, reason: "No access" };
           dragCardIds = [...(s.cardIds || [])];
           dragStackId = s.id;
         }
-      
-        // 2) Xác định dropStackId (stack nhận)
+
         let dropStackId = null;
-      
+
         if (dropOnType === "card") {
           const c2 = ensureCard(dropOnId);
           if (!c2) return { ok: false, reason: "Missing drop card" };
-      
-          // chặn gom lên card thuộc DECK cố định
-          if (c2.stackId === "stack_deck") {
-            return { ok: false, reason: "Cannot stack onto deck" };
-          }
-      
-          // nếu card đang rời stack -> tạo stack mới từ card đó
+          if (c2.stackId === "stack_deck") return { ok: false, reason: "Cannot stack onto deck" };
           dropStackId = c2.stackId || createStackFromCard(c2.id);
         } else {
           const s2 = ensureStack(dropOnId);
           if (!s2) return { ok: false, reason: "Missing drop stack" };
-      
-          // chặn gom lên DECK cố định
-          if (s2.id === "stack_deck") {
-            return { ok: false, reason: "Cannot stack onto deck" };
-          }
-      
+          if (s2.id === "stack_deck") return { ok: false, reason: "Cannot stack onto deck" };
           dropStackId = s2.id;
         }
-      
+
         if (!dropStackId) return { ok: false, reason: "No drop stack" };
         if (dragStackId && dragStackId === dropStackId) return { ok: true };
-      
+
         const dropStack = ensureStack(dropStackId);
         if (!dropStack) return { ok: false, reason: "Drop stack missing (race)" };
         if (!canInteractStack(dropStack, fromId)) return { ok: false, reason: "No access" };
-      
-        // 3) Chuẩn bị danh sách card sẽ attach lên top của dropStack
+
         const moving = [...dragCardIds];
-      
-        // 4) Bóc nguồn (xóa stack nguồn hoặc detach card khỏi stack)
+
         if (dragTargetType === "stack") {
           const s = ensureStack(dragId);
           if (s && s.id !== "stack_deck") delete st.stacks[s.id];
         } else {
           detachFromStack(dragId);
         }
-      
-        // 5) Attach các card lên top dropStack (giữ thứ tự)
+
         for (let i = moving.length - 1; i >= 0; i--) {
           attachToStackTop(moving[i], dropStackId);
         }
-      
-        // 6) CHỐT owner/zone của dropStack: không bao giờ undefined
+
         if (dropStack.zone === ZONES.hand) {
           dropStack.owner = dropStack.owner ?? null;
-      
-          // nếu đang ở hand mà không có owner -> trả về table
-          if (!dropStack.owner) {
-            dropStack.zone = ZONES.table;
-            dropStack.owner = null;
-          }
+          if (!dropStack.owner) { dropStack.zone = ZONES.table; dropStack.owner = null; }
         } else {
           dropStack.owner = null;
         }
-      
-        // 7) Update toàn bộ card trong dropStack theo stack mới
+
         for (const cid of (dropStack.cardIds || [])) {
           const c = ensureCard(cid);
           if (!c) continue;
-      
+
           c.x = dropStack.x;
           c.y = dropStack.y;
           c.zone = dropStack.zone;
-      
-          // hand privacy: card trong hand có owner (string|null), không bao giờ undefined
-          c.owner = (dropStack.zone === ZONES.hand) ? dropStack.owner : null;
-      
-          // nếu muốn đổi CHỦ THẬT khi đưa stack vào hand người khác
-          if (dropStack.zone === ZONES.hand && dropStack.owner) {
-            c.ownerId = dropStack.owner;
-          }
+          c.owner = (dropStack.zone === ZONES.hand) ? (dropStack.owner ?? null) : null;
+          if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
         }
-      
+
         this.bumpVersion();
         return { ok: true };
       }
-
 
       case "unstack": {
         const {stackId} = action;
@@ -3162,9 +3166,7 @@ class HostController {
         c.x = s.x + randInt(-90,90);
         c.y = s.y + randInt(-60,60);
         c.zone = s.zone;
-        
-        // ✅ chỉ HAND mới có owner; còn lại null để ai cũng thao tác
-        c.owner = (s.zone === ZONES.hand) ? s.owner : null;
+        c.owner = (s.zone === ZONES.hand) ? (s.owner ?? null) : null;
 
         this.bumpVersion();
         return {ok:true};
@@ -3184,6 +3186,7 @@ class HostController {
         const keepPlayers = deepClone(st.players);
         this.state = makeFreshTableState(st.roomCode, st.hostId);
         this.state.players = keepPlayers;
+        ensureUIState(this.state);
         this.bumpVersion();
         return {ok:true};
       }
@@ -3197,13 +3200,12 @@ class HostController {
       }
 
       case "join": {
-        // no-op; host side already addOrUpdatePlayer
+        // host sẽ gọi addOrUpdatePlayer ở nơi khác, ở đây no-op
         this.bumpVersion();
         return {ok:true};
       }
 
       case "startGame": {
-        // host only
         if (fromId !== st.hostId) return {ok:false, reason:"Host only"};
         st.game = st.game || {};
         st.game.phase = "playing";
@@ -3214,39 +3216,35 @@ class HostController {
 
       case "set_stat_header": {
         if (st.hostId && fromId !== st.hostId) return { ok:false, reason:"Host only" };
-      
         ensureUIState(st);
-      
+
         const idx = (action.idx | 0);
         const value = (action.value ?? "").toString().slice(0, 12);
-      
         if (idx < 0 || idx > 3) return { ok:false, reason:"Bad index" };
-      
+
         while (st.ui.statHeaders.length < 4) st.ui.statHeaders.push("");
         st.ui.statHeaders[idx] = value;
-      
+
         this.bumpVersion();
         return { ok:true };
       }
-      
+
       case "set_stat": {
         ensureUIState(st);
-      
+
         const playerId = action.playerId;
         const idx = (action.idx | 0);
         const value = (action.value ?? "").toString().slice(0, 12);
-      
         if (idx < 0 || idx > 3) return { ok:false, reason:"Bad index" };
-      
-        // ✅ ai cũng sửa được chỉ số của bất kỳ ai
-        const p = (st.players || []).find(pp => pp.id === playerId);
-        if (!p) return { ok:false, reason:"Player not found" };
-      
+
+        const p2 = (st.players || []).find(pp => pp && pp.id === playerId);
+        if (!p2) return { ok:false, reason:"Player not found" };
+
         if (!st.ui.statsByPlayer[playerId]) st.ui.statsByPlayer[playerId] = ["", "", "", ""];
         while (st.ui.statsByPlayer[playerId].length < 4) st.ui.statsByPlayer[playerId].push("");
-      
+
         st.ui.statsByPlayer[playerId][idx] = value;
-      
+
         this.bumpVersion();
         return { ok:true };
       }
@@ -3258,7 +3256,7 @@ class HostController {
 }
 
 /* =========================================================
-   9) Firebase (Auth + RTDB)
+   9) Firebase (Auth + RTDB) - Firebase-only
 ========================================================= */
 const firebaseConfig = {
   apiKey: "AIzaSyBze3rgBuJ8Ex7c_yWnEVu76huNAuSFll8",
@@ -3282,12 +3280,13 @@ function fbInitOnce(){
 
 async function fbEnsureAuth(){
   fbInitOnce();
+
   if (!FB.auth.currentUser) await FB.auth.signInAnonymously();
 
   FB.user = FB.auth.currentUser;
   FB.uid = FB.user.uid;
 
-  // ưu tiên nameInput (lobby), nếu rỗng thì fallback "Player"
+  // ưu tiên nameInput (lobby), nếu rỗng fallback
   FB.username = ((UI.nameInput?.value || "").trim().slice(0,18)) || "Player";
 
   const uref = FB.db.ref(`AllUser/${FB.uid}`);
@@ -3297,10 +3296,10 @@ async function fbEnsureAuth(){
     await uref.set({ username: FB.username, createdAt: Date.now(), setCard:{} });
   }else{
     const cur = snap.val() || {};
-    if ((cur.username||"") !== FB.username){
-      await uref.update({ username: FB.username });
-    }
-    if (!cur.setCard) await uref.update({ setCard:{} });
+    const patch = {};
+    if ((cur.username||"") !== FB.username) patch.username = FB.username;
+    if (!cur.setCard) patch.setCard = {};
+    if (Object.keys(patch).length) await uref.update(patch);
   }
 }
 
@@ -3331,61 +3330,103 @@ async function fbReleaseRoomNo(roomNo){
   await FB.db.ref(`RoomIndex/freeNos/${roomNo}`).set(true);
 }
 
+/* =========================================================
+   FirebaseTransport (Realtime DB) - single source of truth
+   - intents:  /AllRoom/{roomId}/intents/{pushId}
+   - state:    /AllRoom/{roomId}/state
+   - users:    /AllRoom/{roomId}/users/{uid}
+   - presence: /AllRoom/{roomId}/presence/{uid}
+========================================================= */
 class FirebaseTransport extends NetTransport {
   constructor(roomId){
     super();
-    this.roomId = roomId; // FIX: trước đây nhiều bạn viết this.roomId=this.roomId
-    this.roomRef = FB.db.ref(`AllRoom/${this.roomId}`);
+    if (!roomId) throw new Error("Missing roomId");
+    if (!FB?.db) throw new Error("FB.db missing (call fbEnsureAuth first)");
+
+    this.roomId = roomId;
+    this.roomRef = FB.db.ref(`AllRoom/${roomId}`);
     this.intentsRef = this.roomRef.child("intents");
     this.stateRef = this.roomRef.child("state");
-    this.presRef = this.roomRef.child(`presence/${FB.uid}`);
+    this.metaRef  = this.roomRef.child("meta");
+
+    this.usersRef = this.roomRef.child("users");
+    this.presRef  = this.roomRef.child(`presence/${FB.uid}`);
 
     this._stateCb = null;
     this._intentsCb = null;
+    this._usersCb = null;
+
     this._connectedRef = FB.db.ref(".info/connected");
     this._connectedCb = null;
-    this.onStatus({connected:true, mode:"firebase"});
 
-    this.usersRef = this.roomRef.child("users");
-    this._usersCb = null;
+    this.onStatus({connected:true, mode:"firebase"});
   }
-  
-  listenUsers(onUsers){
-    this._usersCb = (snap)=> onUsers(snap.val() || {});
-    this.usersRef.on("value", this._usersCb);
-  }
-  
+
   async attachPresence(){
+    // users + presence
+    await this.usersRef.child(FB.uid).set({
+      uid: FB.uid,
+      name: FB.username,
+      at: now(),
+    }).catch(()=>{});
+
     this._connectedCb = async (snap)=>{
-      if (snap.val() === true){
-        await this.presRef.set(true);
+      const ok = (snap.val() === true);
+      this.onStatus({connected: ok, mode:"firebase"});
+      if (!ok) return;
+
+      try{
+        await this.presRef.set({ online:true, at: now(), name: FB.username });
         this.presRef.onDisconnect().remove();
-      }
+      }catch(e){}
     };
     this._connectedRef.on("value", this._connectedCb);
   }
 
+  listenUsers(onUsers){
+    if (this._usersCb) return;
+    this._usersCb = (snap)=> onUsers(snap.val() || {});
+    this.usersRef.on("value", this._usersCb);
+  }
+
   listenState(onState){
-    this._stateCb = (snap)=> onState(snap.val());
+    if (this._stateCb) return;
+    this._stateCb = (snap)=> onState(snap.val() || null);
     this.stateRef.on("value", this._stateCb);
   }
 
+  // HOST: listen intents từng cái một, xử lý rồi ACK (xóa)
   listenIntentsAsHost(onIntent){
+    if (this._intentsCb) return;
     this._intentsCb = (snap)=>{
       const v = snap.val();
       if (!v) return;
-      onIntent(v, snap.key);
+      onIntent(v, snap.key, snap.ref);
     };
-    this.intentsRef.limitToLast(200).on("child_added", this._intentsCb);
+    this.intentsRef.limitToLast(300).on("child_added", this._intentsCb);
   }
 
   async sendIntent(action){
-    const payload = { fromUid: FB.uid, fromName: FB.username, at: Date.now(), action };
+    const payload = {
+      fromId: FB.uid,
+      fromName: FB.username,
+      at: now(),
+      action
+    };
     await this.intentsRef.push(payload);
   }
 
   async writeState(state){
     await this.stateRef.set(state);
+  }
+
+  async updateMeta(patch){
+    await this.metaRef.update(patch);
+  }
+
+  async ackIntent(intentRef){
+    if (!intentRef) return;
+    await intentRef.remove().catch(()=>{});
   }
 
   close(){
@@ -3395,16 +3436,16 @@ class FirebaseTransport extends NetTransport {
       if (this._connectedCb) this._connectedRef.off("value", this._connectedCb);
       if (this._usersCb) this.usersRef.off("value", this._usersCb);
       this.presRef.remove();
+      this.usersRef.child(FB.uid).remove();
     }catch(e){}
     this.onStatus({connected:false, mode:"firebase"});
   }
 }
-
 /* =========================================================
-   10) Client State + Transport wiring
+   10) Client State + Transport wiring (Firebase-only)
 ========================================================= */
 const client = {
-  selfId: uid(),
+  selfId: "",
   selfName: "",
   roomCode: "",
   roomId: "",
@@ -3412,9 +3453,10 @@ const client = {
 
   isHost: false,
   transport: null,
-  host: null,
-  authoritative: null,
+  host: null,            // HostController khi là host
+  authoritative: null,   // state đã redact cho viewer
   lastVersion: 0,
+
   selected: null,
   dragging: null,
 };
@@ -3444,10 +3486,10 @@ function setStatusUI(){
     return;
   }
 
-  UI.roomBadge && (UI.roomBadge.textContent = "ROOM " + s.roomCode);
-  UI.chatBadge && (UI.chatBadge.textContent = "v" + s.version);
+  UI.roomBadge && (UI.roomBadge.textContent = "ROOM " + (s.roomCode || client.roomCode || "—"));
+  UI.chatBadge && (UI.chatBadge.textContent = "v" + (s.version || 0));
 
-  const me = s.players.find(p=>p.id===client.selfId);
+  const me = (s.players||[]).find(p=>p && p.id===client.selfId);
   if (UI.meLine){
     if (me){
       UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
@@ -3459,7 +3501,7 @@ function setStatusUI(){
     }
   }
 
-  const hostP = s.players.find(p=>p.id===s.hostId);
+  const hostP = (s.players||[]).find(p=>p && p.id===s.hostId);
   if (UI.hostLine){
     UI.hostLine.innerHTML = hostP
       ? `<span style="display:inline-flex;align-items:center;gap:8px">
@@ -3470,7 +3512,8 @@ function setStatusUI(){
   }
 
   if (UI.playersLine){
-    UI.playersLine.innerHTML = s.players.map(p=>{
+    UI.playersLine.innerHTML = (s.players||[]).map(p=>{
+      if (!p) return "";
       return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
         <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[p.color]};border:1px solid rgba(255,255,255,.18)"></span>
         <span style="color:rgba(233,236,255,.92)">${escapeHtml(p.name)}</span>
@@ -3504,43 +3547,25 @@ function setStatusUI(){
       ? "Đang ở phòng chờ. Host chọn deck và bấm Bắt đầu."
       : "Đang chơi...";
   }
-  
-  // host controls: chỉ host + firebase
-  const hostCanSetup = client.isHost && (client.transport instanceof FirebaseTransport);
+
+  // host controls: chỉ host
+  const hostCanSetup = !!client.isHost;
   if (UI.hostSetupControls){
-    UI.hostSetupControls.style.display = hostCanSetup && phase === "setup" ? "" : "none";
+    UI.hostSetupControls.style.display = (hostCanSetup && phase === "setup") ? "" : "none";
     if (hostCanSetup && phase === "setup"){
-      // auto load list 1 lần nếu dropdown rỗng
       if (UI.hostSetSelect && UI.hostSetSelect.options.length === 0){
         refreshHostSetSelect().catch(()=>{});
       }
     }
   }
-  renderChat();
+
+  renderChat?.();
 }
 
-function sendToServer(msg){
+async function sendIntent(action){
   if (!client.transport) return;
-  client.transport.send(msg);
-}
-
-async function sendIntentFirebase(action){
-  if (!(client.transport instanceof FirebaseTransport)) return;
+  // Firebase-only
   await client.transport.sendIntent(action);
-}
-
-function sendIntent(action){
-  if (UI.modeSelect?.value === "firebase"){
-    sendIntentFirebase(action);
-    return;
-  }
-  sendToServer({
-    type: "intent",
-    roomCode: client.roomCode,
-    fromId: client.selfId,
-    action,
-    at: now(),
-  });
 }
 
 function installTransport(t){
@@ -3548,159 +3573,33 @@ function installTransport(t){
   client.transport = t;
 
   t.onStatus = (st) => {
-    if (st.connected){
-      if (st.mode === "firebase") setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
-      else if (st.mode === "ws") setNetBadge("WS", "rgba(73,209,124,.55)");
-      else setNetBadge("LOCAL", "rgba(73,209,124,.55)");
-    } else {
+    if (st?.connected){
+      setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+    }else{
       setNetBadge("OFFLINE", "rgba(255,255,255,.12)");
-    }
-  };
-
-  t.onMessage = (msg) => {
-    if (!msg) return;
-
-    // Firebase transport không dùng protocol local/ws ở đây
-    if (client.transport instanceof FirebaseTransport) return;
-
-    // Local/WS
-    if (msg.roomCode !== client.roomCode) return;
-
-    if (msg.type === "hello" && client.isHost && client.host){
-      const res = client.host.addOrUpdatePlayer({id: msg.fromId, name: msg.name});
-      if (!res.ok){
-        sendToServer({type:"deny", roomCode: client.roomCode, toId: msg.fromId, reason: res.reason});
-        return;
-      }
-      client.host.applyIntent(client.host.hostId, {type:"chat", text:`${msg.name} joined.`});
-      broadcastStateRaw();
-      return;
-    }
-
-    if (msg.type === "bye" && client.isHost && client.host){
-      client.host.removePlayer(msg.fromId);
-      client.host.applyIntent(client.host.hostId, {type:"chat", text:`A player left.`});
-      broadcastStateRaw();
-      return;
-    }
-
-    if (msg.type === "deny"){
-      if (msg.toId === client.selfId){
-        toast("Không vào được phòng: " + (msg.reason || "Denied"));
-        leaveRoom();
-      }
-      return;
-    }
-
-    if (msg.type === "intent"){
-      if (client.isHost && client.host){
-        const r = client.host.applyIntent(msg.fromId, msg.action);
-        if (!r.ok && msg.fromId === client.selfId) toast("Action fail: " + r.reason);
-        broadcastStateRaw();
-      }
-      return;
-    }
-
-    if (msg.type === "stateRaw"){
-      if (client.isHost) return;
-      const red = redactStateForViewer(msg.state, client.selfId);
-      if (red && (red.version >= (client.lastVersion||0))){
-        client.authoritative = red;
-        client.lastVersion = red.version;
-        setStatusUI();
-      }
-      return;
     }
   };
 }
 
 /* =========================================================
-   11) Room: Local/WS create/join/leave
+   11) Room code helpers (Firebase-only)
 ========================================================= */
 function genRoomCode(){
+  // phòng Firebase dùng ROOM{N} -> hàm này giữ lại để fallback UI
   const a = Math.random().toString(36).slice(2, 6).toUpperCase();
   const b = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `${a}-${b}`;
 }
 
 function readInputs(){
-  client.selfName = (UI.nameInput?.value || "").trim().slice(0,18) || "Player";
+  // name lấy từ fbEnsureAuth (FB.username) là chuẩn nhất, nhưng vẫn giữ UI để hiển thị
+  client.selfName = (UI.nameInput?.value || "").trim().slice(0,18) || (FB?.username || "Player");
   client.roomCode = (UI.roomInput?.value || "").trim().toUpperCase();
   if (!client.roomCode) client.roomCode = genRoomCode();
   if (UI.roomInput) UI.roomInput.value = client.roomCode;
 }
 
-function makeTransportForCurrentMode(){
-  const mode = UI.modeSelect?.value || "local";
-
-  if (mode === "ws"){
-    const url = (UI.wsUrlInput?.value || "").trim() || "ws://localhost:8080";
-    return new WebSocketTransport(url);
-  }
-
-  try{
-    if (typeof BroadcastChannel !== "undefined"){
-      return new LocalBroadcastTransport(client.roomCode, client.selfId);
-    }
-  }catch(e){}
-  return new LocalStorageTransport(client.roomCode, client.selfId);
-}
-
-function broadcastStateRaw(){
-  if (!client.isHost || !client.host) return;
-  const st = client.host.state;
-
-  sendToServer({type:"stateRaw", roomCode: client.roomCode, state: deepClone(st), at: now()});
-
-  client.authoritative = redactStateForViewer(st, client.selfId);
-  client.lastVersion = client.authoritative.version;
-  setStatusUI();
-}
-
-function createRoomAsHost_LocalOrWS(){
-  readInputs();
-
-  client.isHost = true;
-  client.host = new HostController(client.roomCode, client.selfId);
-
-  const t = makeTransportForCurrentMode();
-  installTransport(t);
-
-  // host add itself
-  client.host.addOrUpdatePlayer({ id: client.selfId, name: client.selfName });
-
-  client.authoritative = redactStateForViewer(client.host.state, client.selfId);
-  client.lastVersion = client.authoritative.version;
-
-  setStatusUI();
-  broadcastStateRaw();
-
-  toast("Đã tạo phòng (Host)");
-  goMatch();
-}
-
-function joinRoomAsClient_LocalOrWS(){
-  readInputs();
-  client.isHost = false;
-  client.host = null;
-
-  const t = makeTransportForCurrentMode();
-  installTransport(t);
-
-  sendToServer({type:"hello", roomCode: client.roomCode, fromId: client.selfId, name: client.selfName, at: now()});
-  toast("Đang vào phòng...");
-  goMatch();
-}
-
-function leaveRoom(){
-  if (!client.roomCode) return;
-
-  try{
-    if (!client.isHost){
-      sendToServer({type:"bye", roomCode: client.roomCode, fromId: client.selfId, at: now()});
-    }
-  }catch(e){}
-
+function resetClientSession(){
   if (client.transport) client.transport.close();
   client.transport = null;
   client.isHost = false;
@@ -3709,17 +3608,17 @@ function leaveRoom(){
   client.lastVersion = 0;
   client.selected = null;
   client.dragging = null;
-
   setStatusUI();
   setNetBadge("OFFLINE");
 }
 
 /* =========================================================
-   12) Room: Firebase create/join
+   12) Room: Firebase create/join/leave (Firebase-only)
 ========================================================= */
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
+  // self id/name từ Firebase
   client.selfId = FB.uid;
   client.selfName = FB.username;
 
@@ -3742,9 +3641,11 @@ async function createRoomAsHost_Firebase(){
       hostUid: FB.uid,
       status: "active",
       createdAt: Date.now(),
-      maxPlayers: 6,
+      maxPlayers: 4,
       deckSource: null,
       deckBackUrl: "",
+      deckTotal: 0,
+      deckTypes: 0,
     },
     presence: {},
     users: {},
@@ -3752,46 +3653,62 @@ async function createRoomAsHost_Firebase(){
     state: client.host.state,
   });
 
-  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: 0, atk: 0, def: 0, hp: 20 });
+  // users node (phục vụ lobby/overlay)
+  await roomRef.child(`users/${FB.uid}`).set({ uid: FB.uid, username: FB.username, seat: 0, at: now() });
 
-  client.authoritative = redactStateForViewer(client.host.state, FB.uid);
-  client.lastVersion = client.authoritative.version;
-  setStatusUI();
-
+  // transport
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
+  await t.attachPresence();
+
   t.listenUsers((users)=>{
-    // nhét vào authoritative để overlay đọc được
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users;
   });
-  await t.attachPresence();
 
-  t.listenIntentsAsHost(async (msg, intentKey)=>{
-    const action = msg.action;
-    const fromId = msg.fromUid;
+  // host: xử lý intents -> apply -> writeState -> ack
+  t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
+    try{
+      const action = msg?.action || null;
+      const fromId = msg?.fromId || msg?.fromUid || null;
+      const fromName = msg?.fromName || msg?.fromName || "Player";
+      if (!action || !fromId) {
+        await t.ackIntent(intentRef || FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`));
+        return;
+      }
 
-    client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
+      // đảm bảo player có mặt trong state
+      client.host.addOrUpdatePlayer({ id: fromId, name: fromName });
 
-    const r = client.host.applyIntent(fromId, action);
-    if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
+      const r = client.host.applyIntent(fromId, action);
+      if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
 
-    await t.writeState(client.host.state);
-
-    try{ await FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`).remove(); }catch(e){}
+      await t.writeState(client.host.state);
+      await t.ackIntent(intentRef || FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`));
+    }catch(e){
+      console.error(e);
+      // vẫn cố ack để khỏi kẹt queue
+      try{ await t.ackIntent(intentRef || FB.db.ref(`AllRoom/${client.roomId}/intents/${intentKey}`)); }catch(_){}
+    }
   });
 
+  // host: listen state (để UI cập nhật nếu state bị write từ chính host)
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
     if (client.isHost && client.host){
-      client.host.state = st;
+      client.host.state = st; // sync
       client.authoritative = redactStateForViewer(st, FB.uid);
-    } else {
+    }else{
       client.authoritative = redactStateForViewer(st, FB.uid);
     }
     client.lastVersion = st.version || client.lastVersion;
     setStatusUI();
   });
+
+  // init local view ngay
+  client.authoritative = redactStateForViewer(client.host.state, FB.uid);
+  client.lastVersion = client.authoritative?.version || 0;
+  setStatusUI();
 
   toast(`Đã tạo room: ${roomId}`);
   client.roomMeta = { roomNo, roomId };
@@ -3808,29 +3725,33 @@ async function joinRoomAsClient_Firebase(){
   client.selfName = FB.username;
 
   readInputs();
-  client.roomId = client.roomCode.toLowerCase();
-  if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
+
+  client.roomId = (client.roomCode || "").toLowerCase();
+  if (!client.roomId.startsWith("room")){
+    toast("Nhập room dạng: ROOM1 / room1");
+    return;
+  }
 
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
 
-  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: -1, atk: 0, def: 0, hp: 20 });
+  // ghi users node cho host thấy
+  await roomRef.child(`users/${FB.uid}`).set({ uid: FB.uid, username: FB.username, seat: -1, at: now() });
 
   client.isHost = false;
   client.host = null;
 
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
+  await t.attachPresence();
 
   t.listenUsers((users)=>{
-    // nhét vào authoritative để overlay đọc được
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users;
   });
-  
-  await t.attachPresence();
 
+  // gửi join intent để host add player vào state
   await t.sendIntent({ type: "join" });
 
   t.listenState((st)=>{
@@ -3844,6 +3765,15 @@ async function joinRoomAsClient_Firebase(){
 
   toast("Đã vào " + client.roomCode);
   goMatch();
+}
+
+function leaveRoom(){
+  // Firebase-only: chỉ đóng transport + xoá local session
+  try{
+    if (client.transport) client.transport.close();
+  }catch(e){}
+  resetClientSession();
+  goLobby?.();
 }
 
 function installFirebaseRoomCleanupAsHost(roomId, roomNo){
@@ -3860,7 +3790,7 @@ function installFirebaseRoomCleanupAsHost(roomId, roomNo){
 }
 
 /* =========================================================
-   13) Deck/SetCard Modal (RTDB)
+   13) Deck/SetCard Modal (RTDB) - Firebase-only
 ========================================================= */
 const DECKUI = {
   modal: document.getElementById("deckModal"),
@@ -3922,7 +3852,6 @@ function makeCardTypeRow({frontUrl="", count=1, name=""} = {}){
   return row;
 }
 
-
 function fillEditorFromSet(setId, data){
   deckCurrentSetId = setId;
   DECKUI.setNameInput.value = data?.name || "";
@@ -3943,6 +3872,7 @@ function fillEditorFromSet(setId, data){
     DECKUI.list.appendChild(makeCardTypeRow());
   }
 }
+
 function editorToSetData(){
   const name = (DECKUI.setNameInput.value||"").trim() || "Untitled";
   const backUrl = (DECKUI.backUrlInput.value||"").trim();
@@ -3958,14 +3888,12 @@ function editorToSetData(){
     const count    = Math.max(1, parseInt(inputs[2]?.value || "1", 10) || 1);
 
     if (!frontUrl) continue;
-
     cards["t"+idx] = { name: rowName, frontUrl, count };
     idx++;
   }
 
   return { name, backUrl, cards, updatedAt: Date.now() };
 }
-
 
 async function refreshSetList(){
   await fbEnsureAuth();
@@ -4047,6 +3975,8 @@ function loadImg(url){
   if (!url) return null;
   if (imgCache.has(url)) return imgCache.get(url);
   const im = new Image();
+  im.decoding = "async";
+  im.loading = "lazy";
   im.src = url;
   imgCache.set(url, im);
   return im;
@@ -4086,15 +4016,12 @@ function renderChat(){
   const msgs = (s.chat || []);
   badge.textContent = String(msgs.length);
 
-  // Nếu bạn muốn TEAM filter thật thì filter ở đây.
-  const visible = msgs; // CHATUI.mode === "team" ? msgs.filter(...) : msgs;
+  // TEAM filter thật thì filter ở đây.
+  const visible = msgs;
 
-  // Re-render đơn giản (vì max 120 msg vẫn nhẹ)
   log.innerHTML = "";
 
-  // class age: làm mờ tin nhắn cũ
   const n = visible.length;
-
   for (let i = 0; i < n; i++){
     const m = visible[i];
     const p = getPlayerById(s, m.fromId);
@@ -4123,14 +4050,12 @@ function renderChat(){
     log.appendChild(row);
   }
 
-  // auto scroll khi có tin mới (như LoL)
   if (msgs.length !== CHATUI.lastCount){
     log.scrollTop = log.scrollHeight;
     CHATUI.lastCount = msgs.length;
   }
 }
 
-// toggle ALL/TEAM
 (function initChatToggle(){
   const tg = document.getElementById("chatToggle");
   if (!tg) return;
@@ -4138,13 +4063,11 @@ function renderChat(){
     const btn = e.target.closest("button[data-mode]");
     if (!btn) return;
     CHATUI.mode = btn.dataset.mode;
-
     tg.querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn));
     renderChat();
   });
 })();
 
-// submit form -> send intent
 (function initChatForm(){
   const form = document.getElementById("chatForm");
   const input = document.getElementById("chatInput");
@@ -4157,10 +4080,7 @@ function renderChat(){
     input.value = "";
     sendIntent({ type:"chat", text });
   });
-
-  // Enter gửi, Shift+Enter xuống dòng (LoL style thường không multiline, nhưng bạn có thể giữ)
 })();
-
 
 /* =========================================================
    16) Input / HitTest / Drag
@@ -4178,7 +4098,7 @@ function cardZ(c){
   if (c.zone === ZONES.deck) z = 40;
   return z + (c.order||0)*0.001;
 }
-  
+
 function stackZ(s){
   let z = 12;
   if (s.zone === ZONES.table) z = 55;
@@ -4216,6 +4136,7 @@ function hitTest(worldX, worldY){
     const w = CARD.w, h = CARD.h;
     const x0 = o.x - w/2, y0 = o.y - h/2;
     if (worldX >= x0 && worldX <= x0+w && worldY >= y0 && worldY <= y0+h){
+      // privacy hand
       if (o.zone === ZONES.hand && o.owner && o.owner !== client.selfId) return null;
       return {type:o.type, id:o.id};
     }
@@ -4383,12 +4304,10 @@ function drawZone(rect, label, subtitle="", highlight=false, tint=null){
 
   rr(x,y,w,h,18);
 
-  // base
   ctx.globalAlpha = highlight ? 0.85 : 0.35;
   ctx.fillStyle = highlight ? "rgba(122,162,255,.22)" : "rgba(0,0,0,.10)";
   ctx.fill();
 
-  // tint color for player zone
   if (tint){
     ctx.globalAlpha = highlight ? 0.18 : 0.10;
     ctx.fillStyle = tint;
@@ -4515,28 +4434,27 @@ function draw(){
   }
 
   const seatName = (seat)=>{
-    const p = s.players.find(pp=>pp.seat===seat);
+    const p = (s.players||[]).find(pp => (Number(pp.seat)|0) === seat);
     return p ? p.name : "(empty)";
   };
 
   drawZone(rects.table, "TABLE", "", false);
 
-  const selfId = client.selfId ?? client.playerId ?? client.uid ?? FB?.uid;
-  const me = s.players.find(p => p.id === selfId);
+  const selfId = client.selfId || FB?.uid || "";
+  const me = (s.players||[]).find(p => p && p.id === selfId);
   const mySeat = me ? (Number(me.seat) | 0) : -1;
-  
-  const playerBySeat = (seat)=> s.players.find(pp => (Number(pp.seat)|0) === seat) || null;
+
+  const playerBySeat = (seat)=> (s.players||[]).find(pp => (Number(pp.seat)|0) === seat) || null;
   const tintBySeat = (seat)=>{
     const p = playerBySeat(seat);
-    return p ? (COLORS?.[p.color] ?? p.color ?? null) : null;
+    return p ? (COLORS?.[p.color] ?? null) : null;
   };
-  
+
+  // ✅ 4 người
   drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0, tintBySeat(0));
-  drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2, tintBySeat(2));
   drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1, tintBySeat(1));
+  drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2, tintBySeat(2));
   drawZone(rects.handBottomRight, "Người chơi 4", seatName(3), mySeat===3, tintBySeat(3));
-  drawZone(rects.handRightTop,    "Người chơi 5", seatName(4), mySeat===4, tintBySeat(4));
-  drawZone(rects.handRightBottom, "Người chơi 6", seatName(5), mySeat===5, tintBySeat(5));
 
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
@@ -4562,7 +4480,7 @@ function draw(){
       const c = s.cards[o.id];
       if (!c) continue;
 
-      const owner = s.players.find(p=>p.id===(c.ownerId || c.owner));
+      const owner = (s.players||[]).find(p=>p && p.id===(c.ownerId || c.owner));
       const accent = owner ? COLORS[owner.color] : null;
 
       const frontUrl = c.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
@@ -4575,14 +4493,14 @@ function draw(){
       const top = topId ? s.cards[topId] : null;
 
       const topOwnerId = top?.ownerId || top?.owner || stack.owner;
-      const owner = s.players.find(p=>p.id===topOwnerId);
+      const owner = (s.players||[]).find(p=>p && p.id===topOwnerId);
       const accent = owner ? COLORS[owner.color] : null;
 
       if (top){
         const frontUrl = top.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
         drawCardAtScreen(sp.x, sp.y, !!top.faceUp, top.frontSeed, accent, isSelected, true, stack.cardIds.length, frontUrl, backUrlDefault);
 
-        if (stack.cardIds.length > 1){
+        if ((stack.cardIds?.length||0) > 1){
           ctx.save();
           ctx.globalAlpha = 0.25;
           for (let i=1; i<Math.min(4, stack.cardIds.length); i++){
@@ -4595,94 +4513,15 @@ function draw(){
       }
     }
   }
+
   requestAnimationFrame(draw);
-  renderStatusBoard();
+  renderStatusBoard?.();
 }
 requestAnimationFrame(draw);
 
-const _statInputs = new Map(); // key: uid
-
-function seatRectKey(seat){
-  switch (seat){
-    case 0: return "handTopLeft";
-    case 1: return "handBottomLeft";
-    case 2: return "handTopRight";
-    case 3: return "handBottomRight";
-    case 4: return "handRightTop";
-    case 5: return "handRightBottom";
-    default: return null;
-  }
-}
-
-function ensureStatBoxForUser(userId){
-  if (_statInputs.has(userId)) return _statInputs.get(userId);
-
-  const box = document.createElement("div");
-  box.className = "statBox";
-
-  const dot = document.createElement("div");
-  dot.className = "dot";
-
-  const name = document.createElement("div");
-  name.className = "name";
-  name.textContent = "Player";
-
-  const mkField = (labelText)=>{
-    const wrap = document.createElement("div");
-    const lab = document.createElement("label");
-    lab.textContent = labelText;
-    const inp = document.createElement("input");
-    inp.type = "number";
-    inp.step = "1";
-    inp.value = "0";
-    wrap.appendChild(lab);
-    wrap.appendChild(inp);
-    return {wrap, inp};
-  };
-
-  const atk = mkField("ATK");
-  const def = mkField("DEF");
-  const hp  = mkField("HP");
-
-  box.appendChild(dot);
-  box.appendChild(name);
-  box.appendChild(atk.wrap);
-  box.appendChild(def.wrap);
-  box.appendChild(hp.wrap);
-
-  // realtime update to RTDB (ai cũng sửa)
-  const commit = async (uid, patch)=>{
-    if (!(client.transport instanceof FirebaseTransport)) return;
-    if (!client.roomId) return;
-    try{
-      await FB.db.ref(`AllRoom/${client.roomId}/users/${uid}`).update(patch);
-    }catch(e){}
-  };
-
-  const bind = (inp, key)=> {
-    inp.addEventListener("change", ()=>{
-      const v = parseInt(inp.value,10);
-      commit(userId, {[key]: Number.isFinite(v) ? v : 0});
-    });
-    inp.addEventListener("keydown", (e)=>{
-      if (e.key === "Enter"){
-        e.preventDefault();
-        inp.blur();
-      }
-    });
-  };
-
-  bind(atk.inp, "atk");
-  bind(def.inp, "def");
-  bind(hp.inp,  "hp");
-
-  STATS_UI.root && STATS_UI.root.appendChild(box);
-
-  const obj = { box, dot, name, atk: atk.inp, def: def.inp, hp: hp.inp };
-  _statInputs.set(userId, obj);
-  return obj;
-}
-
+/* =========================================================
+   Status Board (giữ logic bạn đang dùng) - chỉ sửa seat 4 người
+========================================================= */
 const STATUS = {
   el: document.getElementById("statusBoard"),
   body: document.getElementById("sbBody"),
@@ -4695,8 +4534,6 @@ const STATUS = {
 };
 
 function isHost(s){
-  // tùy bạn đang lưu host thế nào
-  // ưu tiên state.hostId, nếu không có thì client.isHost
   return (s?.hostId && client.selfId === s.hostId) || !!client.isHost;
 }
 
@@ -4705,18 +4542,16 @@ function ensureStatsRow(s, playerId){
   s.ui.statHeaders = s.ui.statHeaders || ["ATK","DEF","HP","COIN"];
   s.ui.statsByPlayer = s.ui.statsByPlayer || {};
   if (!s.ui.statsByPlayer[playerId]) s.ui.statsByPlayer[playerId] = ["", "", "", ""];
-  // đảm bảo đủ 4 ô
   for (let i=0;i<4;i++){
     if (s.ui.statsByPlayer[playerId][i] == null) s.ui.statsByPlayer[playerId][i] = "";
   }
   return s.ui.statsByPlayer[playerId];
 }
-  
+
 function initStatusBoardUI(){
   if (!STATUS.el || !STATUS.body || STATUS.bound) return;
   STATUS.bound = true;
 
-  // toggle +/-
   if (STATUS.toggle){
     const apply = ()=>{
       STATUS.el.classList.toggle("collapsed", STATUS.collapsed);
@@ -4729,7 +4564,6 @@ function initStatusBoardUI(){
     apply();
   }
 
-  // event delegation: bind 1 lần trên body
   STATUS.body.addEventListener("input", (e)=>{
     const inp = e.target.closest("input[data-kind]");
     if (!inp) return;
@@ -4753,7 +4587,6 @@ function initStatusBoardUI(){
     }
   });
 
-  // đang gõ -> đừng re-render
   STATUS.body.addEventListener("focusin", (e)=>{
     if (e.target.closest("input[data-kind]")) STATUS.editing = true;
   });
@@ -4767,8 +4600,6 @@ function initStatusBoardUI(){
   });
 }
 
-
-// debounce gửi intent
 function sendIntentDebounced(intent){
   clearTimeout(STATUS._timer);
   STATUS._timer = setTimeout(()=> sendIntent(intent), 120);
@@ -4779,34 +4610,26 @@ function renderStatusBoard(){
 
   const s = getState();
   if (!s || !STATUS.el || !STATUS.body) return;
-
-  // nếu đang edit input thì không rebuild DOM (tránh lag + mất con trỏ)
   if (STATUS.editing) return;
 
-  // đảm bảo shape
   s.ui = s.ui || {};
   const headers = (s.ui.statHeaders || ["ATK","DEF","HP","COIN"]).slice(0,4);
   while (headers.length < 4) headers.push("");
 
   const host = isHost(s);
 
-  // tạo "signature" nhẹ để chỉ update khi data đổi
-  // (dùng version + headers + players + stats)
   let sig = `v=${s.version||0}|h=${headers.join(",")}|p=`;
   const players = (s.players || []);
   for (let i=0;i<players.length;i++){
     const p = players[i];
     if (!p) continue;
-    const stats = ensureStatsRow(s, p.id); // đảm bảo có 4 ô
+    const stats = ensureStatsRow(s, p.id);
     sig += `${p.id}:${p.name||""}:${p.color||""}:${stats.join("/")};`;
   }
-
-  if (sig === STATUS.lastSig) return; // ✅ không đổi thì thôi
+  if (sig === STATUS.lastSig) return;
   STATUS.lastSig = sig;
 
-  // ===== render HTML (chỉ chạy khi sig đổi) =====
   const headerHtml = headers.map((h, idx)=>{
-    // dùng readonly thay vì disabled để vẫn click/copy được
     const ro = host ? "" : "readonly";
     return `
       <th style="padding:6px 6px; text-align:center;">
@@ -4875,8 +4698,7 @@ function renderStatusBoard(){
       </tr>
     `;
   }).join("");
-  
-  // chỉ render BODY, không đụng header
+
   STATUS.body.innerHTML = `
     <table style="border-collapse:collapse;width:100%;">
       <thead>
@@ -4890,29 +4712,13 @@ function renderStatusBoard(){
       </tbody>
     </table>
   `;
-
 }
-
-// chống XSS (vì dùng innerHTML)
-function escapeHtml(str){
-  return (str ?? "").toString()
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
 
 /* =========================================================
-   19) UI bindings (bind 1 lần)
+   19) UI bindings (Firebase-only) - BỎ modeSelect/local/ws
 ========================================================= */
-if (UI.modeSelect){
-  UI.modeSelect.addEventListener("change", ()=>{
-    if (UI.wsRow) UI.wsRow.style.display = (UI.modeSelect.value === "ws") ? "flex" : "none";
-  });
-}
 
+// Apply deck images (host)
 if (UI.applyDeckBtn){
   UI.applyDeckBtn.addEventListener("click", ()=>{
     if (!client.isHost) return toast("Host mới set deck images");
@@ -4921,11 +4727,11 @@ if (UI.applyDeckBtn){
   });
 }
 
+// Create room (Firebase)
 if (UI.createBtn){
   UI.createBtn.addEventListener("click", async ()=>{
     try{
-      if (UI.modeSelect?.value === "firebase") await createRoomAsHost_Firebase();
-      else createRoomAsHost_LocalOrWS();
+      await createRoomAsHost_Firebase();
     }catch(e){
       console.error(e);
       toast("Create error: " + (e.message || e));
@@ -4933,11 +4739,11 @@ if (UI.createBtn){
   });
 }
 
+// Join room (Firebase)
 if (UI.joinBtn){
   UI.joinBtn.addEventListener("click", async ()=>{
     try{
-      if (UI.modeSelect?.value === "firebase") await joinRoomAsClient_Firebase();
-      else joinRoomAsClient_LocalOrWS();
+      await joinRoomAsClient_Firebase();
     }catch(e){
       console.error(e);
       toast("Join error: " + (e.message || e));
@@ -4945,6 +4751,7 @@ if (UI.joinBtn){
   });
 }
 
+// Reset (host)
 if (UI.resetBtn){
   UI.resetBtn.addEventListener("click", ()=>{
     if (!client.authoritative) return;
@@ -4953,16 +4760,12 @@ if (UI.resetBtn){
   });
 }
 
+// Copy link phòng (Firebase-only)
 if (UI.copyLinkBtn){
   UI.copyLinkBtn.addEventListener("click", async ()=>{
     readInputs();
     const url = new URL(location.href);
     url.searchParams.set("room", client.roomCode);
-    url.searchParams.set("mode", UI.modeSelect?.value || "local");
-    if (UI.modeSelect?.value === "ws"){
-      const ws = (UI.wsUrlInput?.value || "").trim();
-      if (ws) url.searchParams.set("ws", ws);
-    }
     try{
       await navigator.clipboard.writeText(url.toString());
       toast("Đã copy link phòng.");
@@ -4972,6 +4775,7 @@ if (UI.copyLinkBtn){
   });
 }
 
+// collapse panels (+/-)
 document.querySelectorAll(".collapse-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     const panelId = btn.dataset.target;
@@ -4981,15 +4785,97 @@ document.querySelectorAll(".collapse-btn").forEach(btn => {
     btn.textContent = collapsed ? "+" : "−";
   });
 });
-
 /* =========================================================
    20) Auth UI buttons (login/register/anon/logout/leave)
+   Firebase-only
 ========================================================= */
+
+// đợi auth ready (tránh case login xong UI chưa đổi)
+function fbWaitAuthReady(){
+  fbInitOnce();
+  return new Promise((resolve)=>{
+    const off = FB.auth.onAuthStateChanged((u)=>{
+      try{ off(); }catch(e){}
+      resolve(u || null);
+    });
+  });
+}
+
+// đảm bảo profile AllUser/{uid} tồn tại + có setCard
+async function ensureUserProfile(uid, patch){
+  fbInitOnce();
+  const uref = FB.db.ref(`AllUser/${uid}`);
+  const snap = await uref.get();
+  if (!snap.exists()){
+    await uref.set({
+      username: patch.username || "Player",
+      email: patch.email || null,
+      createdAt: Date.now(),
+      setCard: {},
+      ...patch,
+    });
+  }else{
+    const cur = snap.val() || {};
+    const upd = {};
+    if (patch.username && (cur.username||"") !== patch.username) upd.username = patch.username;
+    if (patch.email && !cur.email) upd.email = patch.email;
+    if (!cur.setCard) upd.setCard = {};
+    if (Object.keys(upd).length) await uref.update(upd);
+  }
+}
+
+// đồng bộ runtime FB.{user,uid,username} + nameInput
+async function syncRuntimeFromAuth(){
+  fbInitOnce();
+  const u = FB.auth.currentUser;
+  if (!u) return false;
+
+  FB.user = u;
+  FB.uid = u.uid;
+
+  const snap = await FB.db.ref(`AllUser/${FB.uid}`).get();
+  const prof = snap.val() || {};
+  FB.username = (prof.username || "Player").toString().slice(0,18);
+
+  if (UI.nameInput) UI.nameInput.value = FB.username;
+  return true;
+}
+
+// auto route theo auth state
+let _authGateInstalled = false;
+function installAuthGateOnce(){
+  if (_authGateInstalled) return;
+  _authGateInstalled = true;
+
+  fbInitOnce();
+  FB.auth.onAuthStateChanged(async (u)=>{
+    if (!u){
+      // logged out
+      try{ leaveRoom(); }catch(e){}
+      goAuth();
+      setNetBadge("OFFLINE");
+      return;
+    }
+
+    // logged in
+    try{
+      await syncRuntimeFromAuth();
+      goLobby();
+      setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+    }catch(e){
+      console.error(e);
+      toast("Auth sync error: " + (e.message || e));
+      goAuth();
+    }
+  });
+}
+
 async function registerUser(){
   fbInitOnce();
+
   const email = (document.getElementById("authEmail")?.value || "").trim();
   const password = document.getElementById("authPassword")?.value || "";
-  const username = (document.getElementById("authUsername")?.value || "").trim();
+  const username = (document.getElementById("authUsername")?.value || "").trim().slice(0,18);
 
   if (!email || !password || !username){
     toast("Nhập đầy đủ email / mật khẩu / tên");
@@ -4999,23 +4885,19 @@ async function registerUser(){
   const cred = await FB.auth.createUserWithEmailAndPassword(email, password);
   const user = cred.user;
 
-  await FB.db.ref(`AllUser/${user.uid}`).set({
-    username,
-    email,
-    createdAt: Date.now(),
-    setCard: {}
-  });
+  await ensureUserProfile(user.uid, { username, email });
 
   // sync runtime
   FB.user = user; FB.uid = user.uid; FB.username = username;
   if (UI.nameInput) UI.nameInput.value = username;
 
   toast("Đăng ký thành công");
-  goLobby();
+  goLobby(); // fallback (authGate cũng sẽ đưa)
 }
 
 async function loginUser(){
   fbInitOnce();
+
   const email = (document.getElementById("authEmail")?.value || "").trim();
   const password = document.getElementById("authPassword")?.value || "";
 
@@ -5026,18 +4908,36 @@ async function loginUser(){
 
   await FB.auth.signInWithEmailAndPassword(email, password);
 
-  // sau login, lấy username từ profile nếu có
-  FB.user = FB.auth.currentUser;
-  FB.uid = FB.user.uid;
-
-  const snap = await FB.db.ref(`AllUser/${FB.uid}`).get();
-  const prof = snap.val() || {};
-  FB.username = (prof.username || "Player").slice(0,18);
-
-  if (UI.nameInput) UI.nameInput.value = FB.username;
+  // đợi auth ready rồi sync
+  await fbWaitAuthReady();
+  await syncRuntimeFromAuth();
 
   toast("Đăng nhập thành công");
   goLobby();
+}
+
+async function playAnon(){
+  fbInitOnce();
+
+  await FB.auth.signInAnonymously();
+  await fbWaitAuthReady();
+
+  FB.user = FB.auth.currentUser;
+  FB.uid = FB.user.uid;
+
+  const uname =
+    ((document.getElementById("authUsername")?.value || "").trim().slice(0,18)) ||
+    "Guest";
+
+  FB.username = uname;
+
+  await ensureUserProfile(FB.uid, { username: FB.username });
+
+  if (UI.nameInput) UI.nameInput.value = FB.username;
+
+  goLobby();
+  setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+  toast("Chơi thử: vào sảnh chờ");
 }
 
 const loginBtn = document.getElementById("loginBtn");
@@ -5058,42 +4958,15 @@ if (loginBtn){
 }
 if (playAnonBtn){
   playAnonBtn.onclick = async ()=>{
-    try{
-      fbInitOnce();
-      await FB.auth.signInAnonymously();
-      FB.user = FB.auth.currentUser;
-      FB.uid = FB.user.uid;
-
-      const uname =
-        ((document.getElementById("authUsername")?.value || "").trim().slice(0,18)) ||
-        "Guest";
-      FB.username = uname;
-
-      const uref = FB.db.ref(`AllUser/${FB.uid}`);
-      const snap = await uref.get();
-      if (!snap.exists()){
-        await uref.set({ username: FB.username, createdAt: Date.now(), setCard:{} });
-      }else{
-        await uref.update({ username: FB.username });
-        const cur = snap.val() || {};
-        if (!cur.setCard) await uref.update({ setCard:{} });
-      }
-
-      if (UI.nameInput) UI.nameInput.value = FB.username;
-
-      goLobby();
-      toast("Chơi thử: vào sảnh chờ");
-    }catch(e){
-      console.error(e);
-      toast("Anonymous error: " + (e.message || e));
-    }
+    try{ await playAnon(); }catch(e){ console.error(e); toast("Anonymous error: " + (e.message || e)); }
   };
 }
 if (logoutBtn){
   logoutBtn.onclick = async ()=>{
-    try{ if (FB?.auth?.currentUser) await FB.auth.signOut(); }catch(e){}
     try{ leaveRoom(); }catch(e){}
+    try{ if (FB?.auth?.currentUser) await FB.auth.signOut(); }catch(e){}
     goAuth();
+    setNetBadge("OFFLINE");
     toast("Đã đăng xuất");
   };
 }
@@ -5105,9 +4978,10 @@ if (leaveMatchBtn){
   };
 }
 
-// Sảnh chờ////////////////////////////////////////////////
-  ///////////////////
-  (function initLobbyTabs(){
+/* =========================================================
+   Lobby UI (giữ nguyên logic bạn gửi)
+========================================================= */
+(function initLobbyTabs(){
   const root = document.getElementById("lobbyScreen");
   if(!root) return;
 
@@ -5127,7 +5001,7 @@ if (leaveMatchBtn){
     btn.addEventListener("click", ()=> showTab(btn.dataset.tab));
   });
 
-  // mirror: Inventory buttons call existing ids (no change to your logic)
+  // mirror Inventory actions
   const openDeckBtn = document.getElementById("openDeckBtn");
   if(openDeckBtn){
     openDeckBtn.addEventListener("click", ()=> openDeckBtn.click());
@@ -5139,7 +5013,7 @@ if (leaveMatchBtn){
     invApply.addEventListener("click", ()=> applyDeckBtn.click());
   }
 
-  // Net pill reflect netBadge text if you keep updating #netBadge elsewhere
+  // Net pill reflect netBadge
   const netBadge = document.getElementById("netBadge");
   const netPill = document.getElementById("netPill");
   const netTxt = document.getElementById("netTxt");
@@ -5153,11 +5027,10 @@ if (leaveMatchBtn){
       if(dot) dot.style.background = online ? "#42d392" : "#a64b4b";
     };
     sync();
-    // nếu bạn có cơ chế update netBadge liên tục, có thể observe:
     new MutationObserver(sync).observe(netBadge, { childList:true, subtree:true, characterData:true });
   }
 
-  // Small UX: Paste room code
+  // Paste room code
   const pasteBtn = document.getElementById("pasteRoomBtn");
   const quickIn = document.getElementById("quickRoomSearch");
   const roomInput = document.getElementById("roomInput");
@@ -5179,7 +5052,6 @@ if (leaveMatchBtn){
     });
   }
 
-  // Customize sliders text
   const uiSfx = document.getElementById("uiSfx");
   const uiSfxTxt = document.getElementById("uiSfxTxt");
   if(uiSfx && uiSfxTxt){
@@ -5205,7 +5077,6 @@ if (leaveMatchBtn){
   const joinBtn = byId("joinBtn");
   const openDeckBtn = byId("openDeckBtn");
 
-  // Tab switch helper: dùng đúng cơ chế data-tab bạn đã dùng
   function showTab(tabId){
     const root = byId("lobbyScreen");
     if(!root) return;
@@ -5221,7 +5092,6 @@ if (leaveMatchBtn){
   dockResetBtn?.addEventListener("click", ()=> resetBtn?.click());
   dockJoinBtn?.addEventListener("click", ()=> joinBtn?.click());
 
-  // Hint đổi theo tab (optional)
   const hint = byId("dockHint");
   if(hint){
     const map = {
@@ -5241,7 +5111,6 @@ if (leaveMatchBtn){
   }
 })();
 
-  
 /* =========================================================
    21) Deck modal binds
 ========================================================= */
@@ -5261,24 +5130,17 @@ if (DECKUI.newSetBtn) DECKUI.newSetBtn.onclick = createNewSet;
 if (DECKUI.saveBtn) DECKUI.saveBtn.onclick = saveCurrentSet;
 if (DECKUI.deleteSetBtn) DECKUI.deleteSetBtn.onclick = deleteCurrentSet;
 if (DECKUI.loadSetBtn) DECKUI.loadSetBtn.onclick = loadSelectedSet;
-if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=>{
-    DECKUI.list.appendChild(makeCardTypeRow());
-  };
+if (DECKUI.addCardBtn) DECKUI.addCardBtn.onclick = ()=> {
+  DECKUI.list.appendChild(makeCardTypeRow());
+};
 
 /* =========================================================
-   22) Auto-fill URL params
+   22) Auto-fill URL params (Firebase-only)
 ========================================================= */
 (function initFromQuery(){
   const u = new URL(location.href);
   const room = u.searchParams.get("room");
-  const mode = u.searchParams.get("mode");
-  const ws = u.searchParams.get("ws");
   if (room && UI.roomInput) UI.roomInput.value = room.toUpperCase();
-  if (mode && UI.modeSelect && (mode==="local" || mode==="ws" || mode==="firebase")){
-    UI.modeSelect.value = mode;
-    if (UI.wsRow) UI.wsRow.style.display = mode === "ws" ? "flex" : "none";
-  }
-  if (ws && UI.wsUrlInput) UI.wsUrlInput.value = ws;
 })();
 
 addEventListener("beforeunload", ()=>{ try{ leaveRoom(); }catch(e){} });
@@ -5293,8 +5155,26 @@ window.addEventListener("unhandledrejection", (e) => {
 /* =========================================================
    23) Boot
 ========================================================= */
-goAuth();
-setNetBadge("OFFLINE");
+fbInitOnce();
+installAuthGateOnce();
+
+// nếu đã login từ trước (session), tự sync vào lobby
+fbWaitAuthReady().then(async (u)=>{
+  if (u){
+    try{
+      await syncRuntimeFromAuth();
+      goLobby();
+      setNetBadge("FIREBASE", "rgba(73,209,124,.65)");
+    }catch(e){
+      console.error(e);
+      goAuth();
+      setNetBadge("OFFLINE");
+    }
+  }else{
+    goAuth();
+    setNetBadge("OFFLINE");
+  }
+});
 
 </script>
 </body>
