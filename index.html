@@ -4528,14 +4528,15 @@ function drawCardAtScreen(
 
     ctx.drawImage(img, dx, dy, dw, dh);
   } else {
-    // fallback
+    // fallback: vẽ chữ mô tả (không đụng tới bw/bh)
     ctx.fillStyle = "rgba(233,236,255,.92)";
-    ctx.font = `${Math.max(10, 11*camera.scale)}px ui-monospace, monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(String(stackCount), x + w - bw/2 - 8*camera.scale, y + bh/2 + 8*camera.scale);
+    ctx.font = `${Math.max(10, 12*camera.scale)}px ui-monospace, monospace`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
     const label = faceUp && frontSeed ? ("CARD " + String(frontSeed).padStart(2,"0")) : "BACK";
+    ctx.fillText(label, x + 10*camera.scale, y + 12*camera.scale);
   }
+
   ctx.restore();
 
   // base border
