@@ -2247,12 +2247,9 @@ async function refreshHostSetSelect(){
 }
 
 async function hostLoadSelectedSetToRoom_FromSaved(){
-  // ✅ client phải tồn tại trong scope module; nếu chưa có thì do thứ tự script
   if (typeof client === "undefined") {
     throw new Error("client chưa được khởi tạo (đặt code này SAU đoạn const client = {...})");
   }
-
-  // phải ở firebase & host
   if (!client.isHost) return toast("Chỉ host mới load deck");
   if (!(client.transport instanceof FirebaseTransport)) return toast("Chức năng này chỉ dùng trong Firebase");
 
@@ -2264,7 +2261,6 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   const setId = UI.hostSetSelect?.value || "";
   if (!setId) return toast("Chưa chọn set");
 
-  // đảm bảo cache
   if (!_hostSetsCache[setId]) await refreshHostSetSelect();
   const data = _hostSetsCache[setId];
   if (!data) return toast("Set không tồn tại");
@@ -2281,37 +2277,37 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   if (total <= 0) return toast("Set rỗng (chưa có URL / count)");
 
   const backUrl = (data.backUrl || "").trim();
-
-  // ✅ roomRef chuẩn (không cần getRoomRef nếu bạn chưa định nghĩa)
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
 
-  // meta cho cả phòng (để người khác thấy deck info)
-  await roomRef.child("meta").update({
-    deckSource: { uid: FB.uid, setId },
-    deckBackUrl: backUrl,
-    deckTotal: total,
-    deckTypes: types.length,
-    updatedAt: now(),
-  });
+  // meta: lưu lịch sử nhiều deck (append)
+  const deckItem = {
+    uid: FB.uid,
+    setId,
+    name: (data?.name || "Deck").slice(0,38),
+    backUrl,
+    total,
+    types: types.length,
+    at: now(),
+  };
+  await roomRef.child("meta/decks").push(deckItem);
 
-  // build deck vào authoritative state của host
+  // build deck vào state
   const st = client.host.state;
-  st.assets = st.assets || { frontBase:"", backUrl:"" };
+  st.assets = st.assets || { backUrl:"" };
   st.assets.backUrl = backUrl;
 
-  if (typeof buildPhysicalDeckFromTypes !== "function"){
-    throw new Error("buildPhysicalDeckFromTypes chưa tồn tại (bạn đặt function này ở đâu?)");
+  if (typeof hostCreateDeckFromSet !== "function"){
+    throw new Error("hostCreateDeckFromSet chưa tồn tại (bạn chưa dán function phần B)");
   }
 
-  buildPhysicalDeckFromTypes(st, types, "stack_deck");
+  hostCreateDeckFromSet(st, types, deckItem.name);
 
   if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
-
-  // ✅ ghi state qua transport (chuẩn)
   await client.transport.writeState(st);
 
-  toast(`Loaded deck: ${types.length} loại / ${total} lá`);
+  toast(`Đã tạo deck mới: ${types.length} loại / ${total} lá`);
 }
+
 
 /* =========================================================
    7) Wire UI buttons
@@ -2435,60 +2431,62 @@ function updateInspector(){
     return;
   }
 
-  // ===== DECK (SPECIAL CASE) =====
+  // DECK special (nếu bạn còn stack_deck cũ)
   if (sel.type === "stack" && sel.id === "stack_deck"){
     const count = st.stacks?.stack_deck?.cardIds?.length || 0;
     INS.preview.innerHTML = `
       <div style="text-align:center;font-size:13px">
         <div>${count} cards</div>
-        <div style="opacity:.6;margin-top:6px">Press D to draw</div>
-        <div style="opacity:.4;margin-top:4px">Press S to shuffle</div>
+        <div style="opacity:.6;margin-top:6px">Press Q to draw</div>
+        <div style="opacity:.4;margin-top:4px">Press E to shuffle</div>
       </div>
     `;
     return;
   }
 
-  // ===== CARD =====
+  // CARD
   if (sel.type === "card"){
-    const c = st.cards?.[sel.id];
+    const c = getCardById(st, sel.id);
+    if (!c){
+      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Card not found</div>`;
+      return;
+    }
 
-    // ưu tiên frontUrl (setCard), nếu không có thì dùng frontBase+id.png
-    const frontUrl = c?.frontUrl
-      ? c.frontUrl
-      : (st.assets?.frontBase ? (st.assets.frontBase + sel.id + ".png") : "");
+    const frontUrl = (c.frontUrl || "") || (st.assets?.frontBase ? (st.assets.frontBase + c.id + ".png") : "");
     const backUrl  = st.assets?.backUrl || "";
-    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
+    const url = (c.faceUp && frontUrl) ? frontUrl : backUrl;
 
     INS.preview.innerHTML = url
       ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">
-          No image set. Host hãy set Back URL hoặc load setCard.
-        </div>`;
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set</div>`;
     return;
   }
 
-  // ===== STACK (NORMAL) =====
+  // STACK
   if (sel.type === "stack"){
-    const s = st.stacks?.[sel.id];
-    const topId = s?.cardIds?.[0];
-
+    const s = getStackById(st, sel.id);
+    const topId = getStackTopCardId(st, s);
     if (!topId){
       INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Empty stack</div>`;
       return;
     }
 
-    const c = st.cards?.[topId];
-    const frontUrl = c?.frontUrl
-      ? c.frontUrl
-      : (st.assets?.frontBase ? (st.assets.frontBase + topId + ".png") : "");
+    const c = getCardById(st, topId);
+    if (!c){
+      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Top card missing</div>`;
+      return;
+    }
+
+    const frontUrl = (c.frontUrl || "") || (st.assets?.frontBase ? (st.assets.frontBase + c.id + ".png") : "");
     const backUrl  = st.assets?.backUrl || "";
-    const url = (c?.faceUp && frontUrl) ? frontUrl : backUrl;
+    const url = (c.faceUp && frontUrl) ? frontUrl : backUrl;
 
     INS.preview.innerHTML = url
       ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set.</div>`;
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set</div>`;
   }
 }
+
 
 /* =========================================================
    6) Networking (Firebase Realtime ONLY)
@@ -2647,108 +2645,131 @@ function makeFreshTableState(roomCode, hostId){
     roomCode,
     hostId,
     players: [],
-    cards: {},
-    stacks: {},
-    chat: [],
     version: 1,
-    assets: { frontBase:"", backUrl:"" },
-    _deckPool: [],
-    game: { phase: "setup" },
+    assets: { backUrl:"" },  // back chung
+    game: { phase:"setup" },
+
+    // ===== Card pool theo zone =====
+    all: {
+      cards: {}, // cardId -> card data (faceUp, frontUrl, ownerId...)
+      onDeck: {},    // deckId -> { stackId }
+      onHand: {},    // playerId -> { stackId }
+      onTable: {},   // tableId -> { stackId } (có thể dùng 1 stackId duy nhất)
+      onDiscard: {}, // discardId -> { stackId }
+    },
+
+    // ===== Stacks vật lý (để drag/stack/unstack) =====
+    stacks: {}, // stackId -> {id, zone, ownerId|null, x,y, cardIds:[]}
+    chat: [],
+    ui: { statHeaders:["ATK","DEF","HP","COIN"], statsByPlayer:{} },
   };
 
   const rects = zoneRects();
-  const deckX = rects.deck.x + rects.deck.w/2;
-  const deckY = rects.deck.y + rects.deck.h/2;
 
-  const deckStackId = "stack_deck";
-  st.stacks[deckStackId] = { id: deckStackId, zone: ZONES.deck, owner: null, x: deckX, y: deckY, cardIds: [] };
+  // tạo 1 stack table container (không bắt buộc, nhưng tiện)
+  const tableStackId = "stack_table";
+  st.stacks[tableStackId] = {
+    id: tableStackId,
+    zone: ZONES.table,
+    ownerId: null,
+    x: rects.table.x + rects.table.w/2,
+    y: rects.table.y + rects.table.h/2,
+    cardIds: []
+  };
+  st.all.onTable["main"] = { stackId: tableStackId };
 
-  for(let i=1;i<=40;i++){
-    const id = "C" + String(i).padStart(2,"0");
-    st.cards[id] = {
-      id,
-      frontSeed: i,
-      faceUp: false,
-      x: deckX,
-      y: deckY,
-      zone: ZONES.deck,
-      owner: null,
-      ownerId: null,
-      stackId: deckStackId,
-      order: i,
-    };
-    st.stacks[deckStackId].cardIds.push(id);
-  }
+  // discard container
+  const discardStackId = "stack_discard";
+  st.stacks[discardStackId] = {
+    id: discardStackId,
+    zone: ZONES.discard,
+    ownerId: null,
+    x: rects.discard.x + rects.discard.w/2,
+    y: rects.discard.y + rects.discard.h/2,
+    cardIds: []
+  };
+  st.all.onDiscard["main"] = { stackId: discardStackId };
+
   return st;
 }
-
-function buildPhysicalDeckFromTypes(st, types, deckStackId="stack_deck"){
+  
+function hostCreateDeckFromSet(st, types, deckName="Deck"){
   // types: [{name, frontUrl, count}]
-  const deck = st.stacks?.[deckStackId];
-  if (!deck) throw new Error("Missing stack_deck");
-
   const rects = zoneRects();
-  const deckX = rects.deck.x + rects.deck.w/2;
-  const deckY = rects.deck.y + rects.deck.h/2;
+  const deckRect = rects.deck;
 
-  // rebuild sạch cards + giữ stack_deck
-  st.cards = {};
-  st.stacks = {
-    [deckStackId]: { ...deck, id: deckStackId, x:deckX, y:deckY, zone:ZONES.deck, owner:null, cardIds:[] },
+  const deckId = "deck_" + uid().slice(0,6);
+  const stackId = "stack_" + deckId;
+
+  // tạo 1 stack nằm trong vùng DECK
+  st.stacks = st.stacks || {};
+  st.all = st.all || {};
+  st.all.cards = st.all.cards || {};
+  st.all.onDeck = st.all.onDeck || {};
+
+  st.stacks[stackId] = {
+    id: stackId,
+    zone: ZONES.deck,
+    ownerId: null, // deck không có owner
+    x: deckRect.x + deckRect.w/2 + randInt(-40,40),
+    y: deckRect.y + deckRect.h/2 + randInt(-40,40),
+    cardIds: []
   };
 
-  let running = 1;
+  st.all.onDeck[deckId] = { stackId, name: deckName, createdAt: now() };
+
+  // tạo card theo setCard
   for (const t of types){
     const frontUrl = (t.frontUrl||"").trim();
     const count = Math.max(1, parseInt(t.count,10)||1);
     const name = (t.name||"").trim();
     if (!frontUrl) continue;
 
-    for (let k=0; k<count; k++){
-      const id = "D" + String(running).padStart(4,"0") + "_" + uid().slice(0,6);
-      st.cards[id] = {
-        id,
-        faceUp: false,
-        x: deckX, y: deckY,
-        zone: ZONES.deck,
-        owner: null,
-        stackId: deckStackId,
-        order: running,
-        frontSeed: running,
-        frontUrl: frontUrl,   // IMPORTANT
-        typeName: name
+    for (let i=0;i<count;i++){
+      const cid = "C_" + uid().slice(0,10);
+
+      st.all.cards[cid] = {
+        id: cid,
+        typeName: name,
+        frontUrl,
+        faceUp: false,     // mặc định úp trong deck
+        ownerId: null
       };
-      st.stacks[deckStackId].cardIds.push(id);
-      running++;
+
+      // lá mới tạo nằm trên cùng
+      st.stacks[stackId].cardIds.unshift(cid);
     }
   }
 
-  // shuffle
-  const a = st.stacks[deckStackId].cardIds;
-  for(let i=a.length-1;i>0;i--){
+  // shuffle ngay lúc tạo (nếu muốn)
+  const a = st.stacks[stackId].cardIds;
+  for (let i=a.length-1;i>0;i--){
     const j = randInt(0,i);
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i],a[j]] = [a[j],a[i]];
   }
 
   st.version = (st.version||0) + 1;
+  return { deckId, stackId };
 }
 
+  
 function ensureStateShape(state){
-  if (!state || typeof state !== "object") return null;
-
-  const s = deepClone(state);
-
+  const s = deepClone(state || {});
   if (!Array.isArray(s.players)) s.players = [];
-  if (!s.cards || typeof s.cards !== "object") s.cards = {};
-  if (!s.stacks || typeof s.stacks !== "object") s.stacks = {};
-  if (!Array.isArray(s.chat)) s.chat = [];
-  if (!s.assets || typeof s.assets !== "object") s.assets = { frontBase:"", backUrl:"" };
-  if (!Array.isArray(s._deckPool)) s._deckPool = [];
-  if (typeof s.version !== "number") s.version = 1;
+  if (!s.assets) s.assets = { backUrl:"" };
+  if (!s.game) s.game = { phase:"setup" };
+  if (!s.ui) s.ui = { statHeaders:["ATK","DEF","HP","COIN"], statsByPlayer:{} };
 
-  if (!s.game || typeof s.game !== "object") s.game = { phase: "setup" };
-  if (!s.game.phase) s.game.phase = "setup";
+  s.all = s.all || {};
+  s.all.cards = s.all.cards || {};
+  s.all.onDeck = s.all.onDeck || {};
+  s.all.onHand = s.all.onHand || {};
+  s.all.onTable = s.all.onTable || {};
+  s.all.onDiscard = s.all.onDiscard || {};
 
+  s.stacks = s.stacks || {};
+  s.chat = Array.isArray(s.chat) ? s.chat : [];
+  s.version = typeof s.version === "number" ? s.version : 1;
   return s;
 }
 
@@ -4124,23 +4145,66 @@ function stackZ(s){
   return z + (s.cardIds?.length||0)*0.01;
 }
 
+/* =========================================================
+   C) State helpers (compat: old st.cards + new st.all.cards)
+========================================================= */
+function getAllCardsMap(st){
+  // ưu tiên model mới
+  if (st?.all?.cards && typeof st.all.cards === "object") return st.all.cards;
+  // fallback model cũ
+  if (st?.cards && typeof st.cards === "object") return st.cards;
+  return {};
+}
+
+function getCardById(st, id){
+  const mNew = st?.all?.cards;
+  if (mNew && mNew[id]) return mNew[id];
+  const mOld = st?.cards;
+  if (mOld && mOld[id]) return mOld[id];
+  return null;
+}
+
+function getStackById(st, id){
+  if (st?.stacks && st.stacks[id]) return st.stacks[id];
+  return null;
+}
+
+function getStackTopCardId(st, stack){
+  if (!stack) return null;
+  const ids = stack.cardIds || [];
+  return ids.length ? ids[0] : null;
+}
+
+  
 function listDrawableObjects(state){
   const out = [];
   if (!state) return out;
 
-  for (const sid in state.stacks){
+  // stacks (model nào cũng dùng st.stacks)
+  for (const sid in (state.stacks || {})){
     const s = state.stacks[sid];
     if (!s) continue;
     out.push({type:"stack", id:sid, x:s.x, y:s.y, zone:s.zone, owner:s.owner, z: stackZ(s)});
   }
-  for (const cid in state.cards){
-    const c = state.cards[cid];
-    if (!c || c.stackId) continue;
+
+  // free cards: chỉ các card KHÔNG nằm trong stack
+  // - model cũ: st.cards
+  // - model mới: st.all.cards
+  const allCards = getAllCardsMap(state);
+  for (const cid in allCards){
+    const c = allCards[cid];
+    if (!c) continue;
+    if (c.stackId) continue; // đang nằm trong stack -> stack vẽ top
+    // với model mới bạn có thể chưa có x/y/zone cho card rời -> bỏ qua để tránh NaN
+    if (typeof c.x !== "number" || typeof c.y !== "number") continue;
+
     out.push({type:"card", id:cid, x:c.x, y:c.y, zone:c.zone, owner:c.owner, z: cardZ(c)});
   }
+
   out.sort((a,b)=>a.z-b.z);
   return out;
 }
+
 
 function hitTest(worldX, worldY){
   const state = getState();
@@ -4152,7 +4216,7 @@ function hitTest(worldX, worldY){
     const w = CARD.w, h = CARD.h;
     const x0 = o.x - w/2, y0 = o.y - h/2;
     if (worldX >= x0 && worldX <= x0+w && worldY >= y0 && worldY <= y0+h){
-      // privacy hand
+      // chặn click vào HAND người khác
       if (o.zone === ZONES.hand && o.owner && o.owner !== client.selfId) return null;
       return {type:o.type, id:o.id};
     }
@@ -4162,15 +4226,16 @@ function hitTest(worldX, worldY){
 
 function calcDragOffset(state, target, p){
   if (target.type === "card"){
-    const c = state.cards[target.id];
+    const c = getCardById(state, target.id);
     if (!c) return {dx:0,dy:0};
     return {dx: p.x - c.x, dy: p.y - c.y};
   } else {
-    const s = state.stacks[target.id];
+    const s = getStackById(state, target.id);
     if (!s) return {dx:0,dy:0};
     return {dx: p.x - s.x, dy: p.y - s.y};
   }
 }
+
 
 canvas.addEventListener("mousedown", (ev)=>{
   const st = getState();
@@ -4348,6 +4413,13 @@ function drawZone(rect, label, subtitle="", highlight=false, tint=null){
   ctx.restore();
 }
 
+let allCardInGame = {
+  onDeck: {},
+  onHand: {},
+  onTable: {},
+  onDiscard: {},
+}
+
 function drawCardAtScreen(
   cx, cy,
   faceUp,
@@ -4511,7 +4583,7 @@ function draw(){
 
   for (const o of objs){
     const isSelected = client.selected && client.selected.type === o.type && client.selected.id === o.id;
-
+  
     let wx = o.x, wy = o.y;
     if (client.dragging &&
         client.dragging.target.type === o.type &&
@@ -4520,36 +4592,49 @@ function draw(){
       wx = client.dragging.cur.x - (client.dragging.offset?.dx||0);
       wy = client.dragging.cur.y - (client.dragging.offset?.dy||0);
     }
-
+  
     const sp = toScreen({x: wx, y: wy});
-
+  
     if (o.type === "card"){
-      const c = s.cards[o.id];
+      const c = getCardById(s, o.id);
       if (!c) continue;
-
-      const owner = (s.players||[]).find(p=>p && p.id===(c.ownerId || c.owner));
+  
+      const owner = s.players?.find(p=>p.id===(c.ownerId || c.owner)) || null;
       const accent = owner ? COLORS[owner.color] : null;
-
-      const frontUrl = c.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
+  
+      // ✅ model mới: frontUrl nằm trực tiếp trên card
+      // ✅ model cũ: frontUrl hoặc frontBase + id.png
+      const frontUrl = (c.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
       drawCardAtScreen(sp.x, sp.y, !!c.faceUp, c.frontSeed, accent, isSelected, false, 0, frontUrl, backUrlDefault);
     } else {
-      const stack = s.stacks[o.id];
+      const stack = getStackById(s, o.id);
       if (!stack) continue;
-
-      const topId = stack.cardIds?.[0];
-      const top = topId ? s.cards[topId] : null;
-
-      const topOwnerId = top?.ownerId || top?.owner || stack.owner;
-      const owner = (s.players||[]).find(p=>p && p.id===topOwnerId);
+  
+      const topId = getStackTopCardId(s, stack);
+      const top = topId ? getCardById(s, topId) : null;
+  
+      const topOwnerId = (top?.ownerId || top?.owner || stack.owner);
+      const owner = s.players?.find(p=>p.id===topOwnerId) || null;
       const accent = owner ? COLORS[owner.color] : null;
-
+  
       if (top){
-        const frontUrl = top.frontUrl || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
-        drawCardAtScreen(sp.x, sp.y, !!top.faceUp, top.frontSeed, accent, isSelected, true, stack.cardIds.length, frontUrl, backUrlDefault);
-
-        if ((stack.cardIds?.length||0) > 1){
+        const frontUrl = (top.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
+        drawCardAtScreen(
+          sp.x, sp.y,
+          !!top.faceUp,
+          top.frontSeed,
+          accent,
+          isSelected,
+          true,
+          (stack.cardIds?.length || 0),
+          frontUrl,
+          backUrlDefault
+        );
+  
+        // “bóng” các lá dưới (optional)
+        if ((stack.cardIds?.length || 0) > 1){
           ctx.save();
-          ctx.globalAlpha = 0.25;
+          ctx.globalAlpha = 0.22;
           for (let i=1; i<Math.min(4, stack.cardIds.length); i++){
             const dx = i * 2 * camera.scale;
             const dy = i * 2 * camera.scale;
@@ -4557,9 +4642,16 @@ function draw(){
           }
           ctx.restore();
         }
+      } else {
+        // stack rỗng: vẽ 1 khung trống
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        drawCardAtScreen(sp.x, sp.y, false, 0, null, isSelected, false, 0, "", backUrlDefault);
+        ctx.restore();
       }
     }
   }
+
 
   requestAnimationFrame(draw);
   renderStatusBoard?.();
