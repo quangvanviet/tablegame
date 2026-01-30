@@ -3075,109 +3075,106 @@ class HostController {
       }
 
       case "stack": {
-        const { dragTargetType, dragId, dropOnType, dropOnId } = action;
-      
-        let dragCardIds = [];
-        let dragStackId = null;
-      
-        // 1) Drag list (top->bottom)
-        if (dragTargetType === "card") {
-          const c = ensureCard(dragId);
-          if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
-          if (c.stackId === "stack_deck") return { ok:false, reason:"Use draw (Q) to take from deck" };
-      
-          dragCardIds = [dragId];
-          dragStackId = c.stackId || null;
-        } else {
-          const s = ensureStack(dragId);
-          if (!s || !canInteractStack(s, fromId)) return { ok:false, reason:"No access" };
-          if (s.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
-      
-          dragCardIds = [...(s.cardIds || [])]; // top->bottom
-          dragStackId = s.id;
-        }
-      
-        // 2) Resolve dropStackId
-        let dropStackId = null;
-      
-        if (dropOnType === "card") {
-          const c2 = ensureCard(dropOnId);
-          if (!c2) return { ok:false, reason:"Missing drop card" };
-          if (c2.stackId === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
-      
-          // ⚠️ OPTIONAL: tránh stack vào HAND của người khác (nếu không muốn “tưởng bị úp” do privacy)
-          if (c2.zone === ZONES.hand && c2.owner && c2.owner !== fromId) {
-            return { ok:false, reason:"Cannot stack into other player's hand" };
-          }
-      
-          dropStackId = c2.stackId || createStackFromCard(c2.id);
-        } else {
-          const s2 = ensureStack(dropOnId);
-          if (!s2) return { ok:false, reason:"Missing drop stack" };
-          if (s2.id === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
-      
-          // OPTIONAL guard tương tự cho stack ở hand người khác
-          if (s2.zone === ZONES.hand && s2.owner && s2.owner !== fromId) {
-            return { ok:false, reason:"Cannot stack into other player's hand" };
-          }
-      
-          dropStackId = s2.id;
-        }
-      
-        if (!dropStackId) return { ok:false, reason:"No drop stack" };
-        if (dragStackId && dragStackId === dropStackId) return { ok:true };
-      
-        const dropStack = ensureStack(dropStackId);
-        if (!dropStack) return { ok:false, reason:"Drop stack missing (race)" };
-        if (!canInteractStack(dropStack, fromId)) return { ok:false, reason:"No access" };
-      
-        // 3) Detach source
-        if (dragTargetType === "stack") {
-          const s = ensureStack(dragId);
-          if (s && s.id !== "stack_deck") delete st.stacks[s.id];
-        } else {
-          detachFromStack(dragId);
-        }
-      
-        // 4) Attach lên TOP: "mới nhất ở trên"
-        // dragCardIds là top->bottom => attach từ bottom->top để top của drag nằm trên cùng
-        for (let i = dragCardIds.length - 1; i >= 0; i--) {
-          const cid = dragCardIds[i];
-          attachToStackTop(cid, dropStackId);
-      
-          // ✅ QUAN TRỌNG: KHÔNG ĐỤNG c.faceUp => giữ nguyên front/back từng lá
-          // const c = ensureCard(cid); if (c) c.faceUp = c.faceUp;
-        }
-      
-        // 5) Sync zone/owner theo stack (không đổi faceUp)
-        if (dropStack.zone === ZONES.hand) {
-          dropStack.owner = dropStack.owner ?? null;
-          if (!dropStack.owner) {
-            dropStack.zone = ZONES.table;
-            dropStack.owner = null;
-          }
-        } else {
-          dropStack.owner = null;
-        }
-      
-        for (const cid of (dropStack.cardIds || [])) {
-          const c = ensureCard(cid);
-          if (!c) continue;
-      
-          c.x = dropStack.x;
-          c.y = dropStack.y;
-          c.zone = dropStack.zone;
-          c.owner = (dropStack.zone === ZONES.hand) ? dropStack.owner : null;
-      
-          if (dropStack.zone === ZONES.hand && dropStack.owner) {
-            c.ownerId = dropStack.owner;
-          }
-          // ✅ giữ nguyên c.faceUp
-        }
-      
-        this.bumpVersion();
-        return { ok:true };
-      }
+  const { dragTargetType, dragId, dropOnType, dropOnId } = action;
+
+  const isOtherHand = (zone, ownerId) =>
+    (zone === ZONES.hand) && ownerId && ownerId !== fromId;
+
+  const getStackTopToBottom = (stackId) => {
+    const s = ensureStack(stackId);
+    return s ? [...(s.cardIds || [])] : [];
+  };
+
+  // ===== 1) Collect moving cardIds (top->bottom) =====
+  let moving = [];
+  let srcStackId = null;
+
+  if (dragTargetType === "card") {
+    const c = ensureCard(dragId);
+    if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
+    if (c.stackId === "stack_deck") return { ok:false, reason:"Cannot stack from deck (use draw)" };
+
+    moving = [dragId];
+    srcStackId = c.stackId || null;
+  } else {
+    const s = ensureStack(dragId);
+    if (!s || !canInteractStack(s, fromId)) return { ok:false, reason:"No access" };
+    if (s.id === "stack_deck") return { ok:false, reason:"Deck fixed" };
+
+    moving = [...(s.cardIds || [])]; // top->bottom
+    srcStackId = s.id;
+  }
+
+  if (moving.length === 0) return { ok:false, reason:"Nothing to stack" };
+
+  // ===== 2) Resolve dropStack =====
+  let dropStackId = null;
+
+  if (dropOnType === "card") {
+    const c2 = ensureCard(dropOnId);
+    if (!c2) return { ok:false, reason:"Missing drop card" };
+    if (c2.stackId === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
+    if (isOtherHand(c2.zone, c2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
+
+    dropStackId = c2.stackId || createStackFromCard(c2.id);
+  } else {
+    const s2 = ensureStack(dropOnId);
+    if (!s2) return { ok:false, reason:"Missing drop stack" };
+    if (s2.id === "stack_deck") return { ok:false, reason:"Cannot stack onto deck" };
+    if (isOtherHand(s2.zone, s2.owner)) return { ok:false, reason:"Cannot stack into other player's hand" };
+
+    dropStackId = s2.id;
+  }
+
+  if (!dropStackId) return { ok:false, reason:"No drop stack" };
+  if (srcStackId && srcStackId === dropStackId) return { ok:true };
+
+  const dropStack = ensureStack(dropStackId);
+  if (!dropStack) return { ok:false, reason:"Drop stack missing (race)" };
+  if (!canInteractStack(dropStack, fromId)) return { ok:false, reason:"No access" };
+
+  // ===== 3) Snapshot old drop order (top->bottom) BEFORE we mutate =====
+  const oldDrop = [...(dropStack.cardIds || [])];
+
+  // ===== 4) Remove moving cards from their old places (detach / delete src stack) =====
+  if (dragTargetType === "stack") {
+    const s = ensureStack(dragId);
+    // xóa src stack luôn (trừ deck)
+    if (s && s.id !== "stack_deck") delete st.stacks[s.id];
+  } else {
+    // detach single card khỏi stack nếu có
+    detachFromStack(dragId);
+  }
+
+  // Nếu moving có thể chứa card trùng oldDrop (edge case), lọc tránh duplicate
+  const movingSet = new Set(moving);
+  const rest = oldDrop.filter(cid => !movingSet.has(cid));
+
+  // ===== 5) REBUILD: "mới nhất ở trên" =====
+  // moving là top->bottom của group kéo => giữ nguyên thứ tự group
+  dropStack.cardIds = [...moving, ...rest];
+
+  // ===== 6) Sync each card to stack position/zone/owner (KHÔNG flip) =====
+  for (const cid of dropStack.cardIds){
+    const c = ensureCard(cid);
+    if (!c) continue;
+
+    c.stackId = dropStackId;
+    c.x = dropStack.x;
+    c.y = dropStack.y;
+    c.zone = dropStack.zone;
+
+    // only hand has owner privacy
+    c.owner = (dropStack.zone === ZONES.hand) ? (dropStack.owner ?? null) : null;
+    if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
+
+    // ✅ tuyệt đối không đụng c.faceUp
+  }
+
+  this.bumpVersion();
+  return { ok:true };
+}
+
 
       case "unstack": {
         const { stackId } = action;
@@ -3952,15 +3949,28 @@ async function loadSelectedSet(){
 ========================================================= */
 const imgCache = new Map();
 function loadImg(url){
+  url = (url || "").trim();
   if (!url) return null;
-  if (imgCache.has(url)) return imgCache.get(url);
+
+  // reuse
+  const cached = imgCache.get(url);
+  if (cached) return cached;
+
   const im = new Image();
+  im.crossOrigin = "anonymous"; // ✅ giúp vẽ canvas ổn định hơn với nhiều host
   im.decoding = "async";
-  im.loading = "lazy";
+
+  im.onload = () => { /* ok */ };
+  im.onerror = () => {
+    // nếu link chết/không phải direct image
+    console.warn("[img] failed:", url);
+  };
+
   im.src = url;
   imgCache.set(url, im);
   return im;
 }
+
 
 /* =========================================================
    15) Chat
