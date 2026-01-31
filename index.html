@@ -384,12 +384,13 @@
     }
 
    #inspector{
-      position:absolute;
-      z-index:30;
+      position: fixed;      
+      z-index: 90;
       display:none;
       pointer-events:auto;
       width: min(52vh, 360px);
     }
+
     
     #inspector .panel{
       background: var(--panel);
@@ -2371,44 +2372,130 @@ const INS = {
   btnShuffle: document.getElementById("btnShuffle"),
 };
 
+function getCardAny(st, cardId){
+  return (st?.all?.cards?.[cardId]) || (st?.cards?.[cardId]) || null;
+}
+function getStackAny(st, stackId){
+  return st?.stacks?.[stackId] || null;
+}
+
 function getWorldPosOfTarget(st, target){
   if (!st || !target) return null;
   if (target.type === "card"){
-    const c = st.cards?.[target.id];
+    const c = getCardAny(st, target.id);
     if (!c) return null;
     return {x: c.x, y: c.y};
   } else {
-    const s = st.stacks?.[target.id];
+    const s = getStackAny(st, target.id);
     if (!s) return null;
     return {x: s.x, y: s.y};
   }
 }
 
+function getTargetScreenRect(st, target){
+  const wp = getWorldPosOfTarget(st, target);
+  if (!wp) return null;
+  const sp = toScreen(wp);
+
+  // card rect theo size render hiện tại
+  const w = CARD.w * camera.scale;
+  const h = CARD.h * camera.scale;
+
+  return {
+    left: sp.x - w/2,
+    right: sp.x + w/2,
+    top: sp.y - h/2,
+    bottom: sp.y + h/2,
+    cx: sp.x,
+    cy: sp.y,
+  };
+}
+
+function smartPlaceInspector(insEl, avoidRect){
+  const pad = 10;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // đo kích thước panel thật
+  insEl.style.visibility = "hidden";
+  insEl.style.display = "block";
+  insEl.style.left = "0px";
+  insEl.style.top = "0px";
+
+  const b = insEl.getBoundingClientRect();
+  const iw = b.width || 320;
+  const ih = b.height || 420;
+
+  // Nếu không có rect để né, đặt góc phải trên
+  if (!avoidRect){
+    const left = vw - iw - pad;
+    const top  = pad;
+    insEl.style.left = `${left}px`;
+    insEl.style.top  = `${top}px`;
+    insEl.style.visibility = "visible";
+    return;
+  }
+
+  // 4 vị trí ứng viên: right, left, top, bottom
+  const candidates = [];
+
+  // right
+  candidates.push({
+    left: avoidRect.right + 16,
+    top:  clamp(avoidRect.cy - ih/2, pad, vh - ih - pad),
+    score: 0
+  });
+  // left
+  candidates.push({
+    left: avoidRect.left - iw - 16,
+    top:  clamp(avoidRect.cy - ih/2, pad, vh - ih - pad),
+    score: 0
+  });
+  // top
+  candidates.push({
+    left: clamp(avoidRect.cx - iw/2, pad, vw - iw - pad),
+    top:  avoidRect.top - ih - 16,
+    score: 0
+  });
+  // bottom
+  candidates.push({
+    left: clamp(avoidRect.cx - iw/2, pad, vw - iw - pad),
+    top:  avoidRect.bottom + 16,
+    score: 0
+  });
+
+  // đánh điểm: ưu tiên không tràn màn hình + xa card hơn
+  for (const c of candidates){
+    const overflowX = Math.max(0, pad - c.left) + Math.max(0, (c.left + iw + pad) - vw);
+    const overflowY = Math.max(0, pad - c.top)  + Math.max(0, (c.top + ih + pad) - vh);
+    const dx = (c.left + iw/2) - avoidRect.cx;
+    const dy = (c.top + ih/2) - avoidRect.cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    // overflow là phạt nặng
+    c.score = dist - (overflowX + overflowY) * 9999;
+  }
+
+  candidates.sort((a,b)=> b.score - a.score);
+  let best = candidates[0];
+
+  // clamp cuối
+  best.left = clamp(best.left, pad, vw - iw - pad);
+  best.top  = clamp(best.top,  pad, vh - ih - pad);
+
+  insEl.style.left = `${best.left}px`;
+  insEl.style.top  = `${best.top}px`;
+  insEl.style.visibility = "visible";
+}
+
 function positionInspectorNearTarget(){
   const st = getState?.();
   const sel = client?.selected;
-  if (!st || !sel) return;
-
-  const wp = getWorldPosOfTarget(st, sel);
-  if (!wp) return;
-
-  const sp = toScreen(wp);
   const ins = document.getElementById("inspector");
-  if (!ins) return;
+  if (!st || !sel || !ins) return;
 
-  const pad = 10;
-  const offsetX = 20;
-  const offsetY = -20;
-
-  const rect = ins.getBoundingClientRect();
-  let left = sp.x + offsetX;
-  let top  = sp.y + offsetY;
-
-  left = clamp(left, pad, innerWidth - rect.width - pad);
-  top  = clamp(top,  pad, innerHeight - rect.height - pad);
-
-  ins.style.left = left + "px";
-  ins.style.top  = top + "px";
+  const rect = getTargetScreenRect(st, sel);
+  smartPlaceInspector(ins, rect);
 }
 
 function showInspectorPopup(){
@@ -2418,6 +2505,7 @@ function showInspectorPopup(){
   updateInspector();
   requestAnimationFrame(positionInspectorNearTarget);
 }
+
 function hideInspectorPopup(){
   const ins = document.getElementById("inspector");
   if (!ins) return;
@@ -2435,47 +2523,20 @@ function updateInspector(){
     return;
   }
 
-  // DECK special (nếu bạn còn stack_deck cũ)
-  if (sel.type === "stack" && sel.id === "stack_deck"){
-    const count = st.stacks?.stack_deck?.cardIds?.length || 0;
-    INS.preview.innerHTML = `
-      <div style="text-align:center;font-size:13px">
-        <div>${count} cards</div>
-        <div style="opacity:.6;margin-top:6px">Press Q to draw</div>
-        <div style="opacity:.4;margin-top:4px">Press E to shuffle</div>
-      </div>
-    `;
-    return;
-  }
-
-  // CARD
-  if (sel.type === "card"){
-    const c = getCardById(st, sel.id);
-    if (!c){
-      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Card not found</div>`;
-      return;
-    }
-
-    const frontUrl = (c.frontUrl || "") || (st.assets?.frontBase ? (st.assets.frontBase + c.id + ".png") : "");
-    const backUrl  = st.assets?.backUrl || "";
-    const url = (c.faceUp && frontUrl) ? frontUrl : backUrl;
-
-    INS.preview.innerHTML = url
-      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
-      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set</div>`;
-    return;
-  }
-
   // STACK
   if (sel.type === "stack"){
-    const s = getStackById(st, sel.id);
-    const topId = getStackTopCardId(st, s);
+    const s = getStackAny(st, sel.id);
+    if (!s){
+      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Stack not found</div>`;
+      return;
+    }
+    const topId = s.cardIds?.[0] || null;
     if (!topId){
       INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Empty stack</div>`;
       return;
     }
 
-    const c = getCardById(st, topId);
+    const c = getCardAny(st, topId);
     if (!c){
       INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Top card missing</div>`;
       return;
@@ -2488,8 +2549,28 @@ function updateInspector(){
     INS.preview.innerHTML = url
       ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
       : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set</div>`;
+
+    return;
+  }
+
+  // CARD
+  if (sel.type === "card"){
+    const c = getCardAny(st, sel.id);
+    if (!c){
+      INS.preview.innerHTML = `<div style="color:rgba(233,236,255,.55); font-size:12px">Card not found</div>`;
+      return;
+    }
+
+    const frontUrl = (c.frontUrl || "") || (st.assets?.frontBase ? (st.assets.frontBase + c.id + ".png") : "");
+    const backUrl  = st.assets?.backUrl || "";
+    const url = (c.faceUp && frontUrl) ? frontUrl : backUrl;
+
+    INS.preview.innerHTML = url
+      ? `<img src="${url}" style="width:100%; height:100%; object-fit:contain;">`
+      : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set</div>`;
   }
 }
+
 
 
 /* =========================================================
@@ -2783,9 +2864,11 @@ function canInteract(card, actorId){
 }
 function canInteractStack(stack, actorId){
   if (!stack) return false;
-  if (stack.zone === ZONES.hand) return stack.owner === actorId;
+  const owner = stack.owner ?? stack.ownerId ?? null;
+  if (stack.zone === ZONES.hand) return owner === actorId;
   return true;
 }
+
 const ensureUIState = (st) => {
   st.ui = st.ui || {};
   st.ui.statHeaders = st.ui.statHeaders || ["ATK","DEF","HP","COIN"];
@@ -2903,7 +2986,7 @@ class HostController {
     const zone = c.zone ?? ZONES.table;
     const owner = (zone === ZONES.hand) ? (c.ownerId ?? c.owner ?? null) : null;
 
-    st.stacks[sid] = { id:sid, zone, owner, x:c.x, y:c.y, cardIds:[cardId] };
+    st.stacks[sid] = { id:sid, zone, owner, ownerId: owner, x:c.x, y:c.y, cardIds:[cardId] };
     c.stackId = sid;
     return sid;
   }
@@ -2979,9 +3062,7 @@ class HostController {
             }
           } else {
             c.owner = null;
-            c.ownerId = null;
           }
-
           c.stackId = null;
         }
 
@@ -3002,10 +3083,12 @@ class HostController {
             } else {
               ss.zone = ZONES.hand;
               ss.owner = handOwner;
+              ss.ownerId = handOwner;
             }
           } else {
             ss.zone = ZONES.table;
             ss.owner = null;
+            ss.ownerId = null;
           }
 
           // sync cards theo stack (KHÔNG flip)
@@ -3022,7 +3105,6 @@ class HostController {
               c.ownerId = ss.owner;
             } else {
               c.owner = null;
-              c.ownerId = null;
             }
           }
         }
@@ -3155,7 +3237,6 @@ class HostController {
 
           c.zone = ZONES.discard;
           c.owner = null;
-          c.ownerId = null;
           c.faceUp = true;
           c.stackId = null;
 
@@ -3289,8 +3370,14 @@ class HostController {
         c.y = ss.y + randInt(-60, 60);
         c.zone = ss.zone;
 
-        c.owner = (ss.zone === ZONES.hand) ? ss.owner : null;
-        c.ownerId = (ss.zone === ZONES.hand) ? ss.owner : null;
+        c.owner = (ss.zone === ZONES.hand) ? (ss.owner ?? ss.ownerId ?? null) : null;
+        
+        // ✅ ownerId: chỉ đổi nếu nó đang ở hand (đổi theo chủ hand)
+        // còn nếu unstack từ table/discard thì giữ nguyên ownerId để giữ viền
+        if (ss.zone === ZONES.hand){
+          const handOwner = ss.owner ?? ss.ownerId ?? null;
+          c.ownerId = handOwner;
+        }
 
         this.bumpVersion();
         return { ok:true };
@@ -4292,6 +4379,9 @@ function calcDragOffset(state, target, p){
 }
 
 
+// ======= CANVAS INPUT (click vs drag + smart inspector) =======
+const DRAG_THRESHOLD_PX = 6;
+
 canvas.addEventListener("mousedown", (ev)=>{
   const st = getState();
   if (!st) return;
@@ -4302,8 +4392,22 @@ canvas.addEventListener("mousedown", (ev)=>{
   if (hit){
     client.selected = hit;
     updateInspector();
-    client.dragging = { target: hit, start: p, offset: calcDragOffset(st, hit, p), moved:false };
-  }else{
+
+    // bắt đầu drag nhưng chưa chắc là drag (đợi vượt threshold)
+    client.dragging = {
+      target: hit,
+      start: p,
+      cur: p,
+      offset: calcDragOffset(st, hit, p),
+      moved: false,
+      started: false, // ✅ chỉ true khi vượt threshold
+    };
+
+    // chưa show inspector ngay, vì còn có thể là drag
+    // (nếu bạn muốn click-down là hiện ngay thì bật dòng dưới)
+    // showInspectorPopup();
+
+  } else {
     client.selected = null;
     hideInspectorPopup();
     updateInspector();
@@ -4312,12 +4416,36 @@ canvas.addEventListener("mousedown", (ev)=>{
 
 addEventListener("mousemove", (ev)=>{
   if (!client.dragging) return;
-  hideInspectorPopup();
+
   const st = getState();
   if (!st) return;
+
   const p = toWorld(mousePos(ev));
-  client.dragging.moved = true;
   client.dragging.cur = p;
+
+  const dx = p.x - client.dragging.start.x;
+  const dy = p.y - client.dragging.start.y;
+
+  // ✅ chỉ coi là drag khi vượt threshold
+  if (!client.dragging.started){
+    const sp0 = toScreen(client.dragging.start);
+    const sp1 = toScreen(p);
+    const ddx = sp1.x - sp0.x;
+    const ddy = sp1.y - sp0.y;
+
+    if (Math.hypot(ddx, ddy) >= DRAG_THRESHOLD_PX){
+      client.dragging.started = true;
+      client.dragging.moved = true;
+      hideInspectorPopup(); // ✅ bắt đầu kéo thì ẩn inspector
+    } else {
+      // chưa đủ ngưỡng: coi như hover/click => không ẩn inspector
+      return;
+    }
+  } else {
+    client.dragging.moved = true;
+    // đang kéo: ẩn inspector (đề phòng bạn lỡ show trước đó)
+    hideInspectorPopup();
+  }
 });
 
 addEventListener("mouseup", (ev)=>{
@@ -4330,15 +4458,27 @@ addEventListener("mouseup", (ev)=>{
 
   const p = toWorld(mousePos(ev));
 
-  if (!drag.moved){
+  // ✅ Nếu không vượt threshold => coi như CLICK
+  if (!drag.started){
+    // click lên object: show inspector smart
     showInspectorPopup();
+    // đảm bảo reposition sau khi DOM update
+    requestAnimationFrame(positionInspectorNearTarget);
     return;
   }
 
-  const hit = hitTest(p.x, p.y);
-  if (hit && !(hit.type===drag.target.type && hit.id===drag.target.id)){
+  // ✅ Nếu là DRAG thả
+  const dropHit = hitTest(p.x, p.y);
+
+  if (dropHit && !(dropHit.type === drag.target.type && dropHit.id === drag.target.id)){
     hideInspectorPopup();
-    sendIntent({ type:"stack", dragTargetType: drag.target.type, dragId: drag.target.id, dropOnType: hit.type, dropOnId: hit.id });
+    sendIntent({
+      type:"stack",
+      dragTargetType: drag.target.type,
+      dragId: drag.target.id,
+      dropOnType: dropHit.type,
+      dropOnId: dropHit.id
+    });
     return;
   }
 
@@ -4347,8 +4487,8 @@ addEventListener("mouseup", (ev)=>{
     type:"move",
     targetType: drag.target.type,
     id: drag.target.id,
-    x: p.x - (drag.offset?.dx||0),
-    y: p.y - (drag.offset?.dy||0),
+    x: p.x - (drag.offset?.dx || 0),
+    y: p.y - (drag.offset?.dy || 0),
   });
 });
 
