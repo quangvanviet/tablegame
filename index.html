@@ -1351,73 +1351,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               </div>
             </div>
         </section>
-        <section class="tab" id="tabRoomBrowser">
-          <div class="panel soft">
-            <header class="soft-header">
-              <div class="title">ROOM BROWSER</div>
-              <div class="sub">Tìm phòng công khai theo tag / preset / mode</div>
-            </header>
         
-            <div class="content col">
-              <div class="grid-2">
-                <div class="field">
-                  <label>Từ khóa</label>
-                  <input id="rbQuery" placeholder="VD: draft, poker, hic..." />
-                </div>
-        
-                <div class="field">
-                  <label>Tag</label>
-                  <input id="rbTag" placeholder="VD: casual, ranked, test..." />
-                </div>
-        
-                <div class="field">
-                  <label>Chế độ</label>
-                  <select id="rbMode">
-                    <option value="">All</option>
-                    <option value="firebase">Firebase RTDB</option>
-                    <option value="ws">WebSocket</option>
-                    <option value="local">Local</option>
-                  </select>
-                </div>
-        
-                <div class="field">
-                  <label>Preset</label>
-                  <input id="rbPreset" placeholder="VD: Draft 60 / Poker 52..." />
-                </div>
-        
-                <div class="field">
-                  <label>Sắp xếp</label>
-                  <select id="rbSort">
-                    <option value="pop">Phổ biến</option>
-                    <option value="new">Mới nhất</option>
-                    <option value="players">Nhiều người</option>
-                    <option value="ping">Ping thấp</option>
-                  </select>
-                </div>
-        
-                <div class="field">
-                  <label>Chỉ hiển thị phòng còn chỗ</label>
-                  <label class="chk" style="margin-top:8px">
-                    <input type="checkbox" id="rbOnlyOpen" checked />
-                    <span>Open slots</span>
-                  </label>
-                </div>
-              </div>
-        
-              <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
-                <div class="hint" id="rbStatus">—</div>
-                <div class="row" style="gap:10px">
-                  <button class="secondary" id="rbRefreshBtn">Refresh</button>
-                  <button id="rbAutoBtn" class="secondary">Auto: ON</button>
-                </div>
-              </div>
-        
-              <div class="rb-list" id="rbList"></div>
-            </div>
-          </div>
-        </section>
-
-
         <!-- TAB: Customize -->
         <section class="tab" id="tabCustomize">
           <div class="panel soft">
