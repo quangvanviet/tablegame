@@ -2523,6 +2523,12 @@ function updateInspector(){
     return;
   }
 
+  // enable/disable buttons theo selection
+if (INS.btnFlip)    INS.btnFlip.disabled    = !sel;
+if (INS.btnDiscard) INS.btnDiscard.disabled = !sel;
+if (INS.btnUnstack) INS.btnUnstack.disabled = !(sel && sel.type === "stack");
+if (INS.btnShuffle) INS.btnShuffle.disabled = !(sel && sel.type === "stack");
+
   // STACK
   if (sel.type === "stack"){
     const s = getStackAny(st, sel.id);
@@ -2570,8 +2576,80 @@ function updateInspector(){
       : `<div style="padding:12px; font-size:12px; color:rgba(233,236,255,.6)">No image set</div>`;
   }
 }
+function bindInspectorButtons(){
+  // Re-query để chắc chắn DOM đã có nút
+  INS.preview    = document.getElementById("insPreview");
+  INS.btnFlip    = document.getElementById("btnFlip");
+  INS.btnDiscard = document.getElementById("btnDiscard");
+  INS.btnUnstack = document.getElementById("btnUnstack");
+  INS.btnShuffle = document.getElementById("btnShuffle");
 
+  const inspectorEl = document.getElementById("inspector");
+  if (inspectorEl){
+    const stop = (e)=> { e.stopPropagation(); e.preventDefault(); };
+    inspectorEl.addEventListener("mousedown", stop, {passive:false});
+    inspectorEl.addEventListener("mousemove", stop, {passive:false});
+    inspectorEl.addEventListener("mouseup",   stop, {passive:false});
+    inspectorEl.addEventListener("click",     stop, {passive:false}); // ✅ thêm click
+  }
 
+  const safeSel = ()=>{
+    const st = getState?.();
+    const sel = client?.selected;
+    if (!st || !sel) return null;
+    return { st, sel };
+  };
+
+  // helper: bind 1 lần (tránh bind trùng nếu gọi lại)
+  const bindOnce = (el, key, fn)=>{
+    if (!el) return;
+    if (el.dataset?.[key] === "1") return;
+    el.dataset[key] = "1";
+    el.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); fn(); }, {passive:false});
+  };
+
+  bindOnce(INS.btnFlip, "boundFlip", ()=>{
+    const pack = safeSel(); if (!pack) return;
+    const { sel } = pack;
+    sendIntent({ type:"flip", targetType: sel.type, id: sel.id });
+    updateInspector();
+    requestAnimationFrame(positionInspectorNearTarget);
+  });
+
+  bindOnce(INS.btnDiscard, "boundDiscard", ()=>{
+    const pack = safeSel(); if (!pack) return;
+    const { sel } = pack;
+    sendIntent({ type:"discard", targetType: sel.type, id: sel.id });
+    updateInspector();
+    requestAnimationFrame(positionInspectorNearTarget);
+  });
+
+  bindOnce(INS.btnUnstack, "boundUnstack", ()=>{
+    const pack = safeSel(); if (!pack) return;
+    const { sel } = pack;
+    if (sel.type !== "stack") return;
+    sendIntent({ type:"unstack", stackId: sel.id });
+    updateInspector();
+    requestAnimationFrame(positionInspectorNearTarget);
+  });
+
+  bindOnce(INS.btnShuffle, "boundShuffle", ()=>{
+    const pack = safeSel(); if (!pack) return;
+    const { sel } = pack;
+    if (sel.type !== "stack") return;
+    sendIntent({ type:"shuffle", stackId: sel.id });
+    updateInspector();
+    requestAnimationFrame(positionInspectorNearTarget);
+  });
+}
+
+// ✅ gọi bind sau khi DOM sẵn sàng
+// nếu script của bạn nằm cuối body thì vẫn ok; nếu không chắc thì dùng DOMContentLoaded
+if (document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", bindInspectorButtons);
+} else {
+  bindInspectorButtons();
+}
 
 /* =========================================================
    6) Networking (Firebase Realtime ONLY)
