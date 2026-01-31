@@ -3049,6 +3049,8 @@ class HostController {
           const z = normalizeCardZoneFromPos(x, y);
           c.x = x; c.y = y;
           c.zone = z.zone;
+          st._z = (st._z || 0) + 1;
+          c.z = st._z;
 
           if (z.zone === ZONES.hand){
             const handOwner = z.owner ?? null;
@@ -3074,6 +3076,8 @@ class HostController {
 
           const z = normalizeCardZoneFromPos(x, y);
           ss.x = x; ss.y = y;
+          st._z = (st._z || 0) + 1;
+          ss.z = st._z;
 
           if (z.zone === ZONES.hand){
             const handOwner = z.owner ?? null;
@@ -3370,6 +3374,8 @@ class HostController {
         c.zone = ss.zone;
 
         c.owner = (ss.zone === ZONES.hand) ? (ss.owner ?? ss.ownerId ?? null) : null;
+        st._z = (st._z || 0) + 1;
+        c.z = st._z;
         
         // ✅ ownerId: chỉ đổi nếu nó đang ở hand (đổi theo chủ hand)
         // còn nếu unstack từ table/discard thì giữ nguyên ownerId để giữ viền
@@ -4321,31 +4327,48 @@ function listDrawableObjects(state){
   const out = [];
   if (!state) return out;
 
-  // stacks (model nào cũng dùng st.stacks)
+  // stacks
   for (const sid in (state.stacks || {})){
     const s = state.stacks[sid];
     if (!s) continue;
-    out.push({type:"stack", id:sid, x:s.x, y:s.y, zone:s.zone, owner:s.owner, z: stackZ(s)});
+    out.push({
+      type:"stack",
+      id:sid,
+      x:s.x, y:s.y,
+      zone:s.zone,
+      owner:(s.owner ?? s.ownerId ?? null),
+      z: (typeof s.z === "number" ? s.z : stackZ(s))
+    });
   }
 
-  // free cards: chỉ các card KHÔNG nằm trong stack
-  // - model cũ: st.cards
-  // - model mới: st.all.cards
+  // free cards (NOT in stack)
   const allCards = getAllCardsMap(state);
   for (const cid in allCards){
     const c = allCards[cid];
     if (!c) continue;
-    if (c.stackId) continue; // đang nằm trong stack -> stack vẽ top
-    // với model mới bạn có thể chưa có x/y/zone cho card rời -> bỏ qua để tránh NaN
+    if (c.stackId) continue;
     if (typeof c.x !== "number" || typeof c.y !== "number") continue;
 
-    out.push({type:"card", id:cid, x:c.x, y:c.y, zone:c.zone, owner:c.owner, z: cardZ(c)});
+    out.push({
+      type:"card",
+      id:cid,
+      x:c.x, y:c.y,
+      zone:c.zone,
+      owner:(c.owner ?? null),
+      z: (typeof c.z === "number" ? c.z : cardZ(c))
+    });
   }
 
-  out.sort((a,b)=>a.z-b.z);
+  // ✅ sort by z, then type: stack first, card last (card will be drawn on top)
+  out.sort((a,b)=>{
+    const dz = (a.z||0) - (b.z||0);
+    if (dz !== 0) return dz;
+    if (a.type === b.type) return 0;
+    return (a.type === "stack") ? -1 : 1;
+  });
+
   return out;
 }
-
 
 function hitTest(worldX, worldY){
   const state = getState();
