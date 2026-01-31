@@ -1328,7 +1328,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               <!-- Tìm kiếm phòng -->
               <div style="display:flex;gap: 15px; padding: 5px; justify-content: space-between;">
                 <div style="width: 70%">
-                  <input placeholder="Tìm phòng, ví dụ: ROOM42" maxlength="18" /> 
+                  <input id="roomSearchInput" placeholder="Tìm phòng, ví dụ: ROOM42" maxlength="255" /> 
                 </div>
                 <div style="width: 30%; display: flex; flex-direction: row; height: 100%; justify-content: flex-end;">
                   <button class="secondary" id="openCreateRoomBtn">Tạo phòng</button>
@@ -1878,7 +1878,25 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       </div>
     </div>
   </div>
-          
+
+  <!-- POPUP nhập mật khẩu khi vào phòng -->
+  <div id="popupJoinPass" class="modal" style="display:none;">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div style="font-weight:700;">Nhập mật khẩu phòng</div>
+        <button class="secondary" id="btnCloseJoinPass">X</button>
+      </div>
+  
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="joinPassInput" type="password" placeholder="Mật khẩu..." style="flex:1;" />
+        <button class="primary" id="btnJoinPassOk">Vào phòng</button>
+      </div>
+  
+      <div id="joinPassHint" style="margin-top:8px; font-size:12px; opacity:.7;"></div>
+    </div>
+  </div>
+
+  
   <!-- =========================
     POPUP: Deck / SetCard
   ========================= -->
@@ -3813,18 +3831,16 @@ async function createRoomAsHost_Firebase(){
   await roomRef.set({
     meta: {
       roomNo,
-      roomId,
-      roomName,                 // ✅ NEW
-      hasPassword: !!passRaw,   // ✅ NEW
-      passSalt: passRaw ? passSalt : "", // ✅ NEW
-      passHash: passRaw ? passHash : "", // ✅ NEW (không lưu plain)
+      roomName,             
+      hasPassword: !!passRaw, 
+      passSalt: passRaw ? passSalt : "", 
+      passHash: passRaw ? passHash : "",
 
       hostUid: FB.uid,
       status: "active",
       createdAt: Date.now(),
-      maxPlayers: 6,
-      deckSource: null,
-      deckBackUrl: "",
+      maxPlayers: 4,
+      mode: "Truyền thống",
     },
     presence: {},
     users: {},
@@ -3878,6 +3894,197 @@ async function createRoomAsHost_Firebase(){
 
   toggleCreateRoomPopup(false); // ✅ đóng popup
   goMatch();
+}
+
+const ROOMUI = {
+  listEl: document.getElementById("listRoom"),
+  searchEl: document.getElementById("roomSearchInput"),
+
+  passPopup: document.getElementById("popupJoinPass"),
+  passInput: document.getElementById("joinPassInput"),
+  passHint: document.getElementById("joinPassHint"),
+  passClose: document.getElementById("btnCloseJoinPass"),
+  passOk: document.getElementById("btnJoinPassOk"),
+};
+
+let _roomCache = [];          // [{roomId, meta}]
+let _pendingJoin = null;      // { roomId, meta }
+
+function normRoomCode(s){
+  return String(s||"").trim().toUpperCase();
+}
+
+function renderRoomList(filterText=""){
+  if (!ROOMUI.listEl) return;
+
+  const q = normRoomCode(filterText);
+  const items = _roomCache
+    .filter(r=>{
+      if (!q) return true;
+      const code = normRoomCode(r.roomId);
+      const name = normRoomCode(r.meta?.roomName || "");
+      return code.includes(q) || name.includes(q);
+    })
+    .sort((a,b)=> (a.meta?.roomNo||999999) - (b.meta?.roomNo||999999));
+
+  ROOMUI.listEl.innerHTML = "";
+
+  if (items.length === 0){
+    ROOMUI.listEl.innerHTML = `<div style="opacity:.6; padding:10px;">Không có phòng phù hợp</div>`;
+    return;
+  }
+
+  for (const r of items){
+    const code = normRoomCode(r.roomId);
+    const name = (r.meta?.roomName || code);
+    const locked = !!r.meta?.hasPassword;
+
+    const row = document.createElement("div");
+    row.style.cssText = `
+      display:flex; gap:10px; align-items:center;
+      padding:10px; border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.18);
+    `;
+
+    row.innerHTML = `
+      <div style="width:110px; font-weight:700; letter-spacing:.6px;">${code}</div>
+      <div style="flex:1; opacity:.92;">${escapeHtml(name)}</div>
+      <div style="width:90px; text-align:right; opacity:.7;">${locked ? "🔒" : ""}</div>
+      <button class="primary" style="width:92px;">Vào</button>
+    `;
+
+    const btn = row.querySelector("button");
+    btn.addEventListener("click", async ()=>{
+      await onClickJoinRoomFromList(r.roomId, r.meta);
+    });
+
+    ROOMUI.listEl.appendChild(row);
+  }
+}
+
+// helper để không bị XSS khi show roomName
+function escapeHtml(s){
+  return String(s||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+// Listen list phòng: chỉ lấy meta để nhẹ
+let _roomsRef = null;
+function startRoomListListener(){
+  if (_roomsRef) return;
+  _roomsRef = FB.db.ref("AllRoom");
+
+  // Lấy toàn bộ list (nếu bạn có ít phòng). Nếu nhiều phòng -> mình sẽ tối ưu query sau.
+  _roomsRef.on("value", (snap)=>{
+    const v = snap.val() || {};
+    const arr = [];
+
+    for (const roomId in v){
+      const meta = v[roomId]?.meta || null;
+      if (!meta) continue;
+
+      // lọc phòng "active"
+      if (meta.status && meta.status !== "active") continue;
+
+      arr.push({ roomId, meta });
+    }
+
+    _roomCache = arr;
+    renderRoomList(ROOMUI.searchEl?.value || "");
+  });
+}
+
+// Search input
+if (ROOMUI.searchEl){
+  ROOMUI.searchEl.addEventListener("input", ()=>{
+    renderRoomList(ROOMUI.searchEl.value);
+  });
+}
+
+async function onClickJoinRoomFromList(roomId, meta){
+  // đảm bảo auth
+  await fbEnsureAuth();
+
+  client.roomId = String(roomId).toLowerCase();
+  client.roomCode = String(roomId).toUpperCase();
+  if (UI.roomInput) UI.roomInput.value = client.roomCode;
+
+  if (meta?.hasPassword){
+    // show popup pass
+    _pendingJoin = { roomId, meta };
+    openJoinPassPopup(roomId);
+    return;
+  }
+
+  // không có pass -> join thẳng
+  await joinRoomAsClient_Firebase();
+}
+
+function openJoinPassPopup(roomId){
+  if (!ROOMUI.passPopup) return;
+  ROOMUI.passPopup.style.display = "flex";
+  if (ROOMUI.passInput) ROOMUI.passInput.value = "";
+  if (ROOMUI.passHint) ROOMUI.passHint.textContent = `Phòng: ${String(roomId).toUpperCase()}`;
+  setTimeout(()=> ROOMUI.passInput?.focus(), 0);
+}
+
+function closeJoinPassPopup(){
+  if (!ROOMUI.passPopup) return;
+  ROOMUI.passPopup.style.display = "none";
+  _pendingJoin = null;
+}
+
+if (ROOMUI.passClose){
+  ROOMUI.passClose.addEventListener("click", closeJoinPassPopup);
+}
+
+async function submitJoinWithPassword(){
+  if (!_pendingJoin) return;
+  const { roomId, meta } = _pendingJoin;
+  const pass = (ROOMUI.passInput?.value || "").trim();
+
+  if (!pass) return toast("Nhập mật khẩu");
+
+  const salt = meta.passSalt || "";
+  const expected = meta.passHash || "";
+  const got = await sha256Hex(`${salt}:${pass}`);
+
+  if (!salt || !expected || got !== expected){
+    toast("Sai mật khẩu phòng");
+    return;
+  }
+
+  closeJoinPassPopup();
+
+  // set roomCode rồi join
+  client.roomId = String(roomId).toLowerCase();
+  client.roomCode = String(roomId).toUpperCase();
+  if (UI.roomInput) UI.roomInput.value = client.roomCode;
+
+  await joinRoomAsClient_Firebase();
+}
+
+if (ROOMUI.passOk){
+  ROOMUI.passOk.addEventListener("click", submitJoinWithPassword);
+}
+if (ROOMUI.passInput){
+  ROOMUI.passInput.addEventListener("keydown", (e)=>{
+    if (e.key === "Enter") submitJoinWithPassword();
+    if (e.key === "Escape") closeJoinPassPopup();
+  });
+}
+
+function stopRoomListListener(){
+  if (_roomsRef){
+    _roomsRef.off();
+    _roomsRef = null;
+    _roomListStarted = false;
+  }
 }
 
 async function joinRoomAsClient_Firebase(){
@@ -5420,6 +5627,8 @@ if (leaveMatchBtn){
 /* =========================================================
    Lobby UI (giữ nguyên logic bạn gửi)
 ========================================================= */
+let _roomListStarted = false;
+
 (function initLobbyTabs(){
   const root = document.getElementById("lobbyScreen");
   if(!root) return;
@@ -5431,6 +5640,15 @@ if (leaveMatchBtn){
   function showTab(tabId){
     tabs.forEach(t => t.classList.toggle("active", t.id === tabId));
     navs.forEach(b => b.classList.toggle("active", b.dataset.tab === tabId));
+    
+    // ✅ Khi mở tabRoom lần đầu → start listen list phòng
+    if (tabId === "tabRoom" && !_roomListStarted){
+      _roomListStarted = true;
+      startRoomListListener();
+    }
+    if (prevTab === "tabRoom" && tabId !== "tabRoom"){
+      stopRoomListListener();
+    }
   }
 
   navs.forEach(btn => {
