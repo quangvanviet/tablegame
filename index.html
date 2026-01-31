@@ -3796,12 +3796,20 @@ closeCreateRoomBtn.addEventListener("click", ()=>{
     closePopUpCreateRoom();
 });
 
+// ===============================
+//  HASH
+// ===============================
 async function sha256Hex(text){
   const enc = new TextEncoder().encode(text);
   const buf = await crypto.subtle.digest("SHA-256", enc);
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
 
+// ===============================
+//  CREATE ROOM (HOST) - FULL
+//  - write AllRoom (full)
+//  - write AllRoomMeta (light)
+// ===============================
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
@@ -3815,40 +3823,51 @@ async function createRoomAsHost_Firebase(){
   client.roomCode = roomId.toUpperCase();
   if (UI.roomInput) UI.roomInput.value = client.roomCode;
 
-  // ✅ lấy tên phòng + pass từ popup
+  // lấy tên phòng + pass từ popup
   const roomName = (UI.createRoomNameInput?.value || "").trim().slice(0,38) || `Room ${roomNo}`;
   const passRaw  = (UI.createRoomPassInput?.value || "").trim().slice(0,32);
 
-  // ✅ hash pass nếu có
-  const passSalt = uid().slice(0,8); // salt ngắn đủ dùng
+  // hash pass nếu có
+  const passSalt = uid().slice(0,8);
   const passHash = passRaw ? await sha256Hex(`${passSalt}:${passRaw}`) : "";
+
+  // meta nhẹ
+  const meta = {
+    roomNo,
+    roomId: client.roomId,
+    roomName,
+    hasPassword: !!passRaw,
+    passSalt: passRaw ? passSalt : "",
+    passHash: passRaw ? passHash : "",
+    hostUid: FB.uid,
+    status: "active",
+    createdAt: Date.now(),
+    maxPlayers: 4,
+    mode: "Truyền thống",
+  };
 
   client.isHost = true;
   client.host = new HostController(client.roomCode, FB.uid);
   client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username });
 
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
-  await roomRef.set({
-    meta: {
-      roomNo,
-      roomName,             
-      hasPassword: !!passRaw, 
-      passSalt: passRaw ? passSalt : "", 
-      passHash: passRaw ? passHash : "",
 
-      hostUid: FB.uid,
-      status: "active",
-      createdAt: Date.now(),
-      maxPlayers: 4,
-      mode: "Truyền thống",
-    },
+  // ✅ ghi full room
+  await roomRef.set({
+    meta,
     presence: {},
     users: {},
     intents: {},
     state: client.host.state,
   });
 
-  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: 0, atk: 0, def: 0, hp: 20 });
+  // ✅ mirror meta để list phòng nhẹ (KHÔNG kéo state)
+  await FB.db.ref(`AllRoomMeta/${client.roomId}`).set(meta);
+
+  // user entry
+  await roomRef.child(`users/${FB.uid}`).set({
+    username: FB.username, seat: 0, atk: 0, def: 0, hp: 20
+  });
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
   client.lastVersion = client.authoritative.version;
@@ -3856,15 +3875,17 @@ async function createRoomAsHost_Firebase(){
 
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
+
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users;
   });
+
   await t.attachPresence();
 
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
-    const fromId = msg.fromId; // ✅ dùng fromId theo transport mình đã chuẩn hoá
+    const fromId = msg.fromId;
 
     client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
 
@@ -3892,10 +3913,14 @@ async function createRoomAsHost_Firebase(){
 
   installFirebaseRoomCleanupAsHost(client.roomId, roomNo);
 
-  toggleCreateRoomPopup(false); // ✅ đóng popup
+  toggleCreateRoomPopup(false);
   goMatch();
 }
 
+// ===============================
+//  ROOM LIST UI + JOIN WITH PASS POPUP (FULL)
+//  - listen AllRoomMeta (light)
+// ===============================
 const ROOMUI = {
   listEl: document.getElementById("listRoom"),
   searchEl: document.getElementById("roomSearchInput"),
@@ -3907,11 +3932,22 @@ const ROOMUI = {
   passOk: document.getElementById("btnJoinPassOk"),
 };
 
-let _roomCache = [];          // [{roomId, meta}]
-let _pendingJoin = null;      // { roomId, meta }
+let _roomCache = [];     // [{roomId, meta}]
+let _pendingJoin = null; // { roomId, meta }
+let _roomsMetaRef = null;
+let _roomListStarted = false;
 
 function normRoomCode(s){
   return String(s||"").trim().toUpperCase();
+}
+
+function escapeHtml(s){
+  return String(s||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }
 
 function renderRoomList(filterText=""){
@@ -3938,6 +3974,7 @@ function renderRoomList(filterText=""){
     const code = normRoomCode(r.roomId);
     const name = (r.meta?.roomName || code);
     const locked = !!r.meta?.hasPassword;
+    const mode = r.meta?.mode || "";
 
     const row = document.createElement("div");
     row.style.cssText = `
@@ -3948,9 +3985,12 @@ function renderRoomList(filterText=""){
     `;
 
     row.innerHTML = `
-      <div style="width:110px; font-weight:700; letter-spacing:.6px;">${code}</div>
-      <div style="flex:1; opacity:.92;">${escapeHtml(name)}</div>
-      <div style="width:90px; text-align:right; opacity:.7;">${locked ? "🔒" : ""}</div>
+      <div style="width:110px; font-weight:700; letter-spacing:.6px;">${escapeHtml(code)}</div>
+      <div style="flex:1; opacity:.92;">
+        <div style="font-weight:650;">${escapeHtml(name)}</div>
+        <div style="font-size:12px; opacity:.7;">${escapeHtml(mode)}</div>
+      </div>
+      <div style="width:60px; text-align:right; opacity:.8;">${locked ? "🔒" : ""}</div>
       <button class="primary" style="width:92px;">Vào</button>
     `;
 
@@ -3963,40 +4003,32 @@ function renderRoomList(filterText=""){
   }
 }
 
-// helper để không bị XSS khi show roomName
-function escapeHtml(s){
-  return String(s||"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-// Listen list phòng: chỉ lấy meta để nhẹ
-let _roomsRef = null;
 function startRoomListListener(){
-  if (_roomsRef) return;
-  _roomsRef = FB.db.ref("AllRoom");
+  if (_roomsMetaRef) return;
+  _roomsMetaRef = FB.db.ref("AllRoomMeta");
 
-  // Lấy toàn bộ list (nếu bạn có ít phòng). Nếu nhiều phòng -> mình sẽ tối ưu query sau.
-  _roomsRef.on("value", (snap)=>{
+  _roomsMetaRef.on("value", (snap)=>{
     const v = snap.val() || {};
     const arr = [];
 
     for (const roomId in v){
-      const meta = v[roomId]?.meta || null;
+      const meta = v[roomId] || null;
       if (!meta) continue;
-
-      // lọc phòng "active"
       if (meta.status && meta.status !== "active") continue;
-
       arr.push({ roomId, meta });
     }
 
     _roomCache = arr;
     renderRoomList(ROOMUI.searchEl?.value || "");
   });
+}
+
+function stopRoomListListener(){
+  if (_roomsMetaRef){
+    _roomsMetaRef.off();
+    _roomsMetaRef = null;
+  }
+  _roomListStarted = false;
 }
 
 // Search input
@@ -4006,8 +4038,12 @@ if (ROOMUI.searchEl){
   });
 }
 
+// ===============================
+//  Join-from-list flow
+//  - if locked -> popup
+//  - else join direct
+// ===============================
 async function onClickJoinRoomFromList(roomId, meta){
-  // đảm bảo auth
   await fbEnsureAuth();
 
   client.roomId = String(roomId).toLowerCase();
@@ -4015,14 +4051,13 @@ async function onClickJoinRoomFromList(roomId, meta){
   if (UI.roomInput) UI.roomInput.value = client.roomCode;
 
   if (meta?.hasPassword){
-    // show popup pass
     _pendingJoin = { roomId, meta };
     openJoinPassPopup(roomId);
     return;
   }
 
-  // không có pass -> join thẳng
-  await joinRoomAsClient_Firebase();
+  // không pass -> join thẳng (skip password check)
+  await joinRoomAsClient_Firebase({ skipPasswordCheck:true });
 }
 
 function openJoinPassPopup(roomId){
@@ -4045,9 +4080,9 @@ if (ROOMUI.passClose){
 
 async function submitJoinWithPassword(){
   if (!_pendingJoin) return;
+
   const { roomId, meta } = _pendingJoin;
   const pass = (ROOMUI.passInput?.value || "").trim();
-
   if (!pass) return toast("Nhập mật khẩu");
 
   const salt = meta.passSalt || "";
@@ -4061,12 +4096,12 @@ async function submitJoinWithPassword(){
 
   closeJoinPassPopup();
 
-  // set roomCode rồi join
   client.roomId = String(roomId).toLowerCase();
   client.roomCode = String(roomId).toUpperCase();
   if (UI.roomInput) UI.roomInput.value = client.roomCode;
 
-  await joinRoomAsClient_Firebase();
+  // pass đã OK -> join, skip password check trong join
+  await joinRoomAsClient_Firebase({ skipPasswordCheck:true });
 }
 
 if (ROOMUI.passOk){
@@ -4079,32 +4114,37 @@ if (ROOMUI.passInput){
   });
 }
 
-function stopRoomListListener(){
-  if (_roomsRef){
-    _roomsRef.off();
-    _roomsRef = null;
-    _roomListStarted = false;
-  }
-}
-
-async function joinRoomAsClient_Firebase(){
+// ===============================
+//  JOIN ROOM (CLIENT) - FULL
+//  - default: check password from AllRoom/meta
+//  - when coming from list popup: skipPasswordCheck=true
+// ===============================
+async function joinRoomAsClient_Firebase(opts = {}){
   await fbEnsureAuth();
 
   client.selfId = FB.uid;
   client.selfName = FB.username;
 
-  readInputs();
+  // nếu bạn join bằng list -> client.roomCode đã set sẵn
+  // nếu join bằng input -> đọc input
+  if (!client.roomCode) readInputs();
+
   client.roomId = client.roomCode.toLowerCase();
   if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
   const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+
+  // check meta tồn tại
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
 
   const meta = metaSnap.val() || {};
-  if (meta.hasPassword){
+
+  // ✅ chỉ check mật khẩu nếu không skip
+  if (!opts.skipPasswordCheck && meta.hasPassword){
+    // dùng popup list là chuẩn, nhưng fallback cho trường hợp join bằng input
     const pass = prompt("Phòng có mật khẩu. Nhập mật khẩu để vào:");
-    if (pass == null) return; // user cancel
+    if (pass == null) return;
 
     const salt = meta.passSalt || "";
     const expected = meta.passHash || "";
@@ -4116,7 +4156,10 @@ async function joinRoomAsClient_Firebase(){
     }
   }
 
-  await roomRef.child(`users/${FB.uid}`).set({ username: FB.username, seat: -1, atk: 0, def: 0, hp: 20 });
+  // join user
+  await roomRef.child(`users/${FB.uid}`).set({
+    username: FB.username, seat: -1, atk: 0, def: 0, hp: 20
+  });
 
   client.isHost = false;
   client.host = null;
@@ -4130,7 +4173,6 @@ async function joinRoomAsClient_Firebase(){
   });
 
   await t.attachPresence();
-
   await t.sendIntent({ type: "join" });
 
   t.listenState((st)=>{
@@ -4146,6 +4188,9 @@ async function joinRoomAsClient_Firebase(){
   goMatch();
 }
 
+// ===============================
+//  Bind create-room button
+// ===============================
 if (UI.doCreateRoomBtn){
   UI.doCreateRoomBtn.addEventListener("click", async ()=>{
     try{
@@ -4156,9 +4201,11 @@ if (UI.doCreateRoomBtn){
     }
   });
 }
-  
+
+// ===============================
+//  Leave room
+// ===============================
 function leaveRoom(){
-  // Firebase-only: chỉ đóng transport + xoá local session
   try{
     if (client.transport) client.transport.close();
   }catch(e){}
@@ -4166,14 +4213,21 @@ function leaveRoom(){
   goLobby?.();
 }
 
+// ===============================
+//  Host cleanup when everyone leaves
+//  - remove AllRoom + AllRoomMeta
+// ===============================
 function installFirebaseRoomCleanupAsHost(roomId, roomNo){
   const presRef = FB.db.ref(`AllRoom/${roomId}/presence`);
   presRef.on("value", async (snap)=>{
     if (!client.isHost) return;
+
     const v = snap.val() || {};
     const keys = Object.keys(v);
+
     if (keys.length === 0){
       try{ await FB.db.ref(`AllRoom/${roomId}`).remove(); }catch(e){}
+      try{ await FB.db.ref(`AllRoomMeta/${roomId}`).remove(); }catch(e){} // ✅ remove meta mirror
       try{ await fbReleaseRoomNo(roomNo); }catch(e){}
     }
   });
