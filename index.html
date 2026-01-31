@@ -3091,6 +3091,8 @@ class HostController {
             } else {
               c.owner = handOwner;
               c.ownerId = handOwner;
+
+              c.faceUp = false;
             }
           } else {
             c.owner = null;
@@ -3136,6 +3138,7 @@ class HostController {
             if (ss.zone === ZONES.hand && ss.owner){
               c.owner = ss.owner;
               c.ownerId = ss.owner;
+              c.faceUp = false;
             } else {
               c.owner = null;
             }
@@ -3214,6 +3217,7 @@ class HostController {
           c.zone = ZONES.hand;
           c.owner = fromId;
           c.ownerId = fromId;
+          //c.faceUp = false; 
 
           if (hr){
             c.x = hr.x + randInt(40, Math.max(40, hr.w - 40));
