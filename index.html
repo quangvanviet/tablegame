@@ -1843,8 +1843,8 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
         <div class="actions">
           <button class="collapse-btn" data-target="chatPanel" type="button">−</button>
           <div class="chatToggle" id="chatToggle">
-            <button type="button" data-mode="all" class="active">ALL</button>
-            <button type="button" data-mode="team">TEAM</button>
+            <button type="button" data-mode="inGame" class="active">Trận đấu</button>
+            <button type="button" data-mode="all">Thế giới</button>
           </div>
         </div>
         <div class="titleRow">
@@ -3135,7 +3135,7 @@ class HostController {
             if (!handOwner){
               c.zone = ZONES.table;
               c.owner = null;
-              c.ownerId = null;
+              //c.ownerId = null;
             } else {
               c.owner = handOwner;
               c.ownerId = handOwner;
@@ -3165,7 +3165,7 @@ class HostController {
             } else {
               ss.zone = ZONES.hand;
               ss.owner = handOwner;
-              ss.ownerId = handOwner;
+              //ss.ownerId = handOwner;
             }
           } else {
             ss.zone = ZONES.table;
@@ -3429,7 +3429,7 @@ class HostController {
 
           c.owner = (dropStack.zone === ZONES.hand) ? (dropStack.owner ?? null) : null;
           if (dropStack.zone === ZONES.hand && dropStack.owner) c.ownerId = dropStack.owner;
-          else c.ownerId = null;
+          //else c.ownerId = null;
         }
 
         this.bumpVersion();
