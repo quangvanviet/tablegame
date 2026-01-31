@@ -5681,6 +5681,7 @@ if (leaveMatchBtn){
 /* =========================================================
    Lobby UI (giữ nguyên logic bạn gửi)
 ========================================================= */
+startRoomListListener();
 (function initLobbyTabs(){
   const root = document.getElementById("lobbyScreen");
   if(!root) return;
@@ -5689,19 +5690,26 @@ if (leaveMatchBtn){
   const navs = Array.from(root.querySelectorAll(".nav-item"));
   const iconNavs = Array.from(root.querySelectorAll(".icon-btn[data-tab]"));
 
+  let prevTabId = tabs.find(t=>t.classList.contains("active"))?.id || (tabs[0]?.id || "");
+
   function showTab(tabId){
+    // render active
     tabs.forEach(t => t.classList.toggle("active", t.id === tabId));
     navs.forEach(b => b.classList.toggle("active", b.dataset.tab === tabId));
-    
-    // ✅ Khi mở tabRoom lần đầu → start listen list phòng
-    if (tabId === "tabRoom" && !_roomListStarted){
-      _roomListStarted = true;
+
+    // ✅ chỉ start list phòng khi vào tabRoom lần đầu
+    if (tabId === "tabRoom" && !window._roomListStarted){
+      window._roomListStarted = true;
       startRoomListListener();
     }
-    if (prevTab === "tabRoom" && tabId !== "tabRoom"){
-      stopRoomListListener();
-    }
+
+    if (prevTabId === "tabRoom" && tabId !== "tabRoom") stopRoomListListener();
+
+    prevTabId = tabId;
   }
+
+  navs.forEach(btn => btn.addEventListener("click", ()=> showTab(btn.dataset.tab)));
+  iconNavs.forEach(btn => btn.addEventListener("click", ()=> showTab(btn.dataset.tab)));
 
   navs.forEach(btn => {
     btn.addEventListener("click", ()=> showTab(btn.dataset.tab));
