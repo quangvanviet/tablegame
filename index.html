@@ -3091,11 +3091,14 @@ class HostController {
             } else {
               c.owner = handOwner;
               c.ownerId = handOwner;
-
-              c.faceUp = false;
+              //c.faceUp = false;
             }
           } else {
             c.owner = null;
+              if (z.zone === ZONES.deck){
+                c.owner=null; 
+                c.ownerId=null;
+              }
           }
           c.stackId = null;
         }
@@ -3124,6 +3127,10 @@ class HostController {
           } else {
             ss.zone = ZONES.table;
             ss.owner = null;
+            if (z.zone === ZONES.deck){
+              ss.owner=null; 
+              ss.ownerId=null;
+            }
           }
 
           // sync cards theo stack (KHÔNG flip)
@@ -3143,7 +3150,10 @@ class HostController {
               c.faceUp = false; // vào hand người khác thì úp
             } else {
               c.owner = null;
-              // c.ownerId = null;
+              if (ss.zone === ZONES.deck){
+                c.owner=null;
+                c.ownerId=null;
+              }
             }
           }
         }
