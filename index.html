@@ -2655,30 +2655,32 @@ class FirebaseTransport extends NetTransport {
 
   /* ---------- Presence ---------- */
   async attachPresence(){
-    // upsert users/{uid}
-    try{
-      await this.usersRef.child(FB.uid).set({
-        uid: FB.uid,
-        username: FB.username,
-        at: now(),
+    const uid = FB.uid;
+    const roomRef = FB.db.ref(`AllRoom/${this.roomId}`);
+    const myPresRef = roomRef.child(`presence/${uid}`);
+    const connectedRef = FB.db.ref(".info/connected");
+  
+    return new Promise((resolve)=>{
+      connectedRef.on("value", async (snap)=>{
+        if (snap.val() !== true) return;
+  
+        // ✅ quan trọng nhất: tự xóa presence khi mất kết nối / đóng tab
+        try { await myPresRef.onDisconnect().remove(); } catch(e){}
+  
+        // ✅ set presence hiện tại
+        try {
+          await myPresRef.set({
+            uid,
+            name: FB.username || "",
+            at: Date.now()
+          });
+        } catch(e){}
+  
+        resolve();
       });
-    }catch(e){}
-
-    // bind .info/connected để set presence + onDisconnect
-    if (this._connectedCb) return;
-    this._connectedCb = async (snap)=>{
-      const ok = (snap.val() === true);
-      this.onStatus({connected: ok, mode:"firebase"});
-      if (!ok) return;
-
-      try{
-        // presence online
-        await this.presRef.set({ online:true, at: now(), username: FB.username });
-        this.presRef.onDisconnect().remove();
-      }catch(e){}
-    };
-    this._connectedRef.on("value", this._connectedCb);
+    });
   }
+
 
   /* ---------- Streams ---------- */
   listenUsers(onUsers){
@@ -4011,7 +4013,7 @@ async function createRoomAsHost_Firebase(){
   toast(`Đã tạo room: ${roomId}`);
   client.roomMeta = { roomNo, roomId };
 
-  installFirebaseRoomCleanupAsHost(client.roomId, roomNo);
+  installFirebaseRoomCleanup(client.roomId, roomNo);
 
   toggleCreateRoomPopup(false);
   goMatch();
@@ -4285,6 +4287,7 @@ async function joinRoomAsClient_Firebase(opts = {}){
   });
 
   toast("Đã vào " + client.roomCode);
+  installFirebaseRoomCleanup(client.roomId, meta.roomNo);
   goMatch();
 }
 
@@ -4317,21 +4320,50 @@ function leaveRoom(){
 //  Host cleanup when everyone leaves
 //  - remove AllRoom + AllRoomMeta
 // ===============================
-function installFirebaseRoomCleanupAsHost(roomId, roomNo){
-  const presRef = FB.db.ref(`AllRoom/${roomId}/presence`);
-  presRef.on("value", async (snap)=>{
-    if (!client.isHost) return;
+function installFirebaseRoomCleanup(roomId, roomNo){
+  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const presRef = roomRef.child("presence");
+  const metaRef = FB.db.ref(`AllRoomMeta/${roomId}`);
+  const lockRef = roomRef.child("meta/cleanupLock"); // khoá chống race
 
+  presRef.on("value", async (snap)=>{
     const v = snap.val() || {};
     const keys = Object.keys(v);
 
-    if (keys.length === 0){
-      try{ await FB.db.ref(`AllRoom/${roomId}`).remove(); }catch(e){}
-      try{ await FB.db.ref(`AllRoomMeta/${roomId}`).remove(); }catch(e){} // ✅ remove meta mirror
-      try{ await fbReleaseRoomNo(roomNo); }catch(e){}
+    // còn người -> không làm gì
+    if (keys.length !== 0) return;
+
+    // ✅ lấy lock bằng transaction: chỉ 1 client được dọn
+    let lockResult;
+    try{
+      lockResult = await lockRef.transaction(cur=>{
+        if (cur) return; // đã có người lock
+        return { uid: FB.uid, at: Date.now() };
+      });
+    }catch(e){
+      return;
     }
+
+    if (!lockResult?.committed) return;
+
+    // ✅ double-check presence vẫn rỗng (tránh case có người vào lại)
+    let again = {};
+    try{
+      again = (await presRef.get()).val() || {};
+    }catch(e){}
+
+    if (Object.keys(again).length !== 0){
+      try{ await lockRef.remove(); }catch(e){}
+      return;
+    }
+
+    // ✅ xoá room + meta mirror + trả roomNo
+    try{ await roomRef.remove(); }catch(e){}
+    try{ await metaRef.remove(); }catch(e){}
+    try{ await fbReleaseRoomNo(roomNo); }catch(e){}
   });
 }
+
 
 /* =========================================================
    13) Deck/SetCard Modal (RTDB) - Firebase-only
