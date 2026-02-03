@@ -2658,28 +2658,45 @@ class FirebaseTransport extends NetTransport {
     const uid = FB.uid;
     const roomRef = FB.db.ref(`AllRoom/${this.roomId}`);
     const myPresRef = roomRef.child(`presence/${uid}`);
+    const myUserRef = roomRef.child(`users/${uid}`);
     const connectedRef = FB.db.ref(".info/connected");
   
+    // lưu callback để có thể off khi close()
+    this._connectedCb = (snap)=>{};
+    if (this._connectedRef && this._connectedCb){
+      try{ this._connectedRef.off("value", this._connectedCb); }catch(e){}
+    }
+    this._connectedRef = connectedRef;
+  
     return new Promise((resolve)=>{
-      connectedRef.on("value", async (snap)=>{
+      let done = false;
+  
+      this._connectedCb = async (snap)=>{
         if (snap.val() !== true) return;
   
-        // ✅ quan trọng nhất: tự xóa presence khi mất kết nối / đóng tab
-        try { await myPresRef.onDisconnect().remove(); } catch(e){}
+        // ✅ đăng ký onDisconnect khi đã connected
+        try{ await myPresRef.onDisconnect().remove(); }catch(e){}
+        try{ await myUserRef.onDisconnect().remove(); }catch(e){}
   
         // ✅ set presence hiện tại
-        try {
+        try{
           await myPresRef.set({
             uid,
             name: FB.username || "",
             at: Date.now()
           });
-        } catch(e){}
+        }catch(e){}
   
-        resolve();
-      });
+        if (!done){
+          done = true;
+          resolve();
+        }
+      };
+  
+      connectedRef.on("value", this._connectedCb);
     });
   }
+
 
 
   /* ---------- Streams ---------- */
@@ -2735,23 +2752,28 @@ class FirebaseTransport extends NetTransport {
   /* ---------- Cleanup ---------- */
   close(){
     try{
-      if (this._stateCb) this.stateRef.off("value", this._stateCb);
+      // off listeners
+      if (this._stateCb)   this.stateRef.off("value", this._stateCb);
       if (this._intentsCb) this.intentsRef.off("child_added", this._intentsCb);
-      if (this._usersCb) this.usersRef.off("value", this._usersCb);
-      if (this._connectedCb) this._connectedRef.off("value", this._connectedCb);
-
+      if (this._usersCb)   this.usersRef.off("value", this._usersCb);
+      if (this._connectedRef && this._connectedCb) {
+        this._connectedRef.off("value", this._connectedCb);
+      }
+  
       this._stateCb = null;
       this._intentsCb = null;
       this._usersCb = null;
       this._connectedCb = null;
-
-      // dọn presence/users của mình
-      try{ this.presRef.remove(); }catch(e){}
-      try{ this.usersRef.child(FB.uid).remove(); }catch(e){}
+      this._connectedRef = null;
+  
+      // ✅ leave chủ động: dọn presence/users của mình
+      try{ this.presRef?.remove(); }catch(e){}
+      try{ this.usersRef?.child(FB.uid)?.remove(); }catch(e){}
     }catch(e){}
-
+  
     this.onStatus({connected:false, mode:"firebase"});
   }
+
 }
 
 /* =========================================================
@@ -3984,6 +4006,7 @@ async function createRoomAsHost_Firebase(){
   });
 
   await t.attachPresence();
+  installHostPresenceReconcile(client.roomId);
 
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
@@ -4019,6 +4042,51 @@ async function createRoomAsHost_Firebase(){
   goMatch();
 }
 
+function installHostPresenceReconcile(roomId){
+  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const presRef = roomRef.child("presence");
+  const usersRef = roomRef.child("users");
+
+  // tránh chạy dọn quá dày
+  let _lastRun = 0;
+
+  presRef.on("value", async (snap)=>{
+    if (!client.isHost || !client.host?.state) return;
+
+    const nowTs = Date.now();
+    if (nowTs - _lastRun < 800) return; // throttle nhẹ
+    _lastRun = nowTs;
+
+    const pres = snap.val() || {};
+    const online = new Set(Object.keys(pres)); // uid online
+
+    // 1) Dọn users/<uid> không còn online
+    let users = {};
+    try{
+      users = (await usersRef.get()).val() || {};
+    }catch(e){ users = {}; }
+
+    const updates = {};
+    for (const uid in users){
+      if (!online.has(uid)){
+        updates[uid] = null; // remove
+      }
+    }
+    if (Object.keys(updates).length){
+      try{ await usersRef.update(updates); }catch(e){}
+    }
+
+    // 2) Dọn state.players (đúng cái bạn đang vẽ seatName)
+    const st = client.host.state;
+    st.players = (st.players || []).filter(p => p && online.has(p.id));
+
+    // 3) bump + writeState để mọi client thấy ngay
+    if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
+    try{ await client.transport?.writeState?.(st); }catch(e){}
+  });
+}
+
+  
 // ===============================
 //  ROOM LIST UI + JOIN WITH PASS POPUP (FULL)
 //  - listen AllRoomMeta (light)
@@ -4308,13 +4376,27 @@ if (UI.doCreateRoomBtn){
 // ===============================
 //  Leave room
 // ===============================
-function leaveRoom(){
+async function leaveRoom(){
+  const roomId = client.roomId;
+  const uid = FB?.uid;
+
   try{
-    if (client.transport) client.transport.close();
+    if (roomId && uid){
+      const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+      // ✅ xoá presence + user entry
+      await roomRef.child(`presence/${uid}`).remove().catch(()=>{});
+      await roomRef.child(`users/${uid}`).remove().catch(()=>{});
+
+      // (tuỳ chọn) gửi intent leave để host cập nhật state.players ngay
+      try{ await client.transport?.sendIntent?.({ type:"leave" }); }catch(e){}
+    }
   }catch(e){}
+
+  try{ client.transport?.close?.(); }catch(e){}
   resetClientSession();
   goLobby?.();
 }
+
 
 // ===============================
 //  Host cleanup when everyone leaves
