@@ -3131,16 +3131,19 @@ class HostController {
             const c = this._ensureCard(st, cid);
             if (!c) continue;
 
+            c.stackId = ss.id;
+          
             c.x = ss.x;
             c.y = ss.y;
             c.zone = ss.zone;
-
+          
             if (ss.zone === ZONES.hand && ss.owner){
               c.owner = ss.owner;
               c.ownerId = ss.owner;
-              c.faceUp = false;
+              c.faceUp = false; // vào hand người khác thì úp
             } else {
               c.owner = null;
+              // c.ownerId = null;
             }
           }
         }
