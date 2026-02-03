@@ -4049,11 +4049,6 @@ async function hostMoveUserToSlot(roomId, uidMove, targetType, targetSeat){
     await roomRef.child(`users/${FB.uid}`).update({ role:"player" }).catch(()=>{});
   }
 }
-function amSpectator(){
-  const u = client.authoritative?._users?.[FB.uid];
-  return !u || !Number.isInteger(u.playSeat);
-}
-
 
   // ===== Setup box UI =====
   const phase = s.game?.phase || "setup";
@@ -4240,7 +4235,8 @@ async function createRoomAsHost_Firebase(){
 
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
-    client.authoritative._users = users;
+    client.authoritative._users = users || {};
+    renderWaitingRoom(client.roomId, client.authoritative._meta || {}, client.authoritative._users);
   });
 
   await t.attachPresence();
@@ -4616,16 +4612,15 @@ async function joinRoomAsClient_Firebase(opts = {}){
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users || {};
+    renderWaitingRoom(client.roomId, client.authoritative._meta || {}, client.authoritative._users);
   });
 
   await t.attachPresence();
 
-  const roomRef3 = roomRefOf(client.roomId);
-  
-  roomRef3.child("meta").on("value", (snap)=>{
+  // listen meta để biết hostId + render phòng chờ
+  roomRef.child("meta").on("value", (snap)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._meta = snap.val() || {};
-    // cập nhật UI phòng chờ
     renderWaitingRoom(client.roomId, client.authoritative._meta, client.authoritative._users || {});
   });
   
@@ -5478,6 +5473,11 @@ function calcDragOffset(state, target, p){
 
 
 // ======= CANVAS INPUT (click vs drag + smart inspector) =======
+function amSpectator(){
+  const u = client.authoritative?._users?.[FB.uid];
+  return !u || !Number.isInteger(u.playSeat);
+}
+  
 const DRAG_THRESHOLD_PX = 6;
 
 canvas.addEventListener("mousedown", (ev)=>{
