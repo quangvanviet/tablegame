@@ -2233,7 +2233,7 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   if (total <= 0) return toast("Set rỗng (chưa có URL / count)");
 
   const backUrl = (data.backUrl || "").trim();
-  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`)
 
   // meta: lưu lịch sử nhiều deck (append)
   const deckItem = {
@@ -3990,7 +3990,7 @@ async function createRoomAsHost_Firebase(){
   client.host = new HostController(client.roomCode, FB.uid);
   client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username });
 
-  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`)
 
   // ✅ ghi full room
   await roomRef.set({
@@ -4307,6 +4307,45 @@ if (ROOMUI.passInput){
 //  - default: check password from AllRoom/meta
 //  - when coming from list popup: skipPasswordCheck=true
 // ===============================
+async function claimSeat(roomRef, maxPlayers = 4){
+  const uid = FB.uid;
+
+  // nếu uid đã có trong users thì giữ nguyên seat
+  const usersSnap0 = await roomRef.child("users").get();
+  const users0 = usersSnap0.val() || {};
+  if (users0[uid] && Number.isInteger(users0[uid].seat)) return users0[uid].seat;
+
+  // thử claim seat bằng transaction để tránh trùng
+  for (let attempt = 0; attempt < maxPlayers; attempt++){
+    const usersSnap = await roomRef.child("users").get();
+    const users = usersSnap.val() || {};
+
+    const taken = new Set(
+      Object.values(users)
+        .map(u => u?.seat)
+        .filter(s => Number.isInteger(s))
+    );
+
+    let seat = -1;
+    for (let i = 0; i < maxPlayers; i++){
+      if (!taken.has(i)) { seat = i; break; }
+    }
+    if (seat < 0) throw new Error("Phòng đã đủ người (4/4).");
+
+    // claim seat
+    const claimRef = roomRef.child(`seatClaims/${seat}`);
+    const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
+
+    if (tx.committed && tx.snapshot.val() === uid){
+      return seat;
+    }
+    // nếu không commit => seat vừa bị người khác lấy, loop lại
+  }
+
+  throw new Error("Không giữ được seat (race). Thử vào lại.");
+}
+
+  
 async function joinRoomAsClient_Firebase(opts = {}){
   await fbEnsureAuth();
 
@@ -4320,7 +4359,7 @@ async function joinRoomAsClient_Firebase(opts = {}){
   client.roomId = client.roomCode.toLowerCase();
   if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
-  const roomRef = FB.db.ref(`AllRoom/${client.roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`)
 
   // check meta tồn tại
   const metaSnap = await roomRef.child("meta").get();
@@ -4346,13 +4385,19 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
   // join user
   let mySeat = 0;
-  for (let i=0; i<4; i++){
-    const p = client.host.state.players?.[i];
-    if (p && p.id === FB.uid){ mySeat = i; break; }
+  try{
+    mySeat = await claimSeat(roomRef, 4);
+  }catch(e){
+    toast(e?.message || String(e));
+    return;
   }
+  
   await roomRef.child(`users/${FB.uid}`).set({
-    username: FB.username, seat: mySeat, atk: 0, def: 0, hp: 0, coin: 0,
+    username: FB.username,
+    seat: mySeat,
+    atk: 0, def: 0, hp: 0, coin: 0,
   });
+
 
   client.isHost = false;
   client.host = null;
@@ -4399,35 +4444,61 @@ if (UI.doCreateRoomBtn){
 // ===============================
 //  Leave room
 // ===============================
+async function releaseMySeatClaim(roomId, seat){
+  try{
+    const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+
+    let s = seat;
+
+    // fallback: nếu không truyền seat thì đọc từ users
+    if (!Number.isInteger(s)){
+      const usersSnap = await roomRef.child(`users/${FB.uid}`).get();
+      const u = usersSnap.val();
+      s = u?.seat;
+    }
+
+    if (Number.isInteger(s)){
+      await roomRef.child(`seatClaims/${s}`).remove();
+    }
+  }catch(e){
+    console.warn("releaseMySeatClaim error", e);
+  }
+}
+
 async function leaveRoom(){
-  const roomId = client.roomId;
-  const uid = FB?.uid;
+  const roomId = client.roomId;          // giữ lại trước khi reset
+  const uid    = FB?.uid || FB?.uid;     // tuỳ bạn set FB.uid kiểu nào
+  const seat   = client.mySeat;          // bạn nên set client.mySeat lúc join
 
   try{
-    // ✅ báo host trước (nhẹ + nhanh)
+    // báo host trước (không bắt buộc phải await)
     try{ await client.transport?.sendIntent?.({ type:"leave" }); }catch(e){}
 
     if (roomId && uid){
-      const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+      const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+
+      // ✅ release seatClaims TRƯỚC khi xoá users (vì xoá users rồi sẽ mất seat)
+      await releaseMySeatClaim(roomId, seat).catch(()=>{});
+
       // ✅ sau đó mới xoá presence + user entry
       await roomRef.child(`presence/${uid}`).remove().catch(()=>{});
       await roomRef.child(`users/${uid}`).remove().catch(()=>{});
     }
-  }catch(e){}
+  }catch(e){
+    console.warn("leaveRoom error", e);
+  }
 
   try{ client.transport?.close?.(); }catch(e){}
   resetClientSession();
   goLobby?.();
 }
 
-
-
 // ===============================
 //  Host cleanup when everyone leaves
 //  - remove AllRoom + AllRoomMeta
 // ===============================
 function installFirebaseRoomCleanup(roomId, roomNo){
-  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
+  const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`)
   const presRef = roomRef.child("presence");
   const metaRef = FB.db.ref(`AllRoomMeta/${roomId}`);
   const lockRef = roomRef.child("meta/cleanupLock"); // khoá chống race
