@@ -4075,108 +4075,6 @@ function setStatusUI(){
     }
   }
 
-function isMeHost(meta){
-  const hid = meta?.hostId || meta?.hostUid || "";
-  return hid && hid === (FB.uid || "");
-}
-
-// ghế click: tạm thời cho người dùng tự xin ngồi
-// (host kéo thả nâng cấp sau)
-async function requestSit(roomId, seat){
-  const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
-  const uid = FB.uid;
-
-  // chỉ cho xin ngồi nếu đang spectator
-  const uSnap = await roomRef.child(`users/${uid}`).get();
-  const u = uSnap.val() || {};
-  if (Number.isInteger(u.playSeat)) return;
-
-  // claim seat basic (không swap)
-  const claimRef = roomRef.child(`seatClaims/play/${seat}`);
-  const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
-  if (!tx.committed || tx.snapshot.val() !== uid){
-    toast("Ghế đã có người, chọn ghế khác.");
-    return;
-  }
-
-  await roomRef.child(`users/${uid}`).update({ role:"player", playSeat: seat });
-  toast("Đã ngồi ghế " + (seat+1));
-}
-
-function renderLobby(roomId, meta, users){
-  // host controls show/hide
-  const hostBox = document.getElementById("hostSetupControls");
-  if (hostBox) hostBox.style.display = isMeHost(meta) ? "" : "none";
-
-  const wr = document.getElementById("waitingRoom");
-  if (!wr) return;
-
-  const hostBtn = wr.querySelector(`.slot[data-slot="host"]`);
-  const playBtns = [...wr.querySelectorAll(`.slot[data-slot="play"]`)];
-  const specList = document.getElementById("specList");
-  const specCount = document.getElementById("specCount");
-
-  // helper find by seat
-  const entries = Object.entries(users || {});
-  const findPlay = (seat)=>{
-    const f = entries.find(([uid,u]) => Number.isInteger(u?.playSeat) && ((u.playSeat|0) === seat));
-    return f ? { uid:f[0], u:f[1]||{} } : null;
-  };
-
-  // HOST display
-  const hid = meta?.hostId || meta?.hostUid || "";
-  const hu = hid ? (users?.[hid] || null) : null;
-
-  if (hostBtn){
-    if (hid && hu){
-      hostBtn.classList.remove("empty");
-      hostBtn.innerHTML = `<div class="name">${escapeHtml(hu.username||"Host")}</div><div class="meta">${escapeHtml(hid.slice(0,6))}</div>`;
-      hostBtn.disabled = true;
-    } else {
-      hostBtn.classList.add("empty");
-      hostBtn.innerHTML = `<div class="name">Host offline</div><div class="meta">—</div>`;
-      hostBtn.disabled = true;
-    }
-  }
-
-  // PLAY seats
-  for (const btn of playBtns){
-    const seat = Number(btn.dataset.seat)|0;
-    const occ = findPlay(seat);
-
-    if (occ){
-      btn.classList.remove("empty");
-      btn.innerHTML = `<div class="name">${escapeHtml(occ.u.username||"Player")}</div><div class="meta">Ghế ${seat+1}</div>`;
-      btn.disabled = true;
-    } else {
-      btn.classList.add("empty");
-      btn.innerHTML = `<div class="name">Ghế trống</div><div class="meta">Click để ngồi</div>`;
-      btn.disabled = false;
-      btn.onclick = ()=> requestSit(roomId, seat);
-    }
-  }
-
-  // SPECTATORS list
-  const spectators = entries
-    .filter(([uid,u])=> !Number.isInteger(u?.playSeat))
-    .sort((a,b)=> (a[1]?.joinedAt||0) - (b[1]?.joinedAt||0));
-
-  if (specCount) specCount.textContent = String(spectators.length);
-
-  if (specList){
-    specList.innerHTML = "";
-    for (const [uid,u] of spectators){
-      const chip = document.createElement("div");
-      chip.className = "spec-chip";
-      chip.innerHTML = `<div class="n">${escapeHtml(u?.username||"—")}</div><div class="id">${escapeHtml(uid.slice(0,6))}</div>`;
-      specList.appendChild(chip);
-    }
-    if (!spectators.length){
-      specList.innerHTML = `<div style="opacity:.55; font-size:12px;">Không có</div>`;
-    }
-  }
-}
-
   // ===== Setup box UI =====
   const phase = s.game?.phase || "setup";
   if (UI.setupPhaseLine){
@@ -4294,6 +4192,108 @@ async function sha256Hex(text){
 //  - write AllRoom (full)
 //  - write AllRoomMeta (light)
 // ===============================
+function isMeHost(meta){
+  const hid = meta?.hostId || meta?.hostUid || "";
+  return hid && hid === (FB.uid || "");
+}
+
+// ghế click: tạm thời cho người dùng tự xin ngồi
+// (host kéo thả nâng cấp sau)
+async function requestSit(roomId, seat){
+  const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+  const uid = FB.uid;
+
+  // chỉ cho xin ngồi nếu đang spectator
+  const uSnap = await roomRef.child(`users/${uid}`).get();
+  const u = uSnap.val() || {};
+  if (Number.isInteger(u.playSeat)) return;
+
+  // claim seat basic (không swap)
+  const claimRef = roomRef.child(`seatClaims/play/${seat}`);
+  const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
+  if (!tx.committed || tx.snapshot.val() !== uid){
+    toast("Ghế đã có người, chọn ghế khác.");
+    return;
+  }
+
+  await roomRef.child(`users/${uid}`).update({ role:"player", playSeat: seat });
+  toast("Đã ngồi ghế " + (seat+1));
+}
+
+function renderLobby(roomId, meta, users){
+  // host controls show/hide
+  const hostBox = document.getElementById("hostSetupControls");
+  if (hostBox) hostBox.style.display = isMeHost(meta) ? "" : "none";
+
+  const wr = document.getElementById("waitingRoom");
+  if (!wr) return;
+
+  const hostBtn = wr.querySelector(`.slot[data-slot="host"]`);
+  const playBtns = [...wr.querySelectorAll(`.slot[data-slot="play"]`)];
+  const specList = document.getElementById("specList");
+  const specCount = document.getElementById("specCount");
+
+  // helper find by seat
+  const entries = Object.entries(users || {});
+  const findPlay = (seat)=>{
+    const f = entries.find(([uid,u]) => Number.isInteger(u?.playSeat) && ((u.playSeat|0) === seat));
+    return f ? { uid:f[0], u:f[1]||{} } : null;
+  };
+
+  // HOST display
+  const hid = meta?.hostId || meta?.hostUid || "";
+  const hu = hid ? (users?.[hid] || null) : null;
+
+  if (hostBtn){
+    if (hid && hu){
+      hostBtn.classList.remove("empty");
+      hostBtn.innerHTML = `<div class="name">${escapeHtml(hu.username||"Host")}</div><div class="meta">${escapeHtml(hid.slice(0,6))}</div>`;
+      hostBtn.disabled = true;
+    } else {
+      hostBtn.classList.add("empty");
+      hostBtn.innerHTML = `<div class="name">Host offline</div><div class="meta">—</div>`;
+      hostBtn.disabled = true;
+    }
+  }
+
+  // PLAY seats
+  for (const btn of playBtns){
+    const seat = Number(btn.dataset.seat)|0;
+    const occ = findPlay(seat);
+
+    if (occ){
+      btn.classList.remove("empty");
+      btn.innerHTML = `<div class="name">${escapeHtml(occ.u.username||"Player")}</div><div class="meta">Ghế ${seat+1}</div>`;
+      btn.disabled = true;
+    } else {
+      btn.classList.add("empty");
+      btn.innerHTML = `<div class="name">Ghế trống</div><div class="meta">Click để ngồi</div>`;
+      btn.disabled = false;
+      btn.onclick = ()=> requestSit(roomId, seat);
+    }
+  }
+
+  // SPECTATORS list
+  const spectators = entries
+    .filter(([uid,u])=> !Number.isInteger(u?.playSeat))
+    .sort((a,b)=> (a[1]?.joinedAt||0) - (b[1]?.joinedAt||0));
+
+  if (specCount) specCount.textContent = String(spectators.length);
+
+  if (specList){
+    specList.innerHTML = "";
+    for (const [uid,u] of spectators){
+      const chip = document.createElement("div");
+      chip.className = "spec-chip";
+      chip.innerHTML = `<div class="n">${escapeHtml(u?.username||"—")}</div><div class="id">${escapeHtml(uid.slice(0,6))}</div>`;
+      specList.appendChild(chip);
+    }
+    if (!spectators.length){
+      specList.innerHTML = `<div style="opacity:.55; font-size:12px;">Không có</div>`;
+    }
+  }
+}
+  
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
