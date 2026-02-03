@@ -2916,8 +2916,8 @@ const ensureUIState = (st) => {
 class HostController {
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
-    this.hostId = hostId;
     this.state = makeFreshTableState(roomCode, hostId);
+    // hostId trong state sẽ được cập nhật theo meta.hostId khi takeover
   }
 
   bumpVersion(){
@@ -2988,7 +2988,8 @@ class HostController {
   // Helpers (tách ra để dễ bảo trì)
   // ==============================
   _ensureState(){
-    const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, this.hostId);
+    const curHostId = this.state?.hostId || "";
+    const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, curHostId);
     ensureUIState(st);
 
     // đảm bảo shape tối thiểu
@@ -4421,10 +4422,10 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
     if (amHost && !client.isHost){
       client.isHost = true;
-      // bước 3 sẽ cắm startHostAuthority() ở đây
+      startHostAuthority(client.roomId).catch(()=>{});
     }else if (!amHost && client.isHost){
       client.isHost = false;
-      // bước 3 sẽ cắm stopHostAuthority() ở đây
+      stopHostAuthority();
     }
 
     setStatusUI?.();
@@ -4533,6 +4534,102 @@ async function maybeElectNewHost(roomRef){
   await roomRef.child("meta/hostChangedAt").set(Date.now()).catch(()=>{});
 }
 
+let _stopHostIntents = null;
+
+async function startHostAuthority(roomId){
+  const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+
+  // 1) đảm bảo transport tồn tại
+  const t = client.transport;
+  if (!t) return;
+
+  // 2) tạo HostController nếu chưa có
+  if (!client.host){
+    client.host = new HostController(client.roomCode, FB.uid);
+  }
+
+  // 3) lấy state hiện tại từ DB để takeover tiếp tục (không reset bàn)
+  const stSnap = await roomRef.child("state").get();
+  const st = stSnap.val();
+  if (st && typeof st === "object"){
+    client.host.state = st;
+  }
+
+  // 4) cập nhật hostId trong state theo meta.hostId
+  client.host.state.hostId = FB.uid;
+
+  // 5) bật listen intents (chỉ bật 1 lần)
+  if (_stopHostIntents) return;
+
+  const maybeUnsub = t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
+    const action = msg.action;
+    const fromId = msg.fromId;
+
+    // ✅ quan trọng: host lock - nếu mình không còn là host thì bỏ xử lý
+    // (tránh race khi hostId vừa đổi)
+    const hostIdNow = (await roomRef.child("meta/hostId").get()).val() || "";
+    if (hostIdNow !== FB.uid){
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
+    }
+
+    // (A) join/leave: tạm thời giữ như code cũ (bước sau sẽ đổi theo phòng chờ)
+    if (action?.type === "join"){
+      client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
+
+      // mirror seat -> users/<uid>/seat (nếu bạn còn dùng seat trong state)
+      const st2 = client.host.state;
+      let p = null;
+      for (let i=0; i<4; i++){
+        const pp = st2.players?.[i];
+        if (pp && pp.id === fromId){ p = pp; break; }
+      }
+      if (p){
+        try{
+          await roomRef.child(`users/${fromId}/seat`).set(p.seat);
+        }catch(e){}
+      }
+    }
+
+    if (action?.type === "leave"){
+      client.host.removePlayer(fromId);
+      try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
+    }
+
+    // (B) apply intent
+    const r = client.host.applyIntent(fromId, action);
+    if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
+
+    // (C) write state nếu cần
+    const shouldWrite =
+      (action?.type === "join") ||
+      (action?.type === "leave") ||
+      (!!r.ok);
+
+    if (shouldWrite){
+      await t.writeState(client.host.state);
+    }
+
+    await t.ackIntent(intentRef);
+  });
+
+  // nếu listenIntentsAsHost có trả về unsub
+  if (typeof maybeUnsub === "function"){
+    _stopHostIntents = maybeUnsub;
+  } else {
+    // fallback: nếu transport của bạn có method stop riêng thì gán ở đây
+    _stopHostIntents = null;
+  }
+
+  console.log("[host] authority started");
+}
+
+function stopHostAuthority(){
+  try{ _stopHostIntents?.(); }catch(e){}
+  _stopHostIntents = null;
+  console.log("[host] authority stopped");
+}
+  
 // ===============================
 //  Bind create-room button
 // ===============================
