@@ -3093,79 +3093,95 @@ class HostController {
 
 
     switch (action.type){
-
       case "move": {
         const { targetType, id, x, y } = action;
       
-        const dk = st?.stacks?.stack_deck || null;
+        // ===== helpers =====
+        const ensureDeckStack = () => {
+          st.stacks = st.stacks || {};
+          let dk = st.stacks.stack_deck;
       
-        // helper: đưa 1 card vào deck stack (top ở [0])
+          if (!dk) {
+            // tạo deck theo zone rect (center của rects.deck)
+            const r = (typeof rects !== "undefined" && rects && rects.deck) ? rects.deck : null;
+            const cx = r ? (r.x + r.w * 0.5) : x;
+            const cy = r ? (r.y + r.h * 0.5) : y;
+      
+            dk = {
+              id: "stack_deck",
+              x: cx,
+              y: cy,
+              z: 0,
+              zone: ZONES.deck,
+              owner: null,
+              ownerId: null,
+              cardIds: []
+            };
+            st.stacks.stack_deck = dk;
+          }
+      
+          dk.cardIds = dk.cardIds || [];
+          dk.zone = ZONES.deck;
+          return dk;
+        };
+      
         const putCardIntoDeck = (cardId) => {
-          if (!dk) return false;
-      
+          const dk = ensureDeckStack();
           const c = this._ensureCard(st, cardId);
           if (!c) return false;
       
-          // tách khỏi stack cũ (nếu có)
+          // tách khỏi stack hiện tại
           this._detachFromStack(st, cardId);
       
-          dk.cardIds = dk.cardIds || [];
+          // remove duplicate + đưa lên top (top ở [0])
           dk.cardIds = dk.cardIds.filter(cid => cid !== cardId);
           dk.cardIds.unshift(cardId);
       
+          // đồng bộ card
           c.stackId = "stack_deck";
           c.zone = ZONES.deck;
           c.x = dk.x;
           c.y = dk.y;
-      
-          // deck: reset chủ + úp
+          c.faceUp = false;
           c.owner = null;
           c.ownerId = null;
-          c.faceUp = false;
       
           return true;
         };
       
+        // ===== main =====
         if (targetType === "card") {
           const c = this._ensureCard(st, id);
           if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
           if (c.stackId === "stack_deck") return { ok:false, reason:"Use draw to take from deck" };
       
-          // tách khỏi stack hiện tại
+          // detach trước
           this._detachFromStack(st, id);
       
           const z = normalizeCardZoneFromPos(x, y);
       
-          // z-index luôn tăng khi move
+          // z-index
           st._z = (st._z || 0) + 1;
           c.z = st._z;
       
           if (z.zone === ZONES.deck) {
-            if (!dk) return { ok:false, reason:"Deck missing" };
+            // ✅ vào deck: reset chủ + nhập deck thật
             putCardIntoDeck(id);
           } else {
-            // move tự do theo vị trí thả
+            // move bình thường
             c.x = x; c.y = y;
             c.zone = z.zone;
+            c.stackId = null;
       
             if (z.zone === ZONES.hand) {
               const handOwner = z.owner ?? null;
               if (handOwner) {
                 c.owner = handOwner;
                 c.ownerId = handOwner;
-      
-                // vào tay người khác thì úp
                 if (handOwner !== fromId) c.faceUp = false;
               }
-              // nếu handOwner null (hiếm) thì để nguyên như table
-            } else {
-              // table/discard: KHÔNG reset ownerId để giữ viền/chủ như yêu cầu
-              // (nếu bạn muốn ra table thì owner=null nhưng vẫn giữ ownerId để viền,
-              //  bạn có thể set c.owner=null ở đây, nhưng mình để nguyên cho đúng "giữ chủ")
             }
-      
-            // card rời
-            c.stackId = null;
+            // table/discard: giữ nguyên owner/ownerId để giữ viền/chủ như bạn muốn
           }
         }
       
@@ -3177,22 +3193,16 @@ class HostController {
       
           const z = normalizeCardZoneFromPos(x, y);
       
-          // nếu thả stack vào deck: nuốt toàn bộ card vào deck và xoá stack
+          // ✅ thả stack vào deck: nuốt toàn bộ card vào deck + xoá stack
           if (z.zone === ZONES.deck) {
-            if (!dk) return { ok:false, reason:"Deck missing" };
-      
-            for (const cid of (ss.cardIds || [])) {
-              putCardIntoDeck(cid);
-            }
-      
-            // xoá stack cũ
+            for (const cid of (ss.cardIds || [])) putCardIntoDeck(cid);
             delete st.stacks[ss.id];
       
             this.bumpVersion();
             return { ok:true };
           }
       
-          // stack move bình thường (không vào deck)
+          // move stack bình thường
           ss.x = x; ss.y = y;
           st._z = (st._z || 0) + 1;
           ss.z = st._z;
@@ -3208,12 +3218,11 @@ class HostController {
             }
           } else {
             // table hoặc discard
-            ss.zone = z.zone; // ✅ giữ đúng discard nếu có
+            ss.zone = z.zone;
             ss.owner = null;
-            // KHÔNG reset ownerId ở đây (stack thường không cần viền theo ownerId; nếu có, bạn tự quyết)
           }
       
-          // sync cards theo stack (đồng bộ stackId + vị trí + zone + owner)
+          // sync cards theo stack
           for (const cid of (ss.cardIds || [])) {
             const c = this._ensureCard(st, cid);
             if (!c) continue;
@@ -3227,16 +3236,15 @@ class HostController {
               c.owner = ss.owner;
               c.ownerId = ss.owner;
               c.faceUp = false;
-            } else {
-              // stack nằm ở table/discard: giữ viền/chủ như yêu cầu
-              // (không reset owner/ownerId)
             }
+            // table/discard: giữ nguyên owner/ownerId để giữ viền như bạn muốn
           }
         }
       
         this.bumpVersion();
         return { ok:true };
       }
+
 
 
       case "flip": {
