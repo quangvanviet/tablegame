@@ -2926,32 +2926,64 @@ class HostController {
   }
 
   addOrUpdatePlayer({id, name}){
+    if (!id) return { ok:false, reason:"Missing id" };
+  
+    // players là slot cố định 4 ghế: [0..3]
     if (!Array.isArray(this.state.players)) this.state.players = [];
-
-    let p = this.state.players.find(x => x && x.id === id);
-    if (!p){
-      if (this.state.players.length >= 4) return { ok:false, reason:"Room full" };
-
-      const used = new Set(this.state.players.map(x=>x?.color).filter(Boolean));
-      const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[this.state.players.length % COLOR_ORDER.length];
-      const seat = this.state.players.length; // 0..3
-      p = { id, name: name || "Player", color, seat, connectedAt: now() };
-      this.state.players.push(p);
-
-      ensureUIState(this.state);
-      if (!this.state.ui.statsByPlayer[p.id]) this.state.ui.statsByPlayer[p.id] = ["","","",""];
-    } else {
-      p.name = name || p.name;
+    const ps = this.state.players;
+  
+    // 1) nếu đã tồn tại -> update name, giữ nguyên seat
+    for (let i=0; i<4; i++){
+      const p = ps[i];
+      if (p && p.id === id){
+        p.name = name || p.name || "Player";
+        p.seat = i;
+        p.connectedAt = p.connectedAt || now();
+  
+        ensureUIState(this.state);
+        if (!this.state.ui.statsByPlayer[p.id]) this.state.ui.statsByPlayer[p.id] = ["","","",""];
+  
+        this.bumpVersion();
+        return { ok:true, player:p };
+      }
     }
-
+  
+    // 2) tìm ghế trống
+    let seat = -1;
+    for (let i=0; i<4; i++){
+      if (!ps[i]) { seat = i; break; }
+    }
+    if (seat < 0) return { ok:false, reason:"Room full" };
+  
+    // chọn màu chưa dùng
+    const used = new Set(ps.map(x=>x?.color).filter(Boolean));
+    const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[seat % COLOR_ORDER.length];
+  
+    const p = { id, name: name || "Player", color, seat, connectedAt: now() };
+    ps[seat] = p;
+  
+    ensureUIState(this.state);
+    if (!this.state.ui.statsByPlayer[p.id]) this.state.ui.statsByPlayer[p.id] = ["","","",""];
+  
     this.bumpVersion();
     return { ok:true, player:p };
   }
 
   removePlayer(id){
-    this.state.players = (this.state.players || []).filter(p => p && p.id !== id);
+    if (!Array.isArray(this.state.players)) this.state.players = [];
+    const ps = this.state.players;
+  
+    for (let i=0; i<4; i++){
+      const p = ps[i];
+      if (p && p.id === id){
+        ps[i] = null; // ✅ clear slot, không dồn mảng
+        break;
+      }
+    }
+  
     this.bumpVersion();
   }
+
 
   // ==============================
   // Helpers (tách ra để dễ bảo trì)
@@ -3992,20 +4024,65 @@ async function createRoomAsHost_Firebase(){
 
   await t.attachPresence();
   installHostPresenceReconcile(client.roomId);
-  
 
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
     const fromId = msg.fromId;
-
-    client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
-
+  
+    // 1) join: add player + seat
+    if (action?.type === "join"){
+      client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
+  
+      // mirror seat -> users/<uid>/seat
+      const st = client.host.state;
+      let p = null;
+      for (let i=0; i<4; i++){
+        const pp = st.players?.[i];
+        if (pp && pp.id === fromId){ p = pp; break; }
+      }
+      if (p){
+        try{
+          await FB.db.ref(`AllRoom/${client.roomId}/users/${fromId}/seat`).set(p.seat);
+        }catch(e){}
+      }
+    } else {
+      // chỉ update name nếu đã có
+      const st = client.host.state;
+      for (let i=0; i<4; i++){
+        const p = st.players?.[i];
+        if (p && p.id === fromId){
+          p.name = msg.fromName || p.name;
+          break;
+        }
+      }
+    }
+  
+    // 2) leave: remove player + remove users entry
+    if (action?.type === "leave"){
+      client.host.removePlayer(fromId);
+      try{
+        await FB.db.ref(`AllRoom/${client.roomId}/users/${fromId}`).remove();
+      }catch(e){}
+    }
+  
+    // 3) apply intent
     const r = client.host.applyIntent(fromId, action);
     if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
-
-    await t.writeState(client.host.state);
+  
+    // 4) chỉ write khi có thay đổi đáng kể
+    const shouldWrite =
+      (action?.type === "join") ||
+      (action?.type === "leave") ||
+      (!!r.ok);
+  
+    if (shouldWrite){
+      await t.writeState(client.host.state);
+    }
+  
     await t.ackIntent(intentRef);
   });
+
+
 
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
@@ -4269,9 +4346,23 @@ async function joinRoomAsClient_Firebase(opts = {}){
   }
 
   // join user
-  await roomRef.child(`users/${FB.uid}`).set({
-    username: FB.username, seat: -1, atk: 0, def: 0, hp: 20
-  });
+  const myPlayer = client.host.state.players?.[0]; // hoặc tìm theo id
+    let mySeat = 0;
+    for (let i=0; i<4; i++){
+      const pp = client.host.state.players?.[i];
+      if (pp && pp.id === FB.uid){ mySeat = i; break; }
+    }
+    
+    let mySeat = 0;
+    for (let i=0; i<4; i++){
+      const p = client.host.state.players?.[i];
+      if (p && p.id === FB.uid){ mySeat = i; break; }
+    }
+    await roomRef.child(`users/${FB.uid}`).set({
+      username: FB.username, seat: mySeat, atk: 0, def: 0, hp: 0, coin: 0,
+    });
+
+
 
   client.isHost = false;
   client.host = null;
@@ -4323,14 +4414,14 @@ async function leaveRoom(){
   const uid = FB?.uid;
 
   try{
+    // ✅ báo host trước (nhẹ + nhanh)
+    try{ await client.transport?.sendIntent?.({ type:"leave" }); }catch(e){}
+
     if (roomId && uid){
       const roomRef = FB.db.ref(`AllRoom/${roomId}`);
-      // ✅ xoá presence + user entry
+      // ✅ sau đó mới xoá presence + user entry
       await roomRef.child(`presence/${uid}`).remove().catch(()=>{});
       await roomRef.child(`users/${uid}`).remove().catch(()=>{});
-
-      // (tuỳ chọn) gửi intent leave để host cập nhật state.players ngay
-      try{ await client.transport?.sendIntent?.({ type:"leave" }); }catch(e){}
     }
   }catch(e){}
 
@@ -4338,6 +4429,7 @@ async function leaveRoom(){
   resetClientSession();
   goLobby?.();
 }
+
 
 
 // ===============================
@@ -4404,23 +4496,38 @@ function installHostPresenceReconcile(roomId){
       const pres = snap.val() || {};
       const online = new Set(Object.keys(pres)); // uid đang online
 
-      // 1) Dọn users/<uid> không còn online (phòng hợp user out mà users còn)
+      let changed = false;
+
+      // 1) Dọn users/<uid> không còn online
       const usersSnap = await usersRef.get();
       const users = usersSnap.val() || {};
       const updates = {};
       for (const uid in users){
-        if (!online.has(uid)) updates[uid] = null;
+        if (!online.has(uid)){
+          updates[uid] = null;
+        }
       }
       if (Object.keys(updates).length){
         await usersRef.update(updates);
+        changed = true;
       }
 
-      // 2) Dọn state.players (đây là thứ khiến bạn "thấy lại người out")
+      // 2) Dọn state.players theo slot (không filter)
       const st = client.host.state;
-      st.players = (st.players || []).filter(p => p && online.has(p.id));
+      st.players = st.players || [];
+      for (let i=0; i<4; i++){
+        const p = st.players[i];
+        if (p && !online.has(p.id)){
+          st.players[i] = null;
+          changed = true;
+        }
+      }
 
-      if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
-      await client.transport.writeState(st);
+      // ✅ chỉ writeState nếu có thay đổi
+      if (changed){
+        if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
+        await client.transport.writeState(st);
+      }
     }catch(e){
       // ignore
     }finally{
@@ -4428,7 +4535,6 @@ function installHostPresenceReconcile(roomId){
     }
   });
 }
-
 
 /* =========================================================
    13) Deck/SetCard Modal (RTDB) - Firebase-only
