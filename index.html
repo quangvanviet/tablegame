@@ -5422,8 +5422,8 @@ function draw(){
   }
 
   const seatName = (seat)=>{
-    const p = (s.players||[]).find(pp => (Number(pp.seat)|0) === seat);
-    return p ? p.name : "(empty)";
+    const p = (s.players||[]).find(pp => pp && (Number(pp.seat)|0) === seat);
+    return p?.name || "(empty)";
   };
 
   drawZone(rects.table, "TABLE", "", false);
@@ -5444,7 +5444,7 @@ function draw(){
     return (ownerId && ownerId === selfId) ? !!card.faceUp : false;
   };
 
-  const playerBySeat = (seat)=> (s.players||[]).find(pp => (Number(pp.seat)|0) === seat) || null;
+  const playerBySeat = (seat)=> (s.players||[]).find(pp => pp && (Number(pp.seat)|0) === seat) || null;
   const tintBySeat = (seat)=>{
     const p = playerBySeat(seat);
     return p ? (COLORS?.[p.color] ?? null) : null;
