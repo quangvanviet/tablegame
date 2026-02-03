@@ -1946,12 +1946,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     
             <!-- Seats -->
             <div id="waitingRoom" class="waiting-room2">
-              <div class="wr2-top">
-                <div class="wr2-host">
-                  <div class="cap">HOST</div>
-                  <button class="seat2 slot" data-slot="host" type="button"></button>
-                </div>
-    
+              <div class="wr2-top">    
                 <div class="wr2-players">
                   <div class="cap">GHẾ CHƠI</div>
                   <div class="seat2-grid">
@@ -1960,7 +1955,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
                     <button class="seat2 slot" data-slot="play" data-seat="2" type="button"></button>
                     <button class="seat2 slot" data-slot="play" data-seat="3" type="button"></button>
                   </div>
-                  <div class="micro">Click vào ghế để ngồi (host có thể sắp xếp).</div>
+                  <div class="micro">Click vào ghế để ngồi chơi (Ghế 1 là chủ phòng)</div>
                 </div>
               </div>
     
@@ -4198,27 +4193,40 @@ function isMeHost(meta){
 }
 
 // ghế click: tạm thời cho người dùng tự xin ngồi
-// (host kéo thả nâng cấp sau)
 async function requestSit(roomId, seat){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
   const uid = FB.uid;
 
-  // chỉ cho xin ngồi nếu đang spectator
   const uSnap = await roomRef.child(`users/${uid}`).get();
   const u = uSnap.val() || {};
-  if (Number.isInteger(u.playSeat)) return;
 
-  // claim seat basic (không swap)
-  const claimRef = roomRef.child(`seatClaims/play/${seat}`);
-  const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
-  if (!tx.committed || tx.snapshot.val() !== uid){
-    toast("Ghế đã có người, chọn ghế khác.");
+  // nếu đang ngồi ghế đó -> click lại để xuống
+  if (Number.isInteger(u.playSeat)){
+    if ((u.playSeat|0) === (seat|0)) return requestUnseat(roomId);
+    toast("Bạn đang ngồi ghế khác. Hãy xuống ghế chờ trước.");
     return;
   }
 
-  await roomRef.child(`users/${uid}`).update({ role:"player", playSeat: seat });
-  toast("Đã ngồi ghế " + (seat+1));
+  const claimRef = roomRef.child(`seatClaims/play/${seat}`);
+  const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
+  if (!tx.committed || tx.snapshot.val() !== uid){
+    toast("Ghế đã có người ngồi.");
+    return;
+  }
+
+  await roomRef.child(`users/${uid}`).update({
+    role: "player",
+    playSeat: seat|0,
+  });
+
+  if ((seat|0) === 0){
+    await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
+    await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
+  }
+
+  toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
+
 async function requestUnseat(roomId){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
   const uid = FB.uid;
@@ -4227,54 +4235,39 @@ async function requestUnseat(roomId){
   const u = uSnap.val() || {};
   const mySeat = Number.isInteger(u.playSeat) ? (u.playSeat|0) : null;
 
-  // nếu đang là host seat, cho xuống spectator nhưng KHÔNG tự đổi hostId ở đây
-  // (hostId sẽ do bầu host / hoặc người khác take host seat)
-  if (u.isHostSeat){
-    // trả host claim
-    await roomRef.child(`seatClaims/host`).transaction(cur => (cur === uid ? null : undefined)).catch(()=>{});
+  if (mySeat === null){
+    toast("Bạn đang ở ghế chờ rồi.");
+    return;
   }
 
-  if (mySeat !== null){
-    // trả play claim
-    await roomRef.child(`seatClaims/play/${mySeat}`).transaction(cur => (cur === uid ? null : undefined)).catch(()=>{});
-  }
+  await roomRef.child(`seatClaims/play/${mySeat}`).transaction(cur=>{
+    if (cur === uid) return null;
+    return; // abort
+  }).catch(()=>{});
 
   await roomRef.child(`users/${uid}`).update({
     role: "spectator",
     playSeat: null,
-    isHostSeat: false,
   });
+
+  if (mySeat === 0){
+    await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
+    await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
+  }
 
   toast("Đã xuống ghế chờ");
 }
 
-async function requestTakeHostSeat(roomId){
+async function fetchSeatClaims(roomId){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
-  const uid = FB.uid;
-
-  // claim host seat
-  const hostClaimRef = roomRef.child("seatClaims/host");
-  const tx = await hostClaimRef.transaction(cur => (cur === null ? uid : undefined));
-
-  if (!tx.committed || tx.snapshot.val() !== uid){
-    toast("Ghế host đã có người.");
-    return;
-  }
-
-  // cập nhật user role host-seat
-  await roomRef.child(`users/${uid}`).update({
-    role: "host",
-    isHostSeat: true,
-  });
-
-  // ✅ cập nhật hostId để authority theo đúng người ngồi ghế host
-  await roomRef.child("meta/hostId").set(uid).catch(()=>{});
-  await roomRef.child("meta/hostUid").set(uid).catch(()=>{});
-
-  toast("Bạn đã ngồi ghế Host");
+  const snap = await roomRef.child("seatClaims/play").get();
+  return snap.val() || {};
 }
 
-function renderLobby(roomId, meta, users){
+function renderLobby(roomId, meta, users, seatClaimsPlay){
+  users = users || {};
+  seatClaimsPlay = seatClaimsPlay || {};
+
   // host controls show/hide
   const hostBox = document.getElementById("hostSetupControls");
   if (hostBox) hostBox.style.display = isMeHost(meta) ? "" : "none";
@@ -4282,77 +4275,57 @@ function renderLobby(roomId, meta, users){
   const wr = document.getElementById("waitingRoom");
   if (!wr) return;
 
-  const hostBtn = wr.querySelector(`.slot[data-slot="host"]`);
-  const playBtns = [...wr.querySelectorAll(`.slot[data-slot="play"]`)];
-  const specList = document.getElementById("specList");
+  const playBtns  = [...wr.querySelectorAll(`.slot[data-slot="play"]`)];
+  const specList  = document.getElementById("specList");
   const specCount = document.getElementById("specCount");
 
-  // helper find by seat
-  const entries = Object.entries(users || {});
-  const findPlay = (seat)=>{
-    const f = entries.find(([uid,u]) => Number.isInteger(u?.playSeat) && ((u.playSeat|0) === seat));
-    return f ? { uid:f[0], u:f[1]||{} } : null;
-  };
-
-  const hostClaim = meta?.hostId || meta?.hostUid || "";
-  const hostSeatUid = (users && users[hostClaim]) ? hostClaim : null;
-  
-  // nếu dùng seatClaims/host thì đọc từ users không đủ,
-  // nhưng để đơn giản UI: coi host seat theo meta.hostId
-  const hid = meta?.hostId || meta?.hostUid || "";
-  const hu = hid ? (users?.[hid] || null) : null;
-  
-  if (hostBtn){
-    hostBtn.onclick = null;
-  
-    if (hid && hu){
-      hostBtn.classList.remove("empty");
-      hostBtn.innerHTML = `<div class="name">${escapeHtml(hu.username||"Host")}</div><div class="meta">Host</div>`;
-      hostBtn.disabled = true;
-    } else {
-      // host seat trống -> ai cũng click được
-      hostBtn.classList.add("empty");
-      hostBtn.innerHTML = `<div class="name">Ghế Host trống</div><div class="meta">Click để ngồi</div>`;
-      hostBtn.disabled = false;
-      hostBtn.onclick = ()=> requestTakeHostSeat(roomId);
-    }
-  }
-
-  // PLAY seats
-  const me = users?.[FB.uid] || {};
-  const mySeat = Number.isInteger(me?.playSeat) ? (me.playSeat|0) : null;
-  
+  // PLAY seats: dựa trên seatClaimsPlay
   for (const btn of playBtns){
     const seat = Number(btn.dataset.seat)|0;
-    const occ = findPlay(seat);
-  
+
+    const occUid  = seatClaimsPlay?.[seat] || null;
+    const occUser = occUid ? (users?.[occUid] || null) : null;
+    const isHostSeat = (seat === 0);
+
     btn.onclick = null;
-  
-    if (occ){
+
+    if (occUid){
       btn.classList.remove("empty");
-  
-      const isMe = (occ.uid === (FB.uid||""));
+
+      const isMe = (occUid === (FB.uid||""));
+
+      // nếu claim có nhưng user chưa sync thì vẫn hiện “đang đồng bộ”
+      const name = occUser?.username || "Đang đồng bộ...";
+      const label = isHostSeat ? "HOST" : `Ghế ${seat+1}`;
+
       if (isMe){
         btn.innerHTML = `
-          <div class="name">${escapeHtml(occ.u.username||"Bạn")}</div>
-          <div class="meta">Ghế ${seat+1} • Click để xuống chờ</div>
+          <div class="name">${escapeHtml(name)}</div>
+          <div class="meta">${label} • Click để xuống chờ</div>
         `;
         btn.disabled = false;
         btn.onclick = ()=> requestUnseat(roomId);
       } else {
-        btn.innerHTML = `<div class="name">${escapeHtml(occ.u.username||"Player")}</div><div class="meta">Ghế ${seat+1}</div>`;
+        btn.innerHTML = `
+          <div class="name">${escapeHtml(name)}</div>
+          <div class="meta">${label}</div>
+        `;
         btn.disabled = true;
       }
     } else {
       btn.classList.add("empty");
-      btn.innerHTML = `<div class="name">Ghế trống</div><div class="meta">Click để ngồi</div>`;
+      const label = isHostSeat ? "HOST" : `Ghế ${seat+1}`;
+      btn.innerHTML = `
+        <div class="name">${label} trống</div>
+        <div class="meta">Click để ngồi</div>
+      `;
       btn.disabled = false;
       btn.onclick = ()=> requestSit(roomId, seat);
     }
   }
 
-
-  // SPECTATORS list
+  // SPECTATORS list (những ai playSeat null)
+  const entries = Object.entries(users || {});
   const spectators = entries
     .filter(([uid,u])=> !Number.isInteger(u?.playSeat))
     .sort((a,b)=> (a[1]?.joinedAt||0) - (b[1]?.joinedAt||0));
@@ -4361,14 +4334,15 @@ function renderLobby(roomId, meta, users){
 
   if (specList){
     specList.innerHTML = "";
+    if (!spectators.length){
+      specList.innerHTML = `<div style="opacity:.55; font-size:12px;">Không có</div>`;
+      return;
+    }
     for (const [uid,u] of spectators){
       const chip = document.createElement("div");
       chip.className = "spec-chip";
       chip.innerHTML = `<div class="n">${escapeHtml(u?.username||"—")}</div><div class="id">${escapeHtml(uid.slice(0,6))}</div>`;
       specList.appendChild(chip);
-    }
-    if (!spectators.length){
-      specList.innerHTML = `<div style="opacity:.55; font-size:12px;">Không có</div>`;
     }
   }
 }
@@ -4427,19 +4401,22 @@ async function createRoomAsHost_Firebase(){
   // ✅ mirror meta để list phòng nhẹ (KHÔNG kéo state)
   await FB.db.ref(`AllRoomMeta/${client.roomId}`).set(meta);
 
-  // user entry
+  // user entry (host ngồi ghế 0)
   await roomRef.child(`users/${FB.uid}`).set({
     username: FB.username,
     joinedAt: Date.now(),
-    role: "host",
-    isHostSeat: true,
-    playSeat: 0,          // host mặc định ngồi ghế chơi số 1
-    atk: 0, def: 0, hp: 0, coin: 0,
+    role: "player",
+    playSeat: 0,
+    atk: 0, def: 0, hp: 20, coin: 0,
   });
   
-  // claim ghế host + ghế chơi 0
-  await roomRef.child(`seatClaims/host`).set(FB.uid).catch(()=>{});
+  // claim ghế 0
   await roomRef.child(`seatClaims/play/0`).set(FB.uid).catch(()=>{});
+  
+  // hostId = người ngồi ghế 0
+  await roomRef.child(`meta/hostId`).set(FB.uid).catch(()=>{});
+  await roomRef.child(`meta/hostUid`).set(FB.uid).catch(()=>{});
+
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
   client.lastVersion = client.authoritative.version;
@@ -4448,11 +4425,33 @@ async function createRoomAsHost_Firebase(){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
 
+  // meta listener
+  roomRef.child("meta").on("value", (snap)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._meta = snap.val() || {};
+    if (typeof renderLobby === "function"){
+      renderLobby(client.roomId, client.authoritative._meta, client.authoritative._users || {}, client.authoritative._seatClaimsPlay || {});
+    }
+  });
+  
+  // users listener
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users || {};
-    renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users);
+    if (typeof renderLobby === "function"){
+      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users, client.authoritative._seatClaimsPlay || {});
+    }
   });
+  
+  // seatClaims/play listener
+  roomRef.child("seatClaims/play").on("value", (snap)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._seatClaimsPlay = snap.val() || {};
+    if (typeof renderLobby === "function"){
+      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users || {}, client.authoritative._seatClaimsPlay);
+    }
+  });
+
 
   await t.attachPresence();
   installHostPresenceReconcile(client.roomId);
@@ -4824,21 +4823,37 @@ async function joinRoomAsClient_Firebase(opts = {}){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
 
-  t.listenUsers((users)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._users = users || {};
-    renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users);
-  });
-
-  await t.attachPresence();
-
-  // listen meta để biết hostId + render phòng chờ
+  // meta listener
   roomRef.child("meta").on("value", (snap)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._meta = snap.val() || {};
-    renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users);
+    if (typeof renderLobby === "function"){
+      renderLobby(client.roomId, client.authoritative._meta, client.authoritative._users || {}, client.authoritative._seatClaimsPlay || {});
+    }
   });
   
+  // users listener
+  t.listenUsers((users)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._users = users || {};
+    if (typeof renderLobby === "function"){
+      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users, client.authoritative._seatClaimsPlay || {});
+    }
+  });
+  
+  // seatClaims/play listener
+  roomRef.child("seatClaims/play").on("value", (snap)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._seatClaimsPlay = snap.val() || {};
+    if (typeof renderLobby === "function"){
+      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users || {}, client.authoritative._seatClaimsPlay);
+    }
+  });
+
+
+  await t.attachPresence();
+
+
   // ✅ avoid duplicate presence listener
   try{
     if (_presenceCb) roomRef.child("presence").off("value", _presenceCb);
