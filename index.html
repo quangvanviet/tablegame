@@ -1202,6 +1202,40 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       opacity:.75;
       cursor: default;
     }
+    
+    .waiting-room{
+      margin-top:10px; padding-top:10px;
+      border-top:1px solid rgba(255,255,255,.08);
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .wr-title{ font-size:12px; color:var(--muted); font-weight:800; letter-spacing:.6px; }
+    .wr-grid{ display:grid; grid-template-columns: 1fr 1.2fr 1fr; gap:10px; }
+    .wr-col{
+      background: rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:12px;
+      padding:10px;
+    }
+    .wr-col-title{ font-size:12px; opacity:.85; font-weight:800; margin-bottom:8px; }
+    .seat-list{ display:flex; flex-direction:column; gap:8px; }
+    .seat.slot{
+      min-height:44px;
+      border-radius:10px;
+      border:1px dashed rgba(255,255,255,.18);
+      background: rgba(255,255,255,.06);
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px;
+    }
+    .seat.drag-over{ outline:2px solid rgba(255,255,255,.25); }
+    .player-pill{ display:flex; align-items:center; justify-content:space-between; width:100%; gap:10px; }
+    .player-pill .name{ font-weight:800; }
+    .player-pill .sub{ font-size:12px; opacity:.7; }
+    .badge-role{
+      font-size:11px; padding:2px 8px; border-radius:999px;
+      background: rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .wr-hint{ font-size:12px; opacity:.65; margin-top:6px; }
 
   </style>
 </head>
@@ -1725,26 +1759,35 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           </div>
 
           <!-- ===== SETUP / WAITING ROOM (NEW) ===== -->
-          <div id="setupBox" class="col" style="gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,.08)">
-            <div style="font-size:12px; color:var(--muted); font-weight:700;">PHÒNG CHỜ / SETUP</div>
+          <div id="waitingRoom" class="waiting-room">
+            <div class="wr-title">PHÒNG CHỜ</div>
           
-            <div id="setupPhaseLine" class="hint" style="opacity:.95">
-              Đang chờ host...
-            </div>
-          
-            <!-- Host-only controls -->
-            <div id="hostSetupControls" class="col" style="gap:8px; display:none">
-              <label>Host: chọn setCard để chơi</label>
-              <select id="hostSetSelect" style="width:100%"></select>
-          
-              <div class="row">
-                <button id="hostRefreshSetsBtn" class="secondary" style="flex:1">Refresh set</button>
-                <button id="hostLoadDeckBtn" class="secondary" style="flex:1">Load deck</button>
+            <div class="wr-grid">
+              <div class="wr-col">
+                <div class="wr-col-title">HOST</div>
+                <div class="seat slot" data-slot="host"></div>
               </div>
           
-              <button id="startGameBtn" style="width:100%">Bắt đầu chơi</button>
+              <div class="wr-col">
+                <div class="wr-col-title">GHẾ CHƠI (4)</div>
+                <div class="seat-list">
+                  <div class="seat slot" data-slot="play" data-seat="0"></div>
+                  <div class="seat slot" data-slot="play" data-seat="1"></div>
+                  <div class="seat slot" data-slot="play" data-seat="2"></div>
+                  <div class="seat slot" data-slot="play" data-seat="3"></div>
+                </div>
+              </div>
+          
+              <div class="wr-col">
+                <div class="wr-col-title">GHẾ CHỜ (XEM)</div>
+                <div class="seat-list">
+                  <div class="seat slot spectator-slot" data-slot="spec"></div>
+                </div>
+                <div class="wr-hint">Kéo thả để đổi ghế (chỉ host).</div>
+              </div>
             </div>
           </div>
+
           <!-- ===== /SETUP ===== -->
           
           <div class="row">
@@ -2115,7 +2158,6 @@ const UI = {
   frontBaseInput: document.getElementById("frontBaseInput"),
   backUrlInput: document.getElementById("backUrlInput"),
   applyDeckBtn: document.getElementById("applyDeckBtn"),
-  setupBox: document.getElementById("setupBox"),
   setupPhaseLine: document.getElementById("setupPhaseLine"),
   hostSetupControls: document.getElementById("hostSetupControls"),
   hostSetSelect: document.getElementById("hostSetSelect"),
@@ -3834,11 +3876,187 @@ function setStatusUI(){
     }
   }
 
+function isMeHost(meta){
+  return (meta?.hostId || "") === (FB.uid || "");
+}
+
+function buildUserItem(uid, u, meta){
+  const roleLabel = (uid === meta.hostId) ? "HOST" : (u.role === "player" ? "PLAYER" : "VIEW");
+  const el = document.createElement("div");
+  el.className = "player-pill";
+  el.draggable = isMeHost(meta); // chỉ host kéo
+  el.dataset.uid = uid;
+
+  el.innerHTML = `
+    <div class="col" style="gap:2px">
+      <div class="name">${escapeHtml(u.username || "—")}</div>
+      <div class="sub">${escapeHtml(uid.slice(0,6))}</div>
+    </div>
+    <div class="badge-role">${roleLabel}</div>
+  `;
+
+  el.addEventListener("dragstart", (e)=>{
+    e.dataTransfer.setData("text/plain", uid);
+  });
+
+  return el;
+}
+
+function renderWaitingRoom(roomId, meta, users){
+  const root = document.getElementById("waitingRoom");
+  if (!root) return;
+
+  const hostSlot = root.querySelector(`.slot[data-slot="host"]`);
+  const playSlots = [...root.querySelectorAll(`.slot[data-slot="play"]`)];
+  const specSlot = root.querySelector(`.slot[data-slot="spec"]`);
+
+  hostSlot.innerHTML = "";
+  playSlots.forEach(s=> s.innerHTML = "");
+  specSlot.innerHTML = "";
+
+  const entries = Object.entries(users || {}).map(([uid,u])=>[uid, u||{}]);
+  const hid = meta?.hostId || "";
+
+  // host slot
+  if (hid && users?.[hid]){
+    hostSlot.appendChild(buildUserItem(hid, users[hid], meta));
+  } else {
+    hostSlot.innerHTML = `<div style="opacity:.6">— (host offline)</div>`;
+  }
+
+  // play seats
+  for (const slot of playSlots){
+    const seat = Number(slot.dataset.seat) | 0;
+    const found = entries.find(([uid,u]) => Number.isInteger(u.playSeat) && (u.playSeat|0) === seat);
+    if (found){
+      const [uid,u] = found;
+      slot.appendChild(buildUserItem(uid, u, meta));
+    } else {
+      slot.innerHTML = `<div style="opacity:.45">Ghế trống</div>`;
+    }
+  }
+
+  // spectators
+  const spectators = entries
+    .filter(([uid,u])=> !Number.isInteger(u.playSeat))
+    .sort((a,b)=> (a[1].joinedAt||0) - (b[1].joinedAt||0));
+
+  if (spectators.length){
+    for (const [uid,u] of spectators){
+      specSlot.appendChild(buildUserItem(uid, u, meta));
+    }
+  } else {
+    specSlot.innerHTML = `<div style="opacity:.45">Không có</div>`;
+  }
+
+  // drop targets (chỉ host)
+  const canDrag = isMeHost(meta);
+  const allSlots = [hostSlot, ...playSlots, specSlot];
+
+  for (const slot of allSlots){
+    slot.ondragover = canDrag ? (e)=>{ e.preventDefault(); slot.classList.add("drag-over"); } : null;
+    slot.ondragleave = canDrag ? ()=> slot.classList.remove("drag-over") : null;
+    slot.ondrop = canDrag ? async (e)=>{
+      e.preventDefault();
+      slot.classList.remove("drag-over");
+      const draggedUid = e.dataTransfer.getData("text/plain");
+      if (!draggedUid) return;
+
+      const targetType = slot.dataset.slot;
+      const targetSeat = Number(slot.dataset.seat);
+
+      await hostMoveUserToSlot(roomId, draggedUid, targetType, targetSeat);
+    } : null;
+  }
+}
+function roomRefOf(roomId){
+  return FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+}
+
+async function hostMoveUserToSlot(roomId, uidMove, targetType, targetSeat){
+  const roomRef = roomRefOf(roomId);
+
+  // check host
+  const meta = (await roomRef.child("meta").get()).val() || {};
+  if ((meta.hostId||"") !== (FB.uid||"")){
+    toast("Chỉ host mới được kéo thả ghế.");
+    return;
+  }
+
+  const users = (await roomRef.child("users").get()).val() || {};
+  const uMove = users[uidMove];
+  if (!uMove) return;
+
+  const oldSeat = Number.isInteger(uMove.playSeat) ? (uMove.playSeat|0) : null;
+
+  const releaseOld = async (seat)=>{
+    if (Number.isInteger(seat)){
+      await roomRef.child(`seatClaims/play/${seat|0}`).remove().catch(()=>{});
+    }
+  };
+
+  // drop spectator
+  if (targetType === "spec"){
+    await releaseOld(oldSeat);
+    await roomRef.child(`users/${uidMove}`).update({ role:"spectator", playSeat: null });
+    return;
+  }
+
+  // drop play
+  if (targetType === "play"){
+    const seat = targetSeat|0;
+    if (seat < 0 || seat > 3) return;
+
+    const occupant = Object.entries(users).find(([id,u]) => Number.isInteger(u?.playSeat) && (u.playSeat|0) === seat);
+    const occUid = occupant?.[0] || null;
+
+    // claim seat
+    const claimRef = roomRef.child(`seatClaims/play/${seat}`);
+    const tx = await claimRef.transaction(cur => (cur === null || cur === uidMove ? uidMove : undefined));
+
+    if (!tx.committed || tx.snapshot.val() !== uidMove){
+      toast("Ghế vừa bị giữ bởi người khác, thử lại.");
+      return;
+    }
+
+    // swap occupant
+    if (occUid && occUid !== uidMove){
+      if (Number.isInteger(oldSeat)){
+        const claimOldRef = roomRef.child(`seatClaims/play/${oldSeat}`);
+        const tx2 = await claimOldRef.transaction(cur => (cur === null || cur === occUid ? occUid : undefined));
+        if (tx2.committed && tx2.snapshot.val() === occUid){
+          await roomRef.child(`users/${occUid}`).update({ role:"player", playSeat: oldSeat });
+        } else {
+          await roomRef.child(`users/${occUid}`).update({ role:"spectator", playSeat: null });
+        }
+      } else {
+        await roomRef.child(`users/${occUid}`).update({ role:"spectator", playSeat: null });
+      }
+    }
+
+    await releaseOld(oldSeat);
+    await roomRef.child(`users/${uidMove}`).update({
+      role: (uidMove === meta.hostId) ? "host" : "player",
+      playSeat: seat
+    });
+    return;
+  }
+
+  // drop host (cho phép đổi host bằng kéo thả)
+  if (targetType === "host"){
+    await roomRef.child("meta/hostId").transaction(cur => (cur === FB.uid ? uidMove : undefined));
+    await roomRef.child(`users/${uidMove}`).update({ role:"host" });
+    await roomRef.child(`users/${FB.uid}`).update({ role:"player" }).catch(()=>{});
+  }
+}
+function amSpectator(){
+  const u = client.authoritative?._users?.[FB.uid];
+  return !u || !Number.isInteger(u.playSeat);
+}
+
+
   // ===== Setup box UI =====
   const phase = s.game?.phase || "setup";
-  if (UI.setupBox){
-    UI.setupBox.style.display = (phase === "setup") ? "" : "none";
-  }
   if (UI.setupPhaseLine){
     UI.setupPhaseLine.textContent = (phase === "setup")
       ? "Đang ở phòng chờ. Host chọn deck và bấm Bắt đầu."
@@ -4379,7 +4597,7 @@ async function joinRoomAsClient_Firebase(opts = {}){
       return;
     }
   }
-
+  
   // ✅ join user: vào phòng chờ (spectator)
   await roomRef.child(`users/${FB.uid}`).set({
     username: FB.username,
@@ -4402,6 +4620,15 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
   await t.attachPresence();
 
+  const roomRef3 = roomRefOf(client.roomId);
+  
+  roomRef3.child("meta").on("value", (snap)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._meta = snap.val() || {};
+    // cập nhật UI phòng chờ
+    renderWaitingRoom(client.roomId, client.authoritative._meta, client.authoritative._users || {});
+  });
+  
   // ✅ avoid duplicate presence listener
   try{
     if (_presenceCb) roomRef.child("presence").off("value", _presenceCb);
@@ -5255,6 +5482,7 @@ const DRAG_THRESHOLD_PX = 6;
 
 canvas.addEventListener("mousedown", (ev)=>{
   const st = getState();
+  if (amSpectator()) return; // không cho thao tác
   if (!st) return;
 
   const p = toWorld(mousePos(ev));
@@ -5287,7 +5515,7 @@ canvas.addEventListener("mousedown", (ev)=>{
 
 addEventListener("mousemove", (ev)=>{
   if (!client.dragging) return;
-
+  if (amSpectator()) return; // không cho thao tác
   const st = getState();
   if (!st) return;
 
@@ -5321,7 +5549,7 @@ addEventListener("mousemove", (ev)=>{
 
 addEventListener("mouseup", (ev)=>{
   if (!client.dragging) return;
-
+  if (amSpectator()) return; // không cho thao tác
   const st = getState();
   const drag = client.dragging;
   client.dragging = null;
@@ -5368,7 +5596,7 @@ addEventListener("mouseup", (ev)=>{
 ========================================================= */
 addEventListener("keydown", (ev)=>{
   if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
-
+  if (amSpectator()) return; // không cho thao tác
   const st = getState();
   if (!st) return;
 
@@ -5435,6 +5663,7 @@ addEventListener("keydown", (ev)=>{
 });
 
 if (INS.btnShuffle) INS.btnShuffle.onclick = ()=>{
+  if (amSpectator()) return; // không cho thao tác
   const st = getState();
   const sel = client.selected;
 
