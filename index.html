@@ -2661,11 +2661,7 @@ class FirebaseTransport extends NetTransport {
     const myUserRef = roomRef.child(`users/${uid}`);
     const connectedRef = FB.db.ref(".info/connected");
   
-    // lưu callback để có thể off khi close()
-    this._connectedCb = (snap)=>{};
-    if (this._connectedRef && this._connectedCb){
-      try{ this._connectedRef.off("value", this._connectedCb); }catch(e){}
-    }
+    // lưu ref/cb để close() off được
     this._connectedRef = connectedRef;
   
     return new Promise((resolve)=>{
@@ -2674,30 +2670,19 @@ class FirebaseTransport extends NetTransport {
       this._connectedCb = async (snap)=>{
         if (snap.val() !== true) return;
   
-        // ✅ đăng ký onDisconnect khi đã connected
         try{ await myPresRef.onDisconnect().remove(); }catch(e){}
         try{ await myUserRef.onDisconnect().remove(); }catch(e){}
   
-        // ✅ set presence hiện tại
         try{
-          await myPresRef.set({
-            uid,
-            name: FB.username || "",
-            at: Date.now()
-          });
+          await myPresRef.set({ uid, name: FB.username || "", at: Date.now() });
         }catch(e){}
   
-        if (!done){
-          done = true;
-          resolve();
-        }
+        if (!done){ done = true; resolve(); }
       };
   
       connectedRef.on("value", this._connectedCb);
     });
   }
-
-
 
   /* ---------- Streams ---------- */
   listenUsers(onUsers){
@@ -4007,6 +3992,7 @@ async function createRoomAsHost_Firebase(){
 
   await t.attachPresence();
   installHostPresenceReconcile(client.roomId);
+  
 
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
@@ -4042,51 +4028,7 @@ async function createRoomAsHost_Firebase(){
   goMatch();
 }
 
-function installHostPresenceReconcile(roomId){
-  const roomRef = FB.db.ref(`AllRoom/${roomId}`);
-  const presRef = roomRef.child("presence");
-  const usersRef = roomRef.child("users");
 
-  // tránh chạy dọn quá dày
-  let _lastRun = 0;
-
-  presRef.on("value", async (snap)=>{
-    if (!client.isHost || !client.host?.state) return;
-
-    const nowTs = Date.now();
-    if (nowTs - _lastRun < 800) return; // throttle nhẹ
-    _lastRun = nowTs;
-
-    const pres = snap.val() || {};
-    const online = new Set(Object.keys(pres)); // uid online
-
-    // 1) Dọn users/<uid> không còn online
-    let users = {};
-    try{
-      users = (await usersRef.get()).val() || {};
-    }catch(e){ users = {}; }
-
-    const updates = {};
-    for (const uid in users){
-      if (!online.has(uid)){
-        updates[uid] = null; // remove
-      }
-    }
-    if (Object.keys(updates).length){
-      try{ await usersRef.update(updates); }catch(e){}
-    }
-
-    // 2) Dọn state.players (đúng cái bạn đang vẽ seatName)
-    const st = client.host.state;
-    st.players = (st.players || []).filter(p => p && online.has(p.id));
-
-    // 3) bump + writeState để mọi client thấy ngay
-    if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
-    try{ await client.transport?.writeState?.(st); }catch(e){}
-  });
-}
-
-  
 // ===============================
 //  ROOM LIST UI + JOIN WITH PASS POPUP (FULL)
 //  - listen AllRoomMeta (light)
@@ -4443,6 +4385,47 @@ function installFirebaseRoomCleanup(roomId, roomNo){
     try{ await roomRef.remove(); }catch(e){}
     try{ await metaRef.remove(); }catch(e){}
     try{ await fbReleaseRoomNo(roomNo); }catch(e){}
+  });
+}
+
+function installHostPresenceReconcile(roomId){
+  const roomRef  = FB.db.ref(`AllRoom/${roomId}`);
+  const presRef  = roomRef.child("presence");
+  const usersRef = roomRef.child("users");
+
+  let _busy = false;
+
+  presRef.on("value", async (snap)=>{
+    if (!client.isHost || !client.host?.state) return;
+    if (_busy) return;
+    _busy = true;
+
+    try{
+      const pres = snap.val() || {};
+      const online = new Set(Object.keys(pres)); // uid đang online
+
+      // 1) Dọn users/<uid> không còn online (phòng hợp user out mà users còn)
+      const usersSnap = await usersRef.get();
+      const users = usersSnap.val() || {};
+      const updates = {};
+      for (const uid in users){
+        if (!online.has(uid)) updates[uid] = null;
+      }
+      if (Object.keys(updates).length){
+        await usersRef.update(updates);
+      }
+
+      // 2) Dọn state.players (đây là thứ khiến bạn "thấy lại người out")
+      const st = client.host.state;
+      st.players = (st.players || []).filter(p => p && online.has(p.id));
+
+      if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
+      await client.transport.writeState(st);
+    }catch(e){
+      // ignore
+    }finally{
+      _busy = false;
+    }
   });
 }
 
