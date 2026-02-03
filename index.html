@@ -3429,6 +3429,9 @@ class HostController {
         if (ss.zone === ZONES.hand){
           const handOwner = ss.owner ?? ss.ownerId ?? null;
           c.ownerId = handOwner;
+        }else if (ss.zone === ZONES.deck){
+          c.owner=null; 
+          c.ownerId=null;
         }
 
         this.bumpVersion();
