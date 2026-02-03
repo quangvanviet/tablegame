@@ -3993,7 +3993,10 @@ window.client = client;
 
 let _presenceCb = null;
 let _hostIdCb = null;
-  
+let _metaCb = null;
+let _seatClaimsCb = null;
+let _lobbyUsersCb = null;
+
 function setNetBadge(text, color=null){
   if (!UI.netBadge) return;
   UI.netBadge.textContent = text;
@@ -4346,7 +4349,40 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
     }
   }
 }
-  
+function installLobbyRealtimeListeners(roomRef){
+  // gỡ cũ nếu có (tránh nhân bản khi join lại)
+  try{ if (_metaCb) roomRef.child("meta").off("value", _metaCb); }catch(e){}
+  try{ if (_seatClaimsCb) roomRef.child("seatClaims/play").off("value", _seatClaimsCb); }catch(e){}
+
+  _metaCb = (snap)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._meta = snap.val() || {};
+    if (typeof renderLobby === "function"){
+      renderLobby(
+        client.roomId,
+        client.authoritative._meta,
+        client.authoritative._users || {},
+        client.authoritative._seatClaimsPlay || {}
+      );
+    }
+  };
+  roomRef.child("meta").on("value", _metaCb);
+
+  _seatClaimsCb = (snap)=>{
+    if (!client.authoritative) client.authoritative = {};
+    client.authoritative._seatClaimsPlay = snap.val() || {};
+    if (typeof renderLobby === "function"){
+      renderLobby(
+        client.roomId,
+        client.authoritative._meta || {},
+        client.authoritative._users || {},
+        client.authoritative._seatClaimsPlay
+      );
+    }
+  };
+  roomRef.child("seatClaims/play").on("value", _seatClaimsCb);
+}
+
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
@@ -4360,15 +4396,12 @@ async function createRoomAsHost_Firebase(){
   client.roomCode = roomId.toUpperCase();
   if (UI.roomInput) UI.roomInput.value = client.roomCode;
 
-  // lấy tên phòng + pass từ popup
   const roomName = (UI.createRoomNameInput?.value || "").trim().slice(0,38) || `Room ${roomNo}`;
   const passRaw  = (UI.createRoomPassInput?.value || "").trim().slice(0,32);
 
-  // hash pass nếu có
   const passSalt = uid().slice(0,8);
   const passHash = passRaw ? await sha256Hex(`${passSalt}:${passRaw}`) : "";
 
-  // meta nhẹ
   const meta = {
     roomNo,
     roomId: client.roomId,
@@ -4376,7 +4409,8 @@ async function createRoomAsHost_Firebase(){
     hasPassword: !!passRaw,
     passSalt: passRaw ? passSalt : "",
     passHash: passRaw ? passHash : "",
-    hostId: FB.uid,
+    hostId: FB.uid,          // host = ghế 0
+    hostUid: FB.uid,
     status: "active",
     createdAt: Date.now(),
     maxPlayers: 4,
@@ -4385,23 +4419,22 @@ async function createRoomAsHost_Firebase(){
 
   client.isHost = true;
   client.host = new HostController(client.roomCode, FB.uid);
-  client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username });
+  client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username }); // host vào state.players seat 0
 
-  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`)
+  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`);
 
-  // ✅ ghi full room
   await roomRef.set({
     meta,
     presence: {},
     users: {},
     intents: {},
     state: client.host.state,
+    seatClaims: { play: {} },
   });
 
-  // ✅ mirror meta để list phòng nhẹ (KHÔNG kéo state)
   await FB.db.ref(`AllRoomMeta/${client.roomId}`).set(meta);
 
-  // user entry (host ngồi ghế 0)
+  // ✅ host ngồi ghế 0 (HOST SEAT)
   await roomRef.child(`users/${FB.uid}`).set({
     username: FB.username,
     joinedAt: Date.now(),
@@ -4409,14 +4442,13 @@ async function createRoomAsHost_Firebase(){
     playSeat: 0,
     atk: 0, def: 0, hp: 20, coin: 0,
   });
-  
-  // claim ghế 0
+
+  // ✅ claim ghế 0
   await roomRef.child(`seatClaims/play/0`).set(FB.uid).catch(()=>{});
-  
-  // hostId = người ngồi ghế 0
+
+  // ✅ hostId = người ngồi ghế 0
   await roomRef.child(`meta/hostId`).set(FB.uid).catch(()=>{});
   await roomRef.child(`meta/hostUid`).set(FB.uid).catch(()=>{});
-
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
   client.lastVersion = client.authoritative.version;
@@ -4425,33 +4457,22 @@ async function createRoomAsHost_Firebase(){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
 
-  // meta listener
-  roomRef.child("meta").on("value", (snap)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._meta = snap.val() || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(client.roomId, client.authoritative._meta, client.authoritative._users || {}, client.authoritative._seatClaimsPlay || {});
-    }
-  });
-  
-  // users listener
+  // listen lobby meta + seatClaims
+  installLobbyRealtimeListeners(roomRef);
+
+  // users listener (qua transport)
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users || {};
     if (typeof renderLobby === "function"){
-      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users, client.authoritative._seatClaimsPlay || {});
+      renderLobby(
+        client.roomId,
+        client.authoritative._meta || {},
+        client.authoritative._users,
+        client.authoritative._seatClaimsPlay || {}
+      );
     }
   });
-  
-  // seatClaims/play listener
-  roomRef.child("seatClaims/play").on("value", (snap)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._seatClaimsPlay = snap.val() || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users || {}, client.authoritative._seatClaimsPlay);
-    }
-  });
-
 
   await t.attachPresence();
   installHostPresenceReconcile(client.roomId);
@@ -4459,25 +4480,25 @@ async function createRoomAsHost_Firebase(){
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
     const fromId = msg.fromId;
-  
-    // 1) join: add player + seat
+
+    // --- JOIN/LEAVE bookkeeping theo lobby mới ---
     if (action?.type === "join"){
-      client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
-  
-      // mirror seat -> users/<uid>/seat
-      const st = client.host.state;
-      let p = null;
-      for (let i=0; i<4; i++){
-        const pp = st.players?.[i];
-        if (pp && pp.id === fromId){ p = pp; break; }
-      }
-      if (p){
-        try{
-          await FB.db.ref(`AllRoom/${client.roomId}/users/${fromId}/seat`).set(p.seat);
-        }catch(e){}
-      }
-    } else {
-      // chỉ update name nếu đã có
+      // ✅ chỉ add vào state.players nếu user đã có playSeat (đã ngồi ghế)
+      try{
+        const uSnap = await roomRef.child(`users/${fromId}`).get();
+        const u = uSnap.val() || {};
+        if (Number.isInteger(u.playSeat)){
+          client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
+        }
+      }catch(e){}
+    }
+
+    if (action?.type === "leave"){
+      client.host.removePlayer(fromId);
+      try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
+      // (seatClaims release làm ở leaveRoom/requestUnseat của client)
+    }else{
+      // update name nếu player đã ở state.players
       const st = client.host.state;
       for (let i=0; i<4; i++){
         const p = st.players?.[i];
@@ -4487,33 +4508,22 @@ async function createRoomAsHost_Firebase(){
         }
       }
     }
-  
-    // 2) leave: remove player + remove users entry
-    if (action?.type === "leave"){
-      client.host.removePlayer(fromId);
-      try{
-        await FB.db.ref(`AllRoom/${client.roomId}/users/${fromId}`).remove();
-      }catch(e){}
-    }
-  
-    // 3) apply intent
+
+    // apply intent vào bàn (move/flip/draw...)
     const r = client.host.applyIntent(fromId, action);
     if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
-  
-    // 4) chỉ write khi có thay đổi đáng kể
+
     const shouldWrite =
       (action?.type === "join") ||
       (action?.type === "leave") ||
       (!!r.ok);
-  
+
     if (shouldWrite){
       await t.writeState(client.host.state);
     }
-  
+
     await t.ackIntent(intentRef);
   });
-
-
 
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
@@ -4535,7 +4545,6 @@ async function createRoomAsHost_Firebase(){
   toggleCreateRoomPopup(false);
   goMatch();
 }
-
 
 // ===============================
 //  ROOM LIST UI + JOIN WITH PASS POPUP (FULL)
@@ -4807,8 +4816,8 @@ async function joinRoomAsClient_Firebase(opts = {}){
       return;
     }
   }
-  
-  // ✅ join user: vào phòng chờ (spectator)
+
+  // ✅ join user: spectator
   await roomRef.child(`users/${FB.uid}`).set({
     username: FB.username,
     joinedAt: Date.now(),
@@ -4823,51 +4832,33 @@ async function joinRoomAsClient_Firebase(opts = {}){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
 
-  // meta listener
-  roomRef.child("meta").on("value", (snap)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._meta = snap.val() || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(client.roomId, client.authoritative._meta, client.authoritative._users || {}, client.authoritative._seatClaimsPlay || {});
-    }
-  });
-  
-  // users listener
+  // lobby meta + seatClaims
+  installLobbyRealtimeListeners(roomRef);
+
+  // users listener (transport)
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
     client.authoritative._users = users || {};
     if (typeof renderLobby === "function"){
-      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users, client.authoritative._seatClaimsPlay || {});
+      renderLobby(
+        client.roomId,
+        client.authoritative._meta || {},
+        client.authoritative._users,
+        client.authoritative._seatClaimsPlay || {}
+      );
     }
   });
-  
-  // seatClaims/play listener
-  roomRef.child("seatClaims/play").on("value", (snap)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._seatClaimsPlay = snap.val() || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(client.roomId, client.authoritative._meta || {}, client.authoritative._users || {}, client.authoritative._seatClaimsPlay);
-    }
-  });
-
 
   await t.attachPresence();
 
-
   // ✅ avoid duplicate presence listener
-  try{
-    if (_presenceCb) roomRef.child("presence").off("value", _presenceCb);
-  }catch(e){}
-
+  try{ if (_presenceCb) roomRef.child("presence").off("value", _presenceCb); }catch(e){}
   _presenceCb = ()=> { maybeElectNewHost(roomRef).catch(()=>{}); };
   roomRef.child("presence").on("value", _presenceCb);
   maybeElectNewHost(roomRef).catch(()=>{});
 
-  // ✅ listen hostId
-  try{
-    if (_hostIdCb) roomRef.child("meta/hostId").off("value", _hostIdCb);
-  }catch(e){}
-
+  // ✅ listen hostId -> bật/tắt authority
+  try{ if (_hostIdCb) roomRef.child("meta/hostId").off("value", _hostIdCb); }catch(e){}
   _hostIdCb = (snap)=>{
     const hostId = snap.val() || "";
     const amHost = (hostId === (FB.uid || ""));
@@ -4879,7 +4870,6 @@ async function joinRoomAsClient_Firebase(opts = {}){
       client.isHost = false;
       stopHostAuthority();
     }
-
     setStatusUI?.();
   };
   roomRef.child("meta/hostId").on("value", _hostIdCb);
@@ -5140,6 +5130,14 @@ async function leaveRoom(){
     console.warn("leaveRoom error", e);
   }
 
+  try{
+    const rr = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+    if (_metaCb) rr.child("meta").off("value", _metaCb);
+    if (_seatClaimsCb) rr.child("seatClaims/play").off("value", _seatClaimsCb);
+  }catch(e){}
+  _metaCb = null;
+  _seatClaimsCb = null;
+  
   // ✅ off listener theo đúng roomId đã lưu
   try{
     if (roomId){
