@@ -3754,6 +3754,9 @@ const client = {
 };
 window.client = client;
 
+let _presenceCb = null;
+let _hostIdCb = null;
+  
 function setNetBadge(text, color=null){
   if (!UI.netBadge) return;
   UI.netBadge.textContent = text;
@@ -3979,7 +3982,7 @@ async function createRoomAsHost_Firebase(){
     hasPassword: !!passRaw,
     passSalt: passRaw ? passSalt : "",
     passHash: passRaw ? passHash : "",
-    hostUid: FB.uid,
+    hostId: FB.uid,
     status: "active",
     createdAt: Date.now(),
     maxPlayers: 4,
@@ -4345,31 +4348,24 @@ async function claimSeat(roomRef, maxPlayers = 4){
   throw new Error("Không giữ được seat (race). Thử vào lại.");
 }
 
-  
 async function joinRoomAsClient_Firebase(opts = {}){
   await fbEnsureAuth();
 
   client.selfId = FB.uid;
   client.selfName = FB.username;
 
-  // nếu bạn join bằng list -> client.roomCode đã set sẵn
-  // nếu join bằng input -> đọc input
   if (!client.roomCode) readInputs();
 
   client.roomId = client.roomCode.toLowerCase();
   if (!client.roomId.startsWith("room")) return toast("Nhập room dạng: room1 / ROOM1");
 
-  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`)
+  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`);
 
-  // check meta tồn tại
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
-
   const meta = metaSnap.val() || {};
 
-  // ✅ chỉ check mật khẩu nếu không skip
   if (!opts.skipPasswordCheck && meta.hasPassword){
-    // dùng popup list là chuẩn, nhưng fallback cho trường hợp join bằng input
     const pass = prompt("Phòng có mật khẩu. Nhập mật khẩu để vào:");
     if (pass == null) return;
 
@@ -4383,21 +4379,14 @@ async function joinRoomAsClient_Firebase(opts = {}){
     }
   }
 
-  // join user
-  let mySeat = 0;
-  try{
-    mySeat = await claimSeat(roomRef, 4);
-  }catch(e){
-    toast(e?.message || String(e));
-    return;
-  }
-  
+  // ✅ join user: vào phòng chờ (spectator)
   await roomRef.child(`users/${FB.uid}`).set({
     username: FB.username,
-    seat: mySeat,
+    joinedAt: Date.now(),
+    role: "spectator",
+    playSeat: null,
     atk: 0, def: 0, hp: 0, coin: 0,
   });
-
 
   client.isHost = false;
   client.host = null;
@@ -4407,10 +4396,41 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
   t.listenUsers((users)=>{
     if (!client.authoritative) client.authoritative = {};
-    client.authoritative._users = users;
+    client.authoritative._users = users || {};
   });
 
   await t.attachPresence();
+
+  // ✅ avoid duplicate presence listener
+  try{
+    if (_presenceCb) roomRef.child("presence").off("value", _presenceCb);
+  }catch(e){}
+
+  _presenceCb = ()=> { maybeElectNewHost(roomRef).catch(()=>{}); };
+  roomRef.child("presence").on("value", _presenceCb);
+  maybeElectNewHost(roomRef).catch(()=>{});
+
+  // ✅ listen hostId
+  try{
+    if (_hostIdCb) roomRef.child("meta/hostId").off("value", _hostIdCb);
+  }catch(e){}
+
+  _hostIdCb = (snap)=>{
+    const hostId = snap.val() || "";
+    const amHost = (hostId === (FB.uid || ""));
+
+    if (amHost && !client.isHost){
+      client.isHost = true;
+      // bước 3 sẽ cắm startHostAuthority() ở đây
+    }else if (!amHost && client.isHost){
+      client.isHost = false;
+      // bước 3 sẽ cắm stopHostAuthority() ở đây
+    }
+
+    setStatusUI?.();
+  };
+  roomRef.child("meta/hostId").on("value", _hostIdCb);
+
   await t.sendIntent({ type: "join" });
 
   t.listenState((st)=>{
@@ -4425,6 +4445,92 @@ async function joinRoomAsClient_Firebase(opts = {}){
   toast("Đã vào " + client.roomCode);
   installFirebaseRoomCleanup(client.roomId, meta.roomNo);
   goMatch();
+}
+
+async function maybeElectNewHost(roomRef){
+  const uid = FB.uid;
+  if (!uid) return;
+
+  // lấy snapshot cần thiết
+  const [metaSnap, usersSnap, presSnap] = await Promise.all([
+    roomRef.child("meta").get(),
+    roomRef.child("users").get(),
+    roomRef.child("presence").get(),
+  ]);
+
+  const meta = metaSnap.val() || {};
+  const users = usersSnap.val() || {};
+  const pres  = presSnap.val()  || {};
+
+  const curHostId = meta.hostId || "";
+  if (!curHostId) return; // phòng chưa set hostId
+
+  // nếu host vẫn online -> thôi
+  const hostOnline = !!pres[curHostId];
+  if (hostOnline) return;
+
+  // build list candidates online
+  const onlineUsers = Object.entries(users)
+    .map(([id,u])=>({ id, ...(u||{}) }))
+    .filter(u => u.id && pres[u.id]); // online only
+
+  if (onlineUsers.length === 0) return;
+
+  // xác định hostSeat (nếu biết)
+  const hostUser = users[curHostId] || null;
+  const hostSeatRaw = (hostUser?.playSeat ?? hostUser?.seat);
+  const hostSeat = Number.isInteger(hostSeatRaw) ? (hostSeatRaw|0) : -1;
+
+  // helper chọn ứng viên "gần nhất"
+  const seatOf = (u)=>{
+    const s = (u?.playSeat ?? u?.seat);
+    return Number.isInteger(s) ? (s|0) : null;
+  };
+  
+  const playUsers = onlineUsers.filter(u => seatOf(u) !== null);
+  let best = null;
+
+  if (playUsers.length){
+    // sắp theo khoảng cách vòng từ hostSeat
+    const dist = (seat)=>{
+      if (hostSeat < 0) return 999; // không biết host seat
+      const d = (seat - hostSeat + 4) % 4;
+      return d === 0 ? 4 : d; // tránh chọn lại hostSeat
+    };
+
+      best = playUsers
+      .slice()
+      .sort((a,b)=>{
+        const sa = seatOf(a);
+        const sb = seatOf(b);
+        const da = dist(sa);
+        const db = dist(sb);
+
+        if (da !== db) return da - db;
+        // tie-break: joinedAt sớm hơn
+        return (a.joinedAt||0) - (b.joinedAt||0);
+      })[0];
+  } else {
+    // fallback: spectator joined sớm nhất
+    best = onlineUsers
+      .slice()
+      .sort((a,b)=> (a.joinedAt||0) - (b.joinedAt||0))[0];
+  }
+
+  if (!best?.id) return;
+
+  // chỉ người được chọn mới attempt takeover
+  if (best.id !== uid) return;
+
+  // transaction để tránh 2 người cùng giành host
+  await roomRef.child("meta/hostId").transaction((cur)=>{
+    // chỉ takeover nếu host hiện tại vẫn là curHostId (tránh đè người khác đã takeover)
+    if (cur === curHostId) return uid;
+    return; // abort
+  });
+
+  // optional: ghi log
+  await roomRef.child("meta/hostChangedAt").set(Date.now()).catch(()=>{});
 }
 
 // ===============================
@@ -4466,27 +4572,36 @@ async function releaseMySeatClaim(roomId, seat){
 }
 
 async function leaveRoom(){
-  const roomId = client.roomId;          // giữ lại trước khi reset
-  const uid    = FB?.uid || FB?.uid;     // tuỳ bạn set FB.uid kiểu nào
-  const seat   = client.mySeat;          // bạn nên set client.mySeat lúc join
+  const roomId = client.roomId;   // giữ lại trước khi reset
+  const uid    = FB?.uid || "";
 
   try{
-    // báo host trước (không bắt buộc phải await)
     try{ await client.transport?.sendIntent?.({ type:"leave" }); }catch(e){}
 
     if (roomId && uid){
       const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
 
-      // ✅ release seatClaims TRƯỚC khi xoá users (vì xoá users rồi sẽ mất seat)
-      await releaseMySeatClaim(roomId, seat).catch(()=>{});
+      // ⛔ hiện tại join vào spectator, chưa dùng seatClaims -> không cần release
+      // await releaseMySeatClaim(roomId, client.mySeat).catch(()=>{});
 
-      // ✅ sau đó mới xoá presence + user entry
       await roomRef.child(`presence/${uid}`).remove().catch(()=>{});
       await roomRef.child(`users/${uid}`).remove().catch(()=>{});
     }
   }catch(e){
     console.warn("leaveRoom error", e);
   }
+
+  // ✅ off listener theo đúng roomId đã lưu
+  try{
+    if (roomId){
+      const rr = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+      if (_presenceCb) rr.child("presence").off("value", _presenceCb);
+      if (_hostIdCb) rr.child("meta/hostId").off("value", _hostIdCb);
+    }
+  }catch(e){}
+
+  _presenceCb = null;
+  _hostIdCb = null;
 
   try{ client.transport?.close?.(); }catch(e){}
   resetClientSession();
