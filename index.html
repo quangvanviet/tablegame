@@ -3317,43 +3317,86 @@ class HostController {
       case "discard": {
         const { targetType, id } = action;
         const r = rects.discard;
-
-        const placeInDiscard = (c) => {
+      
+        // vị trí thả trong discard zone (gần giữa + random nhẹ)
+        const pickDiscardPos = () => ({
+          x: r.x + randInt(30, Math.max(30, r.w - 30)),
+          y: r.y + randInt(30, Math.max(30, r.h - 30)),
+        });
+      
+        const placeCardAloneInDiscard = (c) => {
           if (!c) return;
+      
+          // Nếu card đang trong stack thì tách ra (vì ta đang discard "lá rời")
           if (c.stackId) this._detachFromStack(st, c.id);
-
+      
+          const p = pickDiscardPos();
+          c.x = p.x; c.y = p.y;
+      
           c.zone = ZONES.discard;
-          c.owner = null;
+      
+          // ✅ theo yêu cầu trước của bạn: table/discard giữ viền/chủ
+          // -> KHÔNG reset ownerId ở đây
+          // Nếu bạn muốn discard trung lập thì mở 2 dòng dưới:
+          // c.owner = null;
+          // c.ownerId = null;
+      
+          // discard thường faceUp để xem được
           c.faceUp = true;
+      
           c.stackId = null;
-
-          c.x = r.x + randInt(30, Math.max(30, r.w - 30));
-          c.y = r.y + randInt(30, Math.max(30, r.h - 30));
         };
-
-        if (targetType === "card"){
+      
+        const placeStackInDiscard = (ss) => {
+          if (!ss) return;
+      
+          const p = pickDiscardPos();
+      
+          // đưa cả stack vào discard như 1 stack bình thường
+          ss.x = p.x;
+          ss.y = p.y;
+          ss.zone = ZONES.discard;
+          ss.owner = null;
+          // nếu stack có ownerId để vẽ viền mà bạn muốn giữ, thì đừng reset
+          // ss.ownerId = null; // chỉ bật nếu bạn muốn discard reset viền stack
+      
+          st._z = (st._z || 0) + 1;
+          ss.z = st._z;
+      
+          // sync các card theo stack (GIỮ stackId, KHÔNG unstack)
+          for (const cid of (ss.cardIds || [])) {
+            const c = this._ensureCard(st, cid);
+            if (!c) continue;
+      
+            c.stackId = ss.id;
+            c.x = ss.x;
+            c.y = ss.y;
+            c.zone = ZONES.discard;
+      
+            // discard pile thường cho xem
+            c.faceUp = true;
+      
+            // ✅ giữ viền/chủ theo yêu cầu (không reset owner/ownerId)
+            // nếu bạn muốn discard trung lập thì bật:
+            // c.owner = null;
+            // c.ownerId = null;
+          }
+        };
+      
+        if (targetType === "card") {
           const c = this._ensureCard(st, id);
           if (!c || !canInteract(c, fromId)) return { ok:false, reason:"No access" };
-          placeInDiscard(c);
+          placeCardAloneInDiscard(c);
         } else {
           const ss = this._ensureStack(st, id);
           if (!ss || !canInteractStack(ss, fromId)) return { ok:false, reason:"No access" };
-
-          const ids = [...(ss.cardIds || [])];
-          for (const cid of ids){
-            const c = this._ensureCard(st, cid);
-            if (c) placeInDiscard(c);
-          }
-
-          // xóa stack sau khi discard hết (trừ deck cố định nếu bạn còn dùng)
-          //if (ss.id !== "stack_deck" && ss.id !== "stack_table" && ss.id !== "stack_discard"){
-            //delete st.stacks[ss.id];
-          //}
+          placeStackInDiscard(ss);
         }
-
+      
         this.bumpVersion();
         return { ok:true };
       }
+
 
       case "stack": {
         const { dragTargetType, dragId, dropOnType, dropOnId } = action;
@@ -5125,6 +5168,18 @@ function draw(){
   const me = (s.players||[]).find(p => p && p.id === selfId);
   const mySeat = me ? (Number(me.seat) | 0) : -1;
 
+  // ✅ privacy: chỉ chủ hand mới được thấy mặt trước
+  const canSeeFront = (card) => {
+    if (!card) return false;
+
+    // ngoài hand: theo faceUp bình thường
+    if (card.zone !== ZONES.hand) return !!card.faceUp;
+
+    // trong hand: chỉ owner mới thấy faceUp, người khác luôn thấy back
+    const ownerId = (card.ownerId ?? card.owner ?? null);
+    return (ownerId && ownerId === selfId) ? !!card.faceUp : false;
+  };
+
   const playerBySeat = (seat)=> (s.players||[]).find(pp => (Number(pp.seat)|0) === seat) || null;
   const tintBySeat = (seat)=>{
     const p = playerBySeat(seat);
@@ -5167,7 +5222,21 @@ function draw(){
       // ✅ model mới: frontUrl nằm trực tiếp trên card
       // ✅ model cũ: frontUrl hoặc frontBase + id.png
       const frontUrl = (c.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
-      drawCardAtScreen(sp.x, sp.y, !!c.faceUp, c.frontSeed, accent, isSelected, false, 0, frontUrl, backUrlDefault);
+
+      // ✅ privacy: hand người khác luôn vẽ back
+      const showFront = canSeeFront(c);
+
+      drawCardAtScreen(
+        sp.x, sp.y,
+        showFront,
+        c.frontSeed,
+        accent,
+        isSelected,
+        false,
+        0,
+        frontUrl,
+        backUrlDefault
+      );
     } else {
       const stack = getStackById(s, o.id);
       if (!stack) continue;
@@ -5196,9 +5265,13 @@ function draw(){
     
         // ✅ 2) vẽ top card SAU (badge sẽ nằm trên cùng)
         const frontUrl = (top.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
+
+        // ✅ privacy: nếu top card đang ở hand người khác -> luôn back
+        const showFrontTop = canSeeFront(top);
+
         drawCardAtScreen(
           sp.x, sp.y,
-          !!top.faceUp,
+          showFrontTop,
           top.frontSeed,
           accent,
           isSelected,
@@ -5216,7 +5289,6 @@ function draw(){
       }
     }
   }
-
 
   requestAnimationFrame(draw);
   renderStatusBoard?.();
