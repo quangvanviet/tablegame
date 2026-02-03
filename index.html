@@ -4345,23 +4345,14 @@ async function joinRoomAsClient_Firebase(opts = {}){
   }
 
   // join user
-  const myPlayer = client.host.state.players?.[0]; // hoặc tìm theo id
-    let mySeat = 0;
-    for (let i=0; i<4; i++){
-      const pp = client.host.state.players?.[i];
-      if (pp && pp.id === FB.uid){ mySeat = i; break; }
-    }
-    
-    let mySeat = 0;
-    for (let i=0; i<4; i++){
-      const p = client.host.state.players?.[i];
-      if (p && p.id === FB.uid){ mySeat = i; break; }
-    }
-    await roomRef.child(`users/${FB.uid}`).set({
-      username: FB.username, seat: mySeat, atk: 0, def: 0, hp: 0, coin: 0,
-    });
-
-
+  let mySeat = 0;
+  for (let i=0; i<4; i++){
+    const p = client.host.state.players?.[i];
+    if (p && p.id === FB.uid){ mySeat = i; break; }
+  }
+  await roomRef.child(`users/${FB.uid}`).set({
+    username: FB.username, seat: mySeat, atk: 0, def: 0, hp: 0, coin: 0,
+  });
 
   client.isHost = false;
   client.host = null;
