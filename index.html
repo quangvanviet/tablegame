@@ -4010,7 +4010,7 @@ function setStatusUI(){
 
   // ===== ROOM BADGE =====
   if (UI.roomBadge){
-    console.log("roomName", client.roomMeta.roomName)
+    console.log("roomName", client, client.meta.roomName)
     const roomName =
       client.roomMeta?.roomName ||
       s.meta?.roomName ||          // (nếu bạn có nhét meta vào state — thường là không)
