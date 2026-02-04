@@ -3999,6 +3999,28 @@ function getState(){
   }
   return client.authoritative;
 }
+function seatColorKey(seat){
+  seat = seat|0;
+  // ưu tiên COLOR_ORDER nếu bạn có
+  if (typeof COLOR_ORDER !== "undefined" && Array.isArray(COLOR_ORDER) && COLOR_ORDER.length){
+    return COLOR_ORDER[seat % COLOR_ORDER.length] || "gray";
+  }
+  // fallback cứng 4 màu
+  return ["red","blue","green","purple"][seat] || "gray";
+}
+function seatColor(seat){
+  return COLORS?.[seatColorKey(seat)] || "rgba(255,255,255,.25)";
+}
+function rgbaWithAlpha(color, a){
+  const m = /^rgba?\((\s*\d+\s*),(\s*\d+\s*),(\s*\d+\s*)(?:,(\s*[\d.]+\s*))?\)$/.exec(String(color).trim());
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},${a})`;
+  const h = String(color).trim();
+  if (/^#([0-9a-fA-F]{6})$/.test(h)){
+    const rr = parseInt(h.slice(1,3),16), gg = parseInt(h.slice(3,5),16), bb = parseInt(h.slice(5,7),16);
+    return `rgba(${rr},${gg},${bb},${a})`;
+  }
+  return color;
+}
 
 function setStatusUI(){
   const s = client.authoritative;
@@ -4025,38 +4047,31 @@ function setStatusUI(){
   // ===== ME =====
   const uid = client.selfId || FB?.uid || "";
   const myName = client.selfName || FB?.username || "Bạn";
+  const uMe = client.lobby?.users?.[uid] || null;
+  const mySeat = Number.isInteger(uMe?.playSeat) ? (uMe.playSeat|0) : null;
 
   // tìm trong state.players (nếu mình đã được add vào players)
   const me = (s.players || []).find(p => p && p.id === uid) || null;
 
   if (UI.meLine){
-    if (uid){
-      // nếu có trong players -> hiển thị seat/color/role theo players
-      if (me){
-        const seat = Number.isInteger(me.seat) ? (me.seat|0) : null;
-        const isHost = (uid && (uid === (s.hostId || "")));
-        const role = isHost ? "HOST" : (seat !== null ? `Ghế ${seat+1}` : "Player");
-
-        const color = me.color || "gray";
-        const dotColor = COLORS?.[color] || "rgba(255,255,255,.35)";
-
-        UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
-          <span style="width:10px;height:10px;border-radius:999px;background:${dotColor};
-            box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
-          <span>${escapeHtml(myName)} • ${role}${me.color ? ` • ${escapeHtml(me.color)}` : ""}</span>
-        </span>`;
-      } else {
-        // spectator (không nằm trong state.players)
-        UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
-          <span style="width:10px;height:10px;border-radius:999px;background:rgba(255,255,255,.25);
-            box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
-          <span>${escapeHtml(myName)} • Xem</span>
-        </span>`;
-      }
-    } else {
+    if (!uid){
       UI.meLine.textContent = "(chưa đăng nhập)";
+    } else {
+      // role theo lobby trước (đổi ghế là đổi ngay)
+      const isHost = (mySeat === 0); // ghế 0 là host
+      const role = (mySeat === null) ? "Xem" : (isHost ? "HOST" : `Ghế ${mySeat+1}`);
+  
+      // màu theo ghế (giống canvas)
+      const c = (mySeat === null) ? "rgba(255,255,255,.25)" : seatColor(mySeat);
+  
+      UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
+        <span style="width:10px;height:10px;border-radius:999px;background:${c};
+          box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
+        <span>${escapeHtml(myName)} • ${role}</span>
+      </span>`;
     }
   }
+
 
   // ===== HOST LINE =====
   const hostId = s.hostId || "";
@@ -4361,6 +4376,11 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
     btn.style.border = "";
     btn.style.background = "";
     btn.style.boxShadow = "";
+    const base = seatColor(seat);
+    btn.style.border = `1px solid ${rgbaWithAlpha(base, 0.22)}`;
+    btn.style.background = rgbaWithAlpha(base, 0.06);
+    btn.style.boxShadow = `0 0 0 1px rgba(0,0,0,.25) inset`;
+
 
     if (occUid){
       btn.classList.remove("empty");
@@ -4371,24 +4391,24 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
       const name = occUser?.username || "Đang đồng bộ...";
       const label = isHostSeat ? "HOST" : `Ghế ${seat+1}`;
 
-      const seatColor = seatColorByUid(occUid);
-      if (seatColor){
-        // viền + nền mờ giống zone trên canvas
-        btn.style.border = `2px solid ${seatColor}`;
-        btn.style.background = withAlpha(seatColor, 0.13);
-        btn.style.boxShadow = `0 0 0 1px rgba(0,0,0,.25) inset`;
+      const base = seatColor(seat);
+      // occupied: đậm hơn
+      btn.style.border = `2px solid ${rgbaWithAlpha(base, 0.95)}`;
+      btn.style.background = rgbaWithAlpha(base, 0.14);
+      btn.style.boxShadow = `0 0 0 2px ${rgbaWithAlpha(base, 0.25)}, 0 0 0 1px rgba(0,0,0,.25) inset`;
+      
+      // nếu là mình ngồi -> highlight thêm
+      if (isMe){
+        btn.style.background = rgbaWithAlpha(base, 0.22);
+        btn.style.boxShadow = `0 0 0 2px ${rgbaWithAlpha(base, 0.45)}, 0 10px 22px rgba(0,0,0,.35)`;
       }
-      if (isMe && seatColor){
-        btn.style.background = withAlpha(seatColor, 0.20);
-        btn.style.boxShadow = `
-          0 0 0 2px ${withAlpha(seatColor, 0.33)},
-          0 6px 18px rgba(0,0,0,.35)
-        `;
-      }
-      if (seat === 0 && seatColor){
+      
+      // seat 0 host: viền double
+      if (seat === 0){
         btn.style.borderStyle = "double";
         btn.style.borderWidth = "3px";
       }
+
       if (isMe){
         btn.innerHTML = `
           <div class="name">${escapeHtml(name)}</div>
