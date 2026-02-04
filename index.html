@@ -1306,17 +1306,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       display:flex;
       flex-direction:column;
       gap: 12px;
-    }
-    
-    .wr2-top{
-      display:grid;
-      grid-template-columns: 260px 1fr;
-      gap: 12px;
-    }
-    @media (max-width: 1100px){
-      .wr2-top{ grid-template-columns: 1fr; }
-    }
-    
+    }    
     .cap{
       font-size: 12px;
       opacity: .75;
@@ -1904,10 +1894,13 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <div class="hud lobby-hud">
       <div class="lobby-layout">
         <!-- RIGHT: LOBBY -->
-        <div class="panel lobby-card lobby-main">
-          <header class="lobby-card-hd">
+        <div style="min-width: 460px;" class="panel lobby-card lobby-main">
+          <header class="lobby-card-hd" style="display: flex;
+          flex-direction: row;
+          align-content: center;
+          justify-content: center;
+          align-items: center;">
             <div class="title">PHÒNG CHỜ</div><div class="badge" id="roomBadge">—</div>
-            <button id="leaveMatchBtn" class="danger" style="width:100%; margin-top:10px;">Rời phòng</button>
           </header>
     
           <div class="lobby-card-bd">
@@ -1917,8 +1910,13 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               <div class="wr2-top">    
                 <div class="wr2-players">
                   <div class="kv">
-                    <div class="k">Bạn là</div>
-                    <div class="v" id="meLine">—</div>
+                    <div style=" display: flex; width: 70%; flex-direction: row;align-items: center;
+                      align-content: center; gap: 15px;">
+                      <div class="k">Bạn là</div><div class="v" id="meLine">—</div>
+                    </div>
+                    <div>
+                      <button id="leaveMatchBtn" class="danger" style="width:100%;">Rời phòng</button>
+                    </div>
                   </div>
                   <div class="sub" id="setupPhaseLine">Đang chờ người chơi...</div>
                   <div class="seat2-grid">
