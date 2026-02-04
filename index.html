@@ -4575,7 +4575,7 @@ async function createRoomAsHost_Firebase(){
   });
 
   toast(`Đã tạo room: ${roomId}`);
-  client.roomMeta = { roomNo, roomId };
+  client.roomMeta = { roomNo, roomId, roomName};
 
   installFirebaseRoomCleanup(client.roomId, roomNo);
 
