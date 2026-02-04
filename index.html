@@ -3138,47 +3138,41 @@ const ensureUIState = (st) => {
 class HostController {
   constructor(roomCode, hostId){
     this.roomCode = roomCode;
+    this.hostId = hostId;
     this.state = makeFreshTableState(roomCode, hostId);
-    // hostId trong state sẽ được cập nhật theo meta.hostId khi takeover
   }
 
   bumpVersion(){
     this.state.version = (this.state.version || 0) + 1;
   }
 
-  addOrUpdatePlayer({id, name}){
+  if (seat < 0 || seat > 3) return { ok:false, reason:"Bad seat" };
+  addOrUpdatePlayerAtSeat(id, name, seat){
     if (!id) return { ok:false, reason:"Missing id" };
+    seat = seat|0;
   
-    // players là slot cố định 4 ghế: [0..3]
     if (!Array.isArray(this.state.players)) this.state.players = [];
     const ps = this.state.players;
   
-    // 1) nếu đã tồn tại -> update name, giữ nguyên seat
+    // nếu player đã ở seat khác -> clear seat cũ
     for (let i=0; i<4; i++){
       const p = ps[i];
       if (p && p.id === id){
-        p.name = name || p.name || "Player";
-        p.seat = i;
-        p.connectedAt = p.connectedAt || now();
-  
-        ensureUIState(this.state);
-        if (!this.state.ui.statsByPlayer[p.id]) this.state.ui.statsByPlayer[p.id] = ["","","",""];
-  
-        this.bumpVersion();
-        return { ok:true, player:p };
+        ps[i] = null;
+        break;
       }
     }
   
-    // 2) tìm ghế trống
-    let seat = -1;
-    for (let i=0; i<4; i++){
-      if (!ps[i]) { seat = i; break; }
+    // nếu seat đang có người khác -> từ chối (để tránh chồng)
+    const occ = ps[seat];
+    if (occ && occ.id !== id){
+      return { ok:false, reason:"Seat occupied" };
     }
-    if (seat < 0) return { ok:false, reason:"Room full" };
   
-    // chọn màu chưa dùng
-    const used = new Set(ps.map(x=>x?.color).filter(Boolean));
-    const color = COLOR_ORDER.find(c=>!used.has(c)) || COLOR_ORDER[seat % COLOR_ORDER.length];
+    // chọn màu theo seat (đồng bộ canvas)
+    const color = (typeof COLOR_ORDER !== "undefined" && Array.isArray(COLOR_ORDER) && COLOR_ORDER.length)
+      ? (COLOR_ORDER[seat % COLOR_ORDER.length] || "gray")
+      : (["red","blue","green","purple"][seat] || "gray");
   
     const p = { id, name: name || "Player", color, seat, connectedAt: now() };
     ps[seat] = p;
@@ -3189,6 +3183,7 @@ class HostController {
     this.bumpVersion();
     return { ok:true, player:p };
   }
+
 
   removePlayer(id){
     if (!Array.isArray(this.state.players)) this.state.players = [];
@@ -3210,7 +3205,7 @@ class HostController {
   // Helpers (tách ra để dễ bảo trì)
   // ==============================
   _ensureState(){
-    const curHostId = this.state?.hostId || "";
+    const curHostId = this.state?.hostId || this.hostId || "";
     const st = this.state = ensureStateShape(this.state) || makeFreshTableState(this.roomCode, curHostId);
     ensureUIState(st);
 
@@ -4273,6 +4268,10 @@ async function requestSit(roomId, seat){
     playSeat: seat|0,
   });
 
+  try{
+    await client.transport?.sendIntent?.({ type:"sit", seat: seat|0 });
+  }catch(e){}
+
   if ((seat|0) === 0){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
@@ -4303,6 +4302,10 @@ async function requestUnseat(roomId){
     role: "spectator",
     playSeat: null,
   });
+
+  try{
+    await client.transport?.sendIntent?.({ type:"unsit" });
+  }catch(e){}
 
   if (mySeat === 0){
     await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
@@ -4589,14 +4592,55 @@ async function createRoomAsHost_Firebase(){
 
     // --- JOIN/LEAVE bookkeeping theo lobby mới ---
     if (action?.type === "join"){
-      // ✅ chỉ add vào state.players nếu user đã có playSeat (đã ngồi ghế)
       try{
         const uSnap = await roomRef.child(`users/${fromId}`).get();
         const u = uSnap.val() || {};
         if (Number.isInteger(u.playSeat)){
-          client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
+          const seat = u.playSeat|0;
+          const uname = u.username || msg.fromName || "Player";
+          client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
+          await t.writeState(client.host.state);
         }
       }catch(e){}
+      await t.ackIntent(intentRef);
+      return;
+    }
+
+    // --- lobby seat -> state.players mapping ---
+    if (action?.type === "sit"){
+      const seat = action.seat|0;
+    
+      // chỉ cho ngồi 0..3
+      if (seat < 0 || seat > 3){
+        await t.ackIntent(intentRef);
+        return;
+      }
+    
+      // lấy username từ users để set name
+      let uname = msg.fromName || "Player";
+      try{
+        const uSnap = await roomRef.child(`users/${fromId}`).get();
+        const u = uSnap.val() || {};
+        uname = u.username || uname;
+      }catch(e){}
+    
+      // ✅ ÉP add vào đúng seat
+      const rr = client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
+      if (rr?.ok){
+        await t.writeState(client.host.state);
+      }
+      await t.ackIntent(intentRef);
+      return;
+
+      await t.ackIntent(intentRef);
+      return;
+    }
+    
+    if (action?.type === "unsit"){
+      client.host.removePlayer(fromId);
+      await t.writeState(client.host.state);
+      await t.ackIntent(intentRef);
+      return;
     }
 
     if (action?.type === "leave"){
