@@ -3145,12 +3145,13 @@ class HostController {
   bumpVersion(){
     this.state.version = (this.state.version || 0) + 1;
   }
-
-  if (seat < 0 || seat > 3) return { ok:false, reason:"Bad seat" };
+  
   addOrUpdatePlayerAtSeat(id, name, seat){
     if (!id) return { ok:false, reason:"Missing id" };
     seat = seat|0;
-  
+    
+    if (seat < 0 || seat > 3) return { ok:false, reason:"Bad seat" };
+    
     if (!Array.isArray(this.state.players)) this.state.players = [];
     const ps = this.state.players;
   
@@ -3183,7 +3184,6 @@ class HostController {
     this.bumpVersion();
     return { ok:true, player:p };
   }
-
 
   removePlayer(id){
     if (!Array.isArray(this.state.players)) this.state.players = [];
