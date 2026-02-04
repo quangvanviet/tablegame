@@ -4005,7 +4005,6 @@ function setStatusUI(){
   }
   UI.chatBadge && (UI.chatBadge.textContent = "v" + (s.version || 0));
 
-const s = getState();
 const uid = client.selfId || FB?.uid || "";
 
 const users = client.authoritative?._users || {};
