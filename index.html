@@ -4535,7 +4535,7 @@ async function createRoomAsHost_Firebase(){
 
   client.isHost = true;
   client.host = new HostController(client.roomCode, FB.uid);
-  client.host.addOrUpdatePlayer({ id: FB.uid, name: FB.username }); // host vào state.players seat 0
+  client.host.addOrUpdatePlayerAtSeat(FB.uid, FB.username, 0);
 
   const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`);
 
@@ -4629,9 +4629,6 @@ async function createRoomAsHost_Firebase(){
       if (rr?.ok){
         await t.writeState(client.host.state);
       }
-      await t.ackIntent(intentRef);
-      return;
-
       await t.ackIntent(intentRef);
       return;
     }
@@ -5128,6 +5125,7 @@ async function maybeElectNewHost(roomRef){
 }
 
 let _stopHostIntents = null;
+let _hostGuardCb = null; // cache hostId hiện tại để host-lock nhẹ
 
 async function startHostAuthority(roomId){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
@@ -5148,78 +5146,118 @@ async function startHostAuthority(roomId){
     client.host.state = st;
   }
 
-  // 4) cập nhật hostId trong state theo meta.hostId
+  // 4) sync hostId trong state theo meta.hostId (để quyền host-only trong applyIntent hoạt động)
   client.host.state.hostId = FB.uid;
 
-  // 5) bật listen intents (chỉ bật 1 lần)
+  // 5) host lock nhẹ: cache meta/hostId bằng listener 1 lần
+  if (!_hostGuardCb){
+    _hostGuardCb = (snap)=>{
+      client._hostIdNow = snap.val() || "";
+    };
+    roomRef.child("meta/hostId").on("value", _hostGuardCb);
+    // nạp ngay
+    try{ client._hostIdNow = (await roomRef.child("meta/hostId").get()).val() || ""; }catch(e){}
+  }
+
+  // 6) bật listen intents (chỉ bật 1 lần)
   if (_stopHostIntents) return;
 
-  const maybeUnsub = t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
+  const unsub = t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
     const fromId = msg.fromId;
 
-    // ✅ quan trọng: host lock - nếu mình không còn là host thì bỏ xử lý
-    // (tránh race khi hostId vừa đổi)
-    const hostIdNow = (await roomRef.child("meta/hostId").get()).val() || "";
-    if (hostIdNow !== FB.uid){
+    // ✅ host lock: nếu mình không còn là host thì chỉ ack rồi bỏ
+    const hostIdNow = client._hostIdNow || "";
+    if (hostIdNow !== (FB.uid || "")){
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
-    // (A) join/leave: tạm thời giữ như code cũ (bước sau sẽ đổi theo phòng chờ)
+    // --- A) JOIN: chỉ sync name/players nếu user đang NGỒI GHẾ (playSeat != null) ---
     if (action?.type === "join"){
-      client.host.addOrUpdatePlayer({ id: fromId, name: msg.fromName });
-
-      // mirror seat -> users/<uid>/seat (nếu bạn còn dùng seat trong state)
-      const st2 = client.host.state;
-      let p = null;
-      for (let i=0; i<4; i++){
-        const pp = st2.players?.[i];
-        if (pp && pp.id === fromId){ p = pp; break; }
-      }
-      if (p){
-        try{
-          await roomRef.child(`users/${fromId}/seat`).set(p.seat);
-        }catch(e){}
-      }
+      try{
+        const u = (await roomRef.child(`users/${fromId}`).get()).val() || {};
+        if (Number.isInteger(u.playSeat)){
+          const seat = u.playSeat|0;
+          const uname = u.username || msg.fromName || "Player";
+          client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
+          await t.writeState(client.host.state);
+        }
+      }catch(e){}
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
     }
 
+    // --- B) SIT/UNSIT: lobby seat -> state.players mapping ---
+    if (action?.type === "sit"){
+      const seat = action.seat|0;
+      if (seat < 0 || seat > 3){
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+
+      let uname = msg.fromName || "Player";
+      try{
+        const u = (await roomRef.child(`users/${fromId}`).get()).val() || {};
+        uname = u.username || uname;
+      }catch(e){}
+
+      const rr = client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
+      if (rr?.ok){
+        await t.writeState(client.host.state);
+      }
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
+    }
+
+    if (action?.type === "unsit"){
+      client.host.removePlayer(fromId);
+      await t.writeState(client.host.state);
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
+    }
+
+    // --- C) LEAVE: remove khỏi state.players, xoá user entry (seatClaims đã release ở client leave/unseat) ---
     if (action?.type === "leave"){
       client.host.removePlayer(fromId);
       try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
+      await t.writeState(client.host.state);
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
     }
 
-    // (B) apply intent
+    // --- D) apply gameplay intents (move/flip/draw/...) ---
     const r = client.host.applyIntent(fromId, action);
-    if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
+    if (!r.ok && fromId === (FB.uid || "")) toast("Action fail: " + r.reason);
 
-    // (C) write state nếu cần
-    const shouldWrite =
-      (action?.type === "join") ||
-      (action?.type === "leave") ||
-      (!!r.ok);
-
-    if (shouldWrite){
+    if (r.ok){
       await t.writeState(client.host.state);
     }
 
-    await t.ackIntent(intentRef);
+    try{ await t.ackIntent(intentRef); }catch(e){}
   });
 
-  // nếu listenIntentsAsHost có trả về unsub
-  if (typeof maybeUnsub === "function"){
-    _stopHostIntents = maybeUnsub;
-  } else {
-    // fallback: nếu transport của bạn có method stop riêng thì gán ở đây
-    _stopHostIntents = null;
-  }
+  _stopHostIntents = (typeof unsub === "function") ? unsub : null;
 
   console.log("[host] authority started");
 }
 
 function stopHostAuthority(){
-  try{ _stopHostIntents?.(); }catch(e){}
+  try{
+    if (_stopHostIntents) _stopHostIntents();
+  }catch(e){}
   _stopHostIntents = null;
+
+  try{
+    const roomId = client.roomId;
+    if (roomId && _hostGuardCb){
+      const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
+      roomRef.child("meta/hostId").off("value", _hostGuardCb);
+    }
+  }catch(e){}
+  _hostGuardCb = null;
+  client._hostIdNow = "";
+
   console.log("[host] authority stopped");
 }
   
