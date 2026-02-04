@@ -1903,43 +1903,11 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
     <div class="hud lobby-hud">
       <div class="lobby-layout">
-    
-        <!-- LEFT: STATUS -->
-        <div class="panel lobby-card" id="sttPanel">
-          <header class="lobby-card-hd">
-            <div class="title">TRẠNG THÁI</div>
-            <div class="badge" id="roomBadge">—</div>
-          </header>
-    
-          <div class="lobby-card-bd">
-            <div class="kv">
-              <div class="k">Bạn là</div>
-              <div class="v" id="meLine">—</div>
-            </div>
-    
-            <div class="kv">
-              <div class="k">Host</div>
-              <div class="v" id="hostLine">—</div>
-            </div>
-    
-            <div class="kv">
-              <div class="k">Người trong phòng</div>
-              <div class="v" id="playersLine">—</div>
-            </div>
-    
-            <div class="hint mini">
-              Privacy: bài trong <b>hand</b> của người khác chỉ hiện mặt sau với bạn.
-            </div>
-    
-            <button id="leaveMatchBtn" class="danger" style="width:100%; margin-top:10px;">Rời phòng</button>
-          </div>
-        </div>
-    
         <!-- RIGHT: LOBBY -->
         <div class="panel lobby-card lobby-main">
           <header class="lobby-card-hd">
-            <div class="title">PHÒNG CHỜ</div>
-            <div class="sub" id="setupPhaseLine">Đang chờ người chơi...</div>
+            <div class="title">PHÒNG CHỜ</div><div class="badge" id="roomBadge">—</div>
+            <button id="leaveMatchBtn" class="danger" style="width:100%; margin-top:10px;">Rời phòng</button>
           </header>
     
           <div class="lobby-card-bd">
@@ -1948,7 +1916,11 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
             <div id="waitingRoom" class="waiting-room2">
               <div class="wr2-top">    
                 <div class="wr2-players">
-                  <div class="cap">GHẾ CHƠI</div>
+                  <div class="kv">
+                    <div class="k">Bạn là</div>
+                    <div class="v" id="meLine">—</div>
+                  </div>
+                  <div class="sub" id="setupPhaseLine">Đang chờ người chơi...</div>
                   <div class="seat2-grid">
                     <button class="seat2 slot" data-slot="play" data-seat="0" type="button"></button>
                     <button class="seat2 slot" data-slot="play" data-seat="1" type="button"></button>
