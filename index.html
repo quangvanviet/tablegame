@@ -1900,13 +1900,19 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           align-content: center;
           justify-content: center;
           align-items: center;">
-            <div class="title">PHÒNG CHỜ</div><div class="badge" id="roomBadge">—</div>
+            <div style="display: flex;  flex-direction: row; align-content: center; align-items: center;
+              width: 90%; gap: 15px;">
+              <div class="title">PHÒNG: </div><div class="badge" id="roomBadge">—</div>
+            </div>
+            <div style="display: flex;justify-content: flex-end;align-items: center; width: 10%;align-content: center;">
+              <button class="collapse-btn" data-target="waitingRoom">+</button>
+            </div>
           </header>
     
           <div class="lobby-card-bd">
     
             <!-- Seats -->
-            <div id="waitingRoom" class="waiting-room2">
+            <div id="waitingRoom" class="content waiting-room2" style="padding: 0px;">
               <div class="wr2-top">    
                 <div class="wr2-players">
                   <div class="kv">
