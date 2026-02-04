@@ -3958,8 +3958,16 @@ const client = {
 
   isHost: false,
   transport: null,
-  host: null,            // HostController khi là host
-  authoritative: null,   // state đã redact cho viewer
+  host: null,
+
+  // ✅ TÁCH 2 NGUỒN
+  authoritativeState: null,  // state đã redact cho viewer (từ listenState)
+  lobby: {                   // meta/users/seatClaims (từ listeners lobby)
+    meta: {},
+    users: {},
+    seatClaimsPlay: {},
+  },
+
   lastVersion: 0,
 
   selected: null,
@@ -3969,6 +3977,8 @@ window.client = client;
 
 let _presenceCb = null;
 let _hostIdCb = null;
+
+// lobby listeners
 let _metaCb = null;
 let _seatClaimsCb = null;
 let _lobbyUsersCb = null;
@@ -3987,84 +3997,116 @@ function getState(){
 }
 
 function setStatusUI(){
-  const s = client.authoritative;
+  const s = client.authoritative; // state redact (giữ nguyên)
   if (!s){
     UI.roomBadge && (UI.roomBadge.textContent = "—");
     UI.meLine && (UI.meLine.textContent = "—");
     UI.hostLine && (UI.hostLine.textContent = "—");
     UI.playersLine && (UI.playersLine.textContent = "—");
     UI.chatBadge && (UI.chatBadge.textContent = "—");
-    updateInspector();
+    updateInspector?.();
     return;
   }
 
+  // ===== ROOM BADGE =====
+  // ⚠️ Bạn không có roomName trong client/state -> chỉ có roomCode/roomId.
+  // Nếu muốn roomName thật, bạn phải lưu nó vào client.roomMeta.roomName khi join/create.
   if (UI.roomBadge){
-    const meta = client.authoritative?._meta || {};
-    const roomName = meta.roomName || client.roomCode || "—";
+    const roomName =
+      client.roomMeta?.roomName ||
+      s.meta?.roomName ||          // (nếu bạn có nhét meta vào state — thường là không)
+      client.roomCode ||
+      s.roomCode ||
+      client.roomId ||
+      "—";
     UI.roomBadge.textContent = `PHÒNG: ${roomName}`;
   }
+
   UI.chatBadge && (UI.chatBadge.textContent = "v" + (s.version || 0));
 
-const uid = client.selfId || FB?.uid || "";
+  // ===== ME =====
+  const uid = client.selfId || FB?.uid || "";
+  const myName = client.selfName || FB?.username || "Bạn";
 
-const users = client.authoritative?._users || {};
-const uMe = users?.[uid] || null;
-
-// fallback: nếu đã vào state.players thì lấy thêm color
-const pMe = (s?.players || []).find(p => p && p.id === uid) || null;
+  // tìm trong state.players (nếu mình đã được add vào players)
+  const me = (s.players || []).find(p => p && p.id === uid) || null;
 
   if (UI.meLine){
-    if (uMe){
-      const displayName = (uMe.username || FB?.username || "Bạn");
-      const role = Number.isInteger(uMe.playSeat)
-        ? ((uMe.playSeat|0) === 0 ? "HOST" : `Ghế ${ (uMe.playSeat|0) + 1 }`)
-        : "Xem";
-  
-      const color = pMe?.color || "gray";
-      const dotColor = COLORS?.[color] || "rgba(255,255,255,.35)";
-  
-      UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
-        <span style="width:10px;height:10px;border-radius:999px;background:${dotColor};box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
-        <span>${escapeHtml(displayName)} • ${role}${pMe?.color ? ` • ${escapeHtml(pMe.color)}` : ""}</span>
-      </span>`;
+    if (uid){
+      // nếu có trong players -> hiển thị seat/color/role theo players
+      if (me){
+        const seat = Number.isInteger(me.seat) ? (me.seat|0) : null;
+        const isHost = (uid && (uid === (s.hostId || "")));
+        const role = isHost ? "HOST" : (seat !== null ? `Ghế ${seat+1}` : "Player");
+
+        const color = me.color || "gray";
+        const dotColor = COLORS?.[color] || "rgba(255,255,255,.35)";
+
+        UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:999px;background:${dotColor};
+            box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
+          <span>${escapeHtml(myName)} • ${role}${me.color ? ` • ${escapeHtml(me.color)}` : ""}</span>
+        </span>`;
+      } else {
+        // spectator (không nằm trong state.players)
+        UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:999px;background:rgba(255,255,255,.25);
+            box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
+          <span>${escapeHtml(myName)} • Xem</span>
+        </span>`;
+      }
     } else {
-      UI.meLine.textContent = "(chưa vào phòng)";
+      UI.meLine.textContent = "(chưa đăng nhập)";
     }
   }
 
-  const hostP = (s.players||[]).find(p=>p && p.id===s.hostId);
+  // ===== HOST LINE =====
+  const hostId = s.hostId || "";
+  const hostP = (s.players || []).find(p=>p && p.id === hostId) || null;
+
   if (UI.hostLine){
-    UI.hostLine.innerHTML = hostP
-      ? `<span style="display:inline-flex;align-items:center;gap:8px">
-          <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[hostP.color]};border:1px solid rgba(255,255,255,.18)"></span>
-          <span>${escapeHtml(hostP.name)}</span>
-        </span>`
-      : "—";
+    if (hostP){
+      const dot = COLORS?.[hostP.color] || "rgba(255,255,255,.35)";
+      UI.hostLine.innerHTML =
+        `<span style="display:inline-flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:999px;background:${dot};
+            border:1px solid rgba(255,255,255,.18)"></span>
+          <span>${escapeHtml(hostP.name || "Host")}</span>
+        </span>`;
+    } else {
+      // host có thể là spectator (chưa có trong state.players) hoặc state chưa kịp sync
+      UI.hostLine.textContent = hostId ? "(đang đồng bộ...)" : "—";
+    }
   }
 
+  // ===== PLAYERS LIST =====
   if (UI.playersLine){
-    UI.playersLine.innerHTML = (s.players||[]).map(p=>{
+    UI.playersLine.innerHTML = (s.players || []).map(p=>{
       if (!p) return "";
+      const dot = COLORS?.[p.color] || "rgba(255,255,255,.35)";
+      const isHost = (p.id === hostId);
       return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
-        <span style="width:10px;height:10px;border-radius:999px;background:${COLORS[p.color]};border:1px solid rgba(255,255,255,.18)"></span>
-        <span style="color:rgba(233,236,255,.92)">${escapeHtml(p.name)}</span>
-        <span style="color:rgba(233,236,255,.55);font-size:12px">(${p.color})</span>
-        ${p.id===s.hostId ? `<span style="margin-left:auto;color:var(--muted);font-size:11px;border:1px solid rgba(255,255,255,.12);padding:2px 6px;border-radius:999px">HOST</span>` : ""}
+        <span style="width:10px;height:10px;border-radius:999px;background:${dot};
+          border:1px solid rgba(255,255,255,.18)"></span>
+        <span style="color:rgba(233,236,255,.92)">${escapeHtml(p.name || "Player")}</span>
+        ${p.color ? `<span style="color:rgba(233,236,255,.55);font-size:12px">(${escapeHtml(p.color)})</span>` : ""}
+        ${isHost ? `<span style="margin-left:auto;color:var(--muted);font-size:11px;border:1px solid rgba(255,255,255,.12);
+          padding:2px 6px;border-radius:999px">HOST</span>` : ""}
       </div>`;
     }).join("");
   }
 
-  updateInspector();
+  updateInspector?.();
 
   // nếu inspector đang mở mà target mất -> hide, còn thì reposition
   const ins = document.getElementById("inspector");
   if (ins && ins.style.display === "block"){
     const sel = client.selected;
-    if (!sel) hideInspectorPopup();
+    if (!sel) hideInspectorPopup?.();
     else {
-      const wp = getWorldPosOfTarget(s, sel);
-      if (!wp) hideInspectorPopup();
-      else positionInspectorNearTarget();
+      const wp = getWorldPosOfTarget?.(s, sel);
+      if (!wp) hideInspectorPopup?.();
+      else positionInspectorNearTarget?.();
     }
   }
 
@@ -4076,19 +4118,19 @@ const pMe = (s?.players || []).find(p => p && p.id === uid) || null;
       : "Đang chơi...";
   }
 
-  // host controls: chỉ host
   const hostCanSetup = !!client.isHost;
   if (UI.hostSetupControls){
     UI.hostSetupControls.style.display = (hostCanSetup && phase === "setup") ? "" : "none";
     if (hostCanSetup && phase === "setup"){
       if (UI.hostSetSelect && UI.hostSetSelect.options.length === 0){
-        refreshHostSetSelect().catch(()=>{});
+        refreshHostSetSelect?.().catch(()=>{});
       }
     }
   }
 
   renderChat?.();
 }
+
 
 async function sendIntent(action){
   if (!client.transport) return;
