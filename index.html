@@ -233,6 +233,13 @@
       border-radius:999px;
     }
 
+    #roomList::-webkit-scrollbar{ width:10px; }
+    #roomList::-webkit-scrollbar-thumb{
+      background: rgba(255,255,255,.10);
+      border:3px solid rgba(0,0,0,0);
+      background-clip: padding-box;
+      border-radius:999px;
+    }
     
     #cardUrlList::-webkit-scrollbar{ width:10px; }
     #cardUrlList::-webkit-scrollbar-thumb{
@@ -1523,7 +1530,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
                 </div>
               </div>
               <!-- list -->
-              <div style="padding: 5px; height: 75%;">
+              <div id="roomList" style="padding: 5px; height: 75%; overflow: auto;">
                 <div id="listRoom" style="display: flex;
                 flex-direction: column;
                 gap: 5px;
@@ -4839,6 +4846,10 @@ async function joinRoomAsClient_Firebase(opts = {}){
   const metaSnap = await roomRef.child("meta").get();
   if (!metaSnap.exists()) return toast("Room không tồn tại / đã đóng");
   const meta = metaSnap.val() || {};
+  client.roomMeta = client.roomMeta || { roomNo:null, roomId:null };
+  client.roomMeta.roomNo = meta.roomNo ?? client.roomMeta.roomNo;
+  client.roomMeta.roomId = client.roomId;
+  client.roomMeta.roomName = meta.roomName || client.roomMeta.roomName;
 
   if (!opts.skipPasswordCheck && meta.hasPassword){
     const pass = prompt("Phòng có mật khẩu. Nhập mật khẩu để vào:");
