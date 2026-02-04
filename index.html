@@ -3961,25 +3961,20 @@ const client = {
   selfName: "",
   roomCode: "",
   roomId: "",
-  roomMeta: { roomNo:null, roomId:null },
+  roomMeta: { roomNo:null, roomId:null, roomName:null,},
 
   isHost: false,
   transport: null,
   host: null,
-
-  // ✅ TÁCH 2 NGUỒN
-  authoritativeState: null,  // state đã redact cho viewer (từ listenState)
-  lobby: {                   // meta/users/seatClaims (từ listeners lobby)
-    meta: {},
-    users: {},
-    seatClaimsPlay: {},
-  },
-
+  authoritative: null,   // ✅ giữ nguyên (state redact)
   lastVersion: 0,
+
+  lobby: { meta:{}, users:{}, seatClaimsPlay:{} },
 
   selected: null,
   dragging: null,
 };
+  
 window.client = client;
 
 let _presenceCb = null;
@@ -4016,10 +4011,12 @@ function setStatusUI(){
   }
 
   // ===== ROOM BADGE =====
-  if (UI.roomBadge){
-    const roomName = client.roomMeta?.roomName || client.roomCode || "—";
-    UI.roomBadge.textContent = `PHÒNG: ${roomName}`;
-  }
+  const roomName =
+    client.lobby.meta?.roomName ||
+    client.roomMeta?.roomName ||
+    client.roomCode || "—";
+  
+  UI.roomBadge.textContent = `PHÒNG: ${roomName}`;
 
   UI.chatBadge && (UI.chatBadge.textContent = "v" + (s.version || 0));
 
@@ -4385,39 +4382,43 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
     }
   }
 }
+  
 function installLobbyRealtimeListeners(roomRef){
-  // gỡ cũ nếu có (tránh nhân bản khi join lại)
+  // ===== META =====
   try{ if (_metaCb) roomRef.child("meta").off("value", _metaCb); }catch(e){}
-  try{ if (_seatClaimsCb) roomRef.child("seatClaims/play").off("value", _seatClaimsCb); }catch(e){}
-
   _metaCb = (snap)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._meta = snap.val() || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(
-        client.roomId,
-        client.authoritative._meta,
-        client.authoritative._users || {},
-        client.authoritative._seatClaimsPlay || {}
-      );
+    client.lobby.meta = snap.val() || {};
+
+    // sync roomMeta cho status UI
+    if (client.lobby.meta?.roomName){
+      client.roomMeta.roomName = client.lobby.meta.roomName;
     }
+
+    setStatusUI?.();
+    renderLobby?.(
+      client.roomId,
+      client.lobby.meta,
+      client.lobby.users,
+      client.lobby.seatClaimsPlay
+    );
   };
   roomRef.child("meta").on("value", _metaCb);
 
+  // ===== SEAT CLAIMS =====
+  try{ if (_seatClaimsCb) roomRef.child("seatClaims/play").off("value", _seatClaimsCb); }catch(e){}
   _seatClaimsCb = (snap)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._seatClaimsPlay = snap.val() || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(
-        client.roomId,
-        client.authoritative._meta || {},
-        client.authoritative._users || {},
-        client.authoritative._seatClaimsPlay
-      );
-    }
+    client.lobby.seatClaimsPlay = snap.val() || {};
+    setStatusUI?.();
+    renderLobby?.(
+      client.roomId,
+      client.lobby.meta,
+      client.lobby.users,
+      client.lobby.seatClaimsPlay
+    );
   };
   roomRef.child("seatClaims/play").on("value", _seatClaimsCb);
 }
+
 
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
@@ -4462,29 +4463,24 @@ async function createRoomAsHost_Firebase(){
   await roomRef.set({
     meta,
     presence: {},
-    users: {},
     intents: {},
     state: client.host.state,
-    seatClaims: { play: {} },
+
+    users: {
+      [FB.uid]: {
+        username: FB.username,
+        joinedAt: Date.now(),
+        role: "player",
+        playSeat: 0,
+        atk: 0, def: 0, hp: 0, coin: 0,
+      }
+    },
+    seatClaims: {
+      play: { 0: FB.uid }
+    },
   });
 
   await FB.db.ref(`AllRoomMeta/${client.roomId}`).set(meta);
-
-  // ✅ host ngồi ghế 0 (HOST SEAT)
-  await roomRef.child(`users/${FB.uid}`).set({
-    username: FB.username,
-    joinedAt: Date.now(),
-    role: "player",
-    playSeat: 0,
-    atk: 0, def: 0, hp: 20, coin: 0,
-  });
-
-  // ✅ claim ghế 0
-  await roomRef.child(`seatClaims/play/0`).set(FB.uid).catch(()=>{});
-
-  // ✅ hostId = người ngồi ghế 0
-  await roomRef.child(`meta/hostId`).set(FB.uid).catch(()=>{});
-  await roomRef.child(`meta/hostUid`).set(FB.uid).catch(()=>{});
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
   client.lastVersion = client.authoritative.version;
@@ -4498,16 +4494,14 @@ async function createRoomAsHost_Firebase(){
 
   // users listener (qua transport)
   t.listenUsers((users)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._users = users || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(
-        client.roomId,
-        client.authoritative._meta || {},
-        client.authoritative._users,
-        client.authoritative._seatClaimsPlay || {}
-      );
-    }
+    client.lobby.users = users || {};
+    setStatusUI?.();
+    renderLobby?.(
+      client.roomId,
+      client.lobby.meta,
+      client.lobby.users,
+      client.lobby.seatClaimsPlay
+    );
   });
 
   await t.attachPresence();
@@ -4877,18 +4871,15 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
   // users listener (transport)
   t.listenUsers((users)=>{
-    if (!client.authoritative) client.authoritative = {};
-    client.authoritative._users = users || {};
-    if (typeof renderLobby === "function"){
-      renderLobby(
-        client.roomId,
-        client.authoritative._meta || {},
-        client.authoritative._users,
-        client.authoritative._seatClaimsPlay || {}
-      );
-    }
+    client.lobby.users = users || {};
+    setStatusUI?.();
+    renderLobby?.(
+      client.roomId,
+      client.lobby.meta,
+      client.lobby.users,
+      client.lobby.seatClaimsPlay
+    );
   });
-
   await t.attachPresence();
 
   // ✅ avoid duplicate presence listener
