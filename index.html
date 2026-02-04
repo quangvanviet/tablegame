@@ -1327,16 +1327,17 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     }
     
     .seat2{
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
       width: 100%;
-      min-height: 56px;
+      min-height: 54px;
       border-radius: 14px;
       border: 1px dashed rgba(255,255,255,.18);
       background: rgba(255,255,255,.06);
       color: inherit;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 10px;
+      gap: 2px;
       padding: 10px 12px;
       cursor: pointer;
       transition: transform .08s ease, background .12s ease, border-color .12s ease;
@@ -1908,7 +1909,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
                 (Player)</div>
             </div>
             <div style="display: flex;justify-content: flex-end;align-items: center; width: 10%;align-content: center;">
-              <button class="collapse-btn" data-target="mainWaitingRoom">-</button>
+              <button class="collapse-btn" data-target="mainWaitingRoom">−</button>
             </div>
           </header>
     
@@ -4337,7 +4338,7 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
       if (isMe){
         btn.innerHTML = `
           <div class="name">${escapeHtml(name)}</div>
-          <div class="meta">${label} • Click để xuống chờ</div>
+          <div class="meta">Click để xuống chờ</div>
         `;
         btn.disabled = false;
         btn.onclick = ()=> requestUnseat(roomId);
@@ -4350,9 +4351,9 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
       }
     } else {
       btn.classList.add("empty");
-      const label = isHostSeat ? "HOST" : `Ghế ${seat+1}`;
+      const label = isHostSeat ? "Ghế chủ phòng" : `Ghế ${seat+1}`;
       btn.innerHTML = `
-        <div class="name">${label} trống</div>
+        <div class="name">${label}</div>
         <div class="meta">Click để ngồi</div>
       `;
       btn.disabled = false;
@@ -4377,7 +4378,7 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
     for (const [uid,u] of spectators){
       const chip = document.createElement("div");
       chip.className = "spec-chip";
-      chip.innerHTML = `<div class="n">${escapeHtml(u?.username||"—")}</div><div class="id">${escapeHtml(uid.slice(0,6))}</div>`;
+      chip.innerHTML = `<div class="n">${escapeHtml(u?.username||"—")}</div>`;
       specList.appendChild(chip);
     }
   }
