@@ -3997,7 +3997,7 @@ function getState(){
 }
 
 function setStatusUI(){
-  const s = client.authoritative; // state redact (giữ nguyên)
+  const s = client.authoritative;
   if (!s){
     UI.roomBadge && (UI.roomBadge.textContent = "—");
     UI.meLine && (UI.meLine.textContent = "—");
@@ -4009,9 +4009,8 @@ function setStatusUI(){
   }
 
   // ===== ROOM BADGE =====
-  // ⚠️ Bạn không có roomName trong client/state -> chỉ có roomCode/roomId.
-  // Nếu muốn roomName thật, bạn phải lưu nó vào client.roomMeta.roomName khi join/create.
   if (UI.roomBadge){
+    console.log("roomName", client.roomMeta.roomName)
     const roomName =
       client.roomMeta?.roomName ||
       s.meta?.roomName ||          // (nếu bạn có nhét meta vào state — thường là không)
