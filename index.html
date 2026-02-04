@@ -1894,7 +1894,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <div class="hud lobby-hud">
       <div class="lobby-layout">
         <!-- RIGHT: LOBBY -->
-        <div style="min-width: 460px;" class="panel lobby-card lobby-main">
+        <div id="mainWaitingRoom" style="min-width: 460px;" class="panel lobby-card lobby-main">
           <header class="lobby-card-hd" style="display: flex;
           flex-direction: row;
           align-content: center;
@@ -1905,14 +1905,14 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               <div class="title">PHÒNG: </div><div class="badge" id="roomBadge">—</div>
             </div>
             <div style="display: flex;justify-content: flex-end;align-items: center; width: 10%;align-content: center;">
-              <button class="collapse-btn" data-target="waitingRoom">+</button>
+              <button class="collapse-btn" data-target="mainWaitingRoom">+</button>
             </div>
           </header>
     
-          <div class="lobby-card-bd">
+          <div class="content lobby-card-bd">
     
             <!-- Seats -->
-            <div id="waitingRoom" class="content waiting-room2" style="padding: 0px;">
+            <div id="waitingRoom" class="waiting-room2">
               <div class="wr2-top">    
                 <div class="wr2-players">
                   <div class="kv">
