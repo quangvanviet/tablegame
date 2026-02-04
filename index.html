@@ -4017,15 +4017,7 @@ function setStatusUI(){
 
   // ===== ROOM BADGE =====
   if (UI.roomBadge){
-    console.log("roomName", client)
-    console.log("roomName", s)
-    const roomName =
-      client.roomMeta?.roomName ||
-      s.meta?.roomName ||          // (nếu bạn có nhét meta vào state — thường là không)
-      client.roomCode ||
-      s.roomCode ||
-      client.roomId ||
-      "—";
+    const roomName = client.roomMeta?.roomName || client.roomCode || "—";
     UI.roomBadge.textContent = `PHÒNG: ${roomName}`;
   }
 
