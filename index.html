@@ -4542,12 +4542,12 @@ async function createRoomAsHost_Firebase(){
 
   const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`);
 
+  // ✅ ghi room trước
   await roomRef.set({
     meta,
     presence: {},
     intents: {},
     state: client.host.state,
-
     users: {
       [FB.uid]: {
         username: FB.username,
@@ -4557,19 +4557,22 @@ async function createRoomAsHost_Firebase(){
         atk: 0, def: 0, hp: 0, coin: 0,
       }
     },
-    seatClaims: {
-      play: { 0: FB.uid }
-    },
+    seatClaims: { play: { 0: FB.uid } },
   });
-  await t.writeState(client.host.state);
+
+  // ✅ mirror meta để list phòng
   await FB.db.ref(`AllRoomMeta/${client.roomId}`).set(meta);
+
+  // ✅ tạo transport TRƯỚC khi dùng t.*
+  const t = new FirebaseTransport(client.roomId);
+  installTransport(t);
+
+  // ✅ đảm bảo state được write ra DB ngay (để move/draw không bị reject do state chưa sync)
+  await t.writeState(client.host.state);
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
   client.lastVersion = client.authoritative.version;
   setStatusUI();
-
-  const t = new FirebaseTransport(client.roomId);
-  installTransport(t);
 
   // listen lobby meta + seatClaims
   installLobbyRealtimeListeners(roomRef);
@@ -4593,31 +4596,25 @@ async function createRoomAsHost_Firebase(){
     const action = msg.action;
     const fromId = msg.fromId;
 
-    // --- JOIN/LEAVE ---
+    // --- JOIN/LEAVE/SIT/UNSIT: chỉ rebuild từ lobby ---
     if (action?.type === "join"){
       await hostRebuildPlayersFromLobby(roomRef);
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
-    
-    // SIT
     if (action?.type === "sit"){
       await hostRebuildPlayersFromLobby(roomRef);
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
-    
-    // UNSIT
     if (action?.type === "unsit"){
       await hostRebuildPlayersFromLobby(roomRef);
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
-    
-    // LEAVE
     if (action?.type === "leave"){
       try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
       await hostRebuildPlayersFromLobby(roomRef);
@@ -4626,20 +4623,13 @@ async function createRoomAsHost_Firebase(){
       return;
     }
 
-
-    // apply intent vào bàn (move/flip/draw...)
+    // --- gameplay intents (move/flip/draw...) ---
     const r = client.host.applyIntent(fromId, action);
     if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
 
-    const shouldWrite =
-      (action?.type === "join") ||
-      (action?.type === "leave") ||
-      (!!r.ok);
-
-    if (shouldWrite){
+    if (r.ok){
       await t.writeState(client.host.state);
     }
-
     await t.ackIntent(intentRef);
   });
 
@@ -4656,13 +4646,14 @@ async function createRoomAsHost_Firebase(){
   });
 
   toast(`Đã tạo room: ${roomId}`);
-  client.roomMeta = { roomNo, roomId, roomName};
+  client.roomMeta = { roomNo, roomId, roomName };
 
   installFirebaseRoomCleanup(client.roomId, roomNo);
 
   toggleCreateRoomPopup(false);
   goMatch();
 }
+
 
 async function hostRebuildPlayersFromLobby(roomRef){
   const [usersSnap, seatSnap, metaSnap] = await Promise.all([
