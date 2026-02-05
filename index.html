@@ -3093,26 +3093,70 @@ function ensureStateShape(state){
 }
 
 function redactStateForViewer(state, viewerId){
-  const s = ensureStateShape(state);
-  if (!s) return null;
+  const base = ensureStateShape(state);
+  if (!base) return null;
 
-  const viewer = s.players.find(p => p && p.id === viewerId) || null;
+  // ✅ clone nông để tránh mutate trực tiếp state gốc
+  const s = { ...base };
 
-  for (const cardId in s.cards){
-    const c = s.cards[cardId];
-    if (!c) continue;
+  // ✅ normalize players về đúng 4 ghế (0..3), dù Firebase trả array hay object
+  const srcP = base.players;
+  const players = [null, null, null, null];
 
-    // che bài người khác trên tay
-    if (c.zone === ZONES.hand && c.owner && c.owner !== viewerId){
+  if (Array.isArray(srcP)){
+    for (let i=0;i<4;i++){
+      const p = srcP[i];
+      players[i] = (p && typeof p === "object") ? p : null;
+    }
+  } else if (srcP && typeof srcP === "object"){
+    for (let i=0;i<4;i++){
+      const p = srcP[i] || srcP[String(i)] || null;
+      players[i] = (p && typeof p === "object") ? p : null;
+    }
+  }
+  s.players = players;
+
+  // ✅ tìm viewer (không dùng .find trên object nữa)
+  let viewer = null;
+  for (let i=0;i<4;i++){
+    const p = players[i];
+    if (p && p.id === viewerId){ viewer = p; break; }
+  }
+
+  // ✅ cards có thể nằm ở s.cards hoặc s.all.cards (tuỳ version code)
+  const srcCards = (base.all && base.all.cards) ? base.all.cards : (base.cards || {});
+  const cards = { ...srcCards };
+
+  // che bài người khác trên tay
+  for (const cardId in cards){
+    const c0 = cards[cardId];
+    if (!c0) continue;
+
+    // clone card object để không mutate bản gốc
+    const c = { ...c0 };
+
+    const ownerId = (c.ownerId ?? c.owner ?? null);
+
+    if (c.zone === ZONES.hand && ownerId && ownerId !== viewerId){
       c.faceUp = false;
       c.frontSeed = 0;
       if (c.frontUrl) c.frontUrl = "";
     }
+
+    cards[cardId] = c;
   }
 
-  s._viewer = viewer ? {id: viewer.id, name: viewer.name, color: viewer.color} : null;
+  // gắn lại vào đúng chỗ
+  if (base.all && base.all.cards){
+    s.all = { ...(base.all || {}), cards };
+  } else {
+    s.cards = cards;
+  }
+
+  s._viewer = viewer ? { id: viewer.id, name: viewer.name, color: viewer.color } : null;
   return s;
 }
+
 
 /* =========================================================
    8) Host Controller (Authoritative) - Firebase-only
