@@ -4278,7 +4278,6 @@ async function requestSit(roomId, seat){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
   }
-  try{ await client.transport?.sendIntent?.({ type:"sit", seat: seat|0 }); }catch(e){}
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
 
@@ -4313,7 +4312,6 @@ async function requestUnseat(roomId){
     await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
     await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
   }
-  try{ await client.transport?.sendIntent?.({ type:"unsit" }); }catch(e){}
   toast("Đã xuống ghế chờ");
 }
 function seatColorByUid(uid){
@@ -6293,15 +6291,18 @@ function draw(){
   }
 
   const seatName = (seat)=>{
-    const p = (s.players||[]).find(pp => pp && (Number(pp.seat)|0) === seat);
+    const p = (s.players||[])[seat] || null;
     return p?.name || "(empty)";
   };
 
   drawZone(rects.table, "TABLE", "", false);
 
   const selfId = client.selfId || FB?.uid || "";
-  const me = (s.players||[]).find(p => p && p.id === selfId);
-  const mySeat = me ? (Number(me.seat) | 0) : -1;
+  let mySeat = -1;
+  for (let i=0;i<4;i++){
+    const p = (s.players||[])[i];
+    if (p && p.id === selfId){ mySeat = i; break; }
+  }
 
   // ✅ privacy: chỉ chủ hand mới được thấy mặt trước
   const canSeeFront = (card) => {
@@ -6315,7 +6316,8 @@ function draw(){
     return (ownerId && ownerId === selfId) ? !!card.faceUp : false;
   };
 
-  const playerBySeat = (seat)=> (s.players||[]).find(pp => pp && (Number(pp.seat)|0) === seat) || null;
+  const playerBySeat = (seat)=> ((s.players||[])[seat] || null);
+
   const tintBySeat = (seat)=>{
     const p = playerBySeat(seat);
     return p ? (COLORS?.[p.color] ?? null) : null;
