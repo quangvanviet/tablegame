@@ -2989,7 +2989,10 @@ function makeFreshTableState(roomCode, hostId){
   const st = {
     roomCode,
     hostId,
-    players: [],
+
+    // ✅ 4 ghế cố định, KHÔNG dồn mảng
+    players: [null, null, null, null],
+
     version: 1,
     assets: { backUrl:"" },  // back chung
     game: { phase:"setup" },
@@ -3074,7 +3077,25 @@ function hostCreateDeckFromSet(st, types, deckName="Deck"){
   
 function ensureStateShape(state){
   const s = deepClone(state || {});
-  if (!Array.isArray(s.players)) s.players = [];
+
+  // ✅ normalize players: array OR object -> fixed 4 slots
+  const outPlayers = [null, null, null, null];
+  const srcP = s.players;
+
+  if (Array.isArray(srcP)){
+    for (let i=0;i<4;i++){
+      const p = srcP[i];
+      outPlayers[i] = (p && typeof p === "object") ? p : null;
+    }
+  } else if (srcP && typeof srcP === "object"){
+    for (let i=0;i<4;i++){
+      const p = srcP[i] || srcP[String(i)] || null;
+      outPlayers[i] = (p && typeof p === "object") ? p : null;
+    }
+  }
+  s.players = outPlayers;
+
+  // phần còn lại giữ nguyên logic của bạn
   if (!s.assets) s.assets = { backUrl:"" };
   if (!s.game) s.game = { phase:"setup" };
   if (!s.ui) s.ui = { statHeaders:["ATK","DEF","HP","COIN"], statsByPlayer:{} };
@@ -3091,6 +3112,7 @@ function ensureStateShape(state){
   s.version = typeof s.version === "number" ? s.version : 1;
   return s;
 }
+
 
 function redactStateForViewer(state, viewerId){
   const base = ensureStateShape(state);
