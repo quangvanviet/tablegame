@@ -4561,7 +4561,7 @@ async function createRoomAsHost_Firebase(){
       play: { 0: FB.uid }
     },
   });
-
+  await t.writeState(client.host.state);
   await FB.db.ref(`AllRoomMeta/${client.roomId}`).set(meta);
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
@@ -4593,74 +4593,39 @@ async function createRoomAsHost_Firebase(){
     const action = msg.action;
     const fromId = msg.fromId;
 
-    // --- JOIN/LEAVE bookkeeping theo lobby mới ---
+    // --- JOIN/LEAVE ---
     if (action?.type === "join"){
       await hostRebuildPlayersFromLobby(roomRef);
-      try{
-        const uSnap = await roomRef.child(`users/${fromId}`).get();
-        const u = uSnap.val() || {};
-        if (Number.isInteger(u.playSeat)){
-          const seat = u.playSeat|0;
-          const uname = u.username || msg.fromName || "Player";
-          client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
-          await t.writeState(client.host.state);
-        }
-      }catch(e){}
+      await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
-
-    // --- lobby seat -> state.players mapping ---
+    
+    // SIT
     if (action?.type === "sit"){
-      const seat = action.seat|0;
       await hostRebuildPlayersFromLobby(roomRef);
-      // chỉ cho ngồi 0..3
-      if (seat < 0 || seat > 3){
-        await t.ackIntent(intentRef);
-        return;
-      }
-    
-      // lấy username từ users để set name
-      let uname = msg.fromName || "Player";
-      try{
-        const uSnap = await roomRef.child(`users/${fromId}`).get();
-        const u = uSnap.val() || {};
-        uname = u.username || uname;
-      }catch(e){}
-    
-      // ✅ ÉP add vào đúng seat
-      const rr = client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
-      if (rr?.ok){
-        await t.writeState(client.host.state);
-      }
+      await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
     
+    // UNSIT
     if (action?.type === "unsit"){
       await hostRebuildPlayersFromLobby(roomRef);
-      client.host.removePlayer(fromId);
+      await t.writeState(client.host.state);
+      await t.ackIntent(intentRef);
+      return;
+    }
+    
+    // LEAVE
+    if (action?.type === "leave"){
+      try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
+      await hostRebuildPlayersFromLobby(roomRef);
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
 
-    if (action?.type === "leave"){
-      await hostRebuildPlayersFromLobby(roomRef);
-      client.host.removePlayer(fromId);
-      try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
-      // (seatClaims release làm ở leaveRoom/requestUnseat của client)
-    }else{
-      // update name nếu player đã ở state.players
-      const st = client.host.state;
-      for (let i=0; i<4; i++){
-        const p = st.players?.[i];
-        if (p && p.id === fromId){
-          p.name = msg.fromName || p.name;
-          break;
-        }
-      }
-    }
 
     // apply intent vào bàn (move/flip/draw...)
     const r = client.host.applyIntent(fromId, action);
@@ -6381,6 +6346,7 @@ function draw(){
   const backUrlDefault = s.assets?.backUrl || "";
 
   for (const o of objs){
+    if (!o) continue;
     const isSelected = client.selected && client.selected.type === o.type && client.selected.id === o.id;
   
     let wx = o.x, wy = o.y;
@@ -6398,7 +6364,7 @@ function draw(){
       const c = getCardById(s, o.id);
       if (!c) continue;
   
-      const owner = s.players?.find(p=>p.id===(c.ownerId || c.owner)) || null;
+      const owner = (s.players || []).find(p => p && p.id === (c.ownerId || c.owner)) || null;
       const accent = owner ? COLORS[owner.color] : null;
   
       // ✅ model mới: frontUrl nằm trực tiếp trên card
@@ -6427,7 +6393,7 @@ function draw(){
       const top = topId ? getCardById(s, topId) : null;
     
       const topOwnerId = (top?.ownerId || top?.owner || stack.owner);
-      const owner = s.players?.find(p=>p.id===topOwnerId) || null;
+      const owner = (s.players || []).find(p => p && p.id === topOwnerId) || null;
       const accent = owner ? COLORS[owner.color] : null;
     
       const count = (stack.cardIds?.length || 0);
