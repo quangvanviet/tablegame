@@ -3294,7 +3294,9 @@ class HostController {
 
     // chỉ allow nếu đã join (trừ action join)
     const player = (st.players || []).find(p => p && p.id === fromId);
-    if (!player && action?.type !== "join") return { ok:false, reason:"Not in room" };
+    const isHost = (fromId === (st.hostId || ""));
+    if (!player && !isHost && action?.type !== "join") return { ok:false, reason:"Not in room" };
+
 
     const rects = zoneRects();
 
@@ -4499,6 +4501,7 @@ function installLobbyRealtimeListeners(roomRef){
 }
 
 
+  
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
@@ -4592,6 +4595,7 @@ async function createRoomAsHost_Firebase(){
 
     // --- JOIN/LEAVE bookkeeping theo lobby mới ---
     if (action?.type === "join"){
+      await hostRebuildPlayersFromLobby(roomRef);
       try{
         const uSnap = await roomRef.child(`users/${fromId}`).get();
         const u = uSnap.val() || {};
@@ -4609,7 +4613,7 @@ async function createRoomAsHost_Firebase(){
     // --- lobby seat -> state.players mapping ---
     if (action?.type === "sit"){
       const seat = action.seat|0;
-    
+      await hostRebuildPlayersFromLobby(roomRef);
       // chỉ cho ngồi 0..3
       if (seat < 0 || seat > 3){
         await t.ackIntent(intentRef);
@@ -4634,6 +4638,7 @@ async function createRoomAsHost_Firebase(){
     }
     
     if (action?.type === "unsit"){
+      await hostRebuildPlayersFromLobby(roomRef);
       client.host.removePlayer(fromId);
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
@@ -4641,6 +4646,7 @@ async function createRoomAsHost_Firebase(){
     }
 
     if (action?.type === "leave"){
+      await hostRebuildPlayersFromLobby(roomRef);
       client.host.removePlayer(fromId);
       try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
       // (seatClaims release làm ở leaveRoom/requestUnseat của client)
@@ -4693,6 +4699,56 @@ async function createRoomAsHost_Firebase(){
   goMatch();
 }
 
+async function hostRebuildPlayersFromLobby(roomRef){
+  const [usersSnap, seatSnap, metaSnap] = await Promise.all([
+    roomRef.child("users").get(),
+    roomRef.child("seatClaims/play").get(),
+    roomRef.child("meta").get(),
+  ]);
+
+  const users = usersSnap.val() || {};
+  const seatClaims = seatSnap.val() || {};
+  const meta = metaSnap.val() || {};
+
+  const st = client.host._ensureState ? client.host._ensureState() : client.host.state;
+  st.players = Array.isArray(st.players) ? st.players : [];
+
+  // clear đủ 4 slot
+  for (let i=0;i<4;i++) st.players[i] = null;
+
+  // rebuild theo seatClaims (key có thể là "0","1","2","3")
+  for (let seat=0; seat<4; seat++){
+    const uid = seatClaims?.[seat] || seatClaims?.[String(seat)] || null;
+    if (!uid) continue;
+
+    const u = users?.[uid] || {};
+    const name = u.username || "Player";
+
+    // ✅ color đồng bộ theo seat
+    const color = (Array.isArray(COLOR_ORDER) && COLOR_ORDER.length)
+      ? (COLOR_ORDER[seat % COLOR_ORDER.length] || "gray")
+      : (["red","blue","green","purple"][seat] || "gray");
+
+    st.players[seat] = {
+      id: uid,
+      name,
+      color,
+      seat,
+      connectedAt: st.players[seat]?.connectedAt || now(),
+    };
+
+    ensureUIState(st);
+    if (!st.ui.statsByPlayer[uid]) st.ui.statsByPlayer[uid] = ["","","",""];
+  }
+
+  // hostId trong state = meta.hostId (để host-only ok)
+  st.hostId = meta.hostId || meta.hostUid || st.hostId || "";
+
+  client.host.bumpVersion?.();
+  return st;
+}
+
+  
 // ===============================
 //  ROOM LIST UI + JOIN WITH PASS POPUP (FULL)
 //  - listen AllRoomMeta (light)
@@ -5175,6 +5231,7 @@ async function startHostAuthority(roomId){
 
     // --- A) JOIN: chỉ sync name/players nếu user đang NGỒI GHẾ (playSeat != null) ---
     if (action?.type === "join"){
+      await hostRebuildPlayersFromLobby(roomRef);
       try{
         const u = (await roomRef.child(`users/${fromId}`).get()).val() || {};
         if (Number.isInteger(u.playSeat)){
@@ -5190,6 +5247,7 @@ async function startHostAuthority(roomId){
 
     // --- B) SIT/UNSIT: lobby seat -> state.players mapping ---
     if (action?.type === "sit"){
+      await hostRebuildPlayersFromLobby(roomRef);
       const seat = action.seat|0;
       if (seat < 0 || seat > 3){
         try{ await t.ackIntent(intentRef); }catch(e){}
@@ -5211,6 +5269,7 @@ async function startHostAuthority(roomId){
     }
 
     if (action?.type === "unsit"){
+      await hostRebuildPlayersFromLobby(roomRef);
       client.host.removePlayer(fromId);
       await t.writeState(client.host.state);
       try{ await t.ackIntent(intentRef); }catch(e){}
@@ -5219,6 +5278,7 @@ async function startHostAuthority(roomId){
 
     // --- C) LEAVE: remove khỏi state.players, xoá user entry (seatClaims đã release ở client leave/unseat) ---
     if (action?.type === "leave"){
+      await hostRebuildPlayersFromLobby(roomRef);
       client.host.removePlayer(fromId);
       try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
       await t.writeState(client.host.state);
