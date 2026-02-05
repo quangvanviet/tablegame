@@ -4278,7 +4278,7 @@ async function requestSit(roomId, seat){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
   }
-
+  try{ await client.transport?.sendIntent?.({ type:"sit", seat: seat|0 }); }catch(e){}
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
 
@@ -4313,7 +4313,7 @@ async function requestUnseat(roomId){
     await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
     await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
   }
-
+  try{ await client.transport?.sendIntent?.({ type:"unsit" }); }catch(e){}
   toast("Đã xuống ghế chờ");
 }
 function seatColorByUid(uid){
@@ -4500,8 +4500,6 @@ function installLobbyRealtimeListeners(roomRef){
   roomRef.child("seatClaims/play").on("value", _seatClaimsCb);
 }
 
-
-  
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
 
@@ -4653,7 +4651,6 @@ async function createRoomAsHost_Firebase(){
   toggleCreateRoomPopup(false);
   goMatch();
 }
-
 
 async function hostRebuildPlayersFromLobby(roomRef){
   const [usersSnap, seatSnap, metaSnap] = await Promise.all([
