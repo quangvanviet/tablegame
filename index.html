@@ -4644,6 +4644,11 @@ async function createRoomAsHost_Firebase(){
 
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
+    console.log("RAW st.players =", st?.players, "keys=", st?.players && Object.keys(st.players));
+    const red = redactStateForViewer(st, FB.uid);
+    console.log("RED players =", red?.players, "keys=", red?.players && Object.keys(red.players));
+    client.authoritative = red
+    
     if (client.isHost && client.host){
       client.host.state = st;
       client.authoritative = redactStateForViewer(st, FB.uid);
@@ -5046,11 +5051,16 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
+    console.log("RAW st.players =", st?.players, "keys=", st?.players && Object.keys(st.players));
     const red = redactStateForViewer(st, FB.uid);
     if (!red) return;
     client.authoritative = red;
     client.lastVersion = red.version || client.lastVersion;
     setStatusUI();
+
+    
+    console.log("RED players =", red?.players, "keys=", red?.players && Object.keys(red.players));
+    client.authoritative = red;
   });
 
   toast("Đã vào " + client.roomCode);
