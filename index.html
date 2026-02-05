@@ -6291,7 +6291,8 @@ function draw(){
   }
 
   const seatName = (seat)=>{
-    const p = (s.players||[])[seat] || null;
+    const ps = s.players || {};
+    const p = ps[seat] || ps[String(seat)] || null;
     return p?.name || "(empty)";
   };
 
@@ -6301,10 +6302,15 @@ function draw(){
 
   const selfId = client.selfId || FB?.uid || "";
   let mySeat = -1;
-  for (let i=0;i<4;i++){
-    const p = (s.players||[])[i];
-    if (p && p.id === selfId){ mySeat = i; break; }
+  const ps = s.players || {};
+  for (let i = 0; i < 4; i++){
+    const p = ps[i] || ps[String(i)] || null;
+    if (p && p.id === selfId){
+      mySeat = i;
+      break;
+    }
   }
+
 
   // ✅ privacy: chỉ chủ hand mới được thấy mặt trước
   const canSeeFront = (card) => {
@@ -6318,7 +6324,11 @@ function draw(){
     return (ownerId && ownerId === selfId) ? !!card.faceUp : false;
   };
 
-  const playerBySeat = (seat)=> ((s.players||[])[seat] || null);
+  const playerBySeat = (seat)=>{
+    const ps = s.players || {};
+    return ps[seat] || ps[String(seat)] || null;
+  };
+
 
   const tintBySeat = (seat)=>{
     const p = playerBySeat(seat);
@@ -6359,7 +6369,16 @@ function draw(){
       const c = getCardById(s, o.id);
       if (!c) continue;
   
-      const owner = (s.players || []).find(p => p && p.id === (c.ownerId || c.owner)) || null;
+      let owner = null;
+      const ps = s.players || {};
+      for (let i = 0; i < 4; i++){
+        const p = ps[i] || ps[String(i)] || null;
+        if (p && p.id === (c.ownerId || c.owner)){
+          owner = p;
+          break;
+        }
+      }
+
       const accent = owner ? COLORS[owner.color] : null;
   
       // ✅ model mới: frontUrl nằm trực tiếp trên card
