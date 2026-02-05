@@ -4643,11 +4643,8 @@ async function createRoomAsHost_Firebase(){
   });
 
   t.listenState((st)=>{
-    //if (!st || typeof st !== "object") return;
-    console.log("RAW st.players =", st?.players, "keys=", st?.players && Object.keys(st.players));
+    if (!st || typeof st !== "object") return;
     const red = redactStateForViewer(st, FB.uid);
-    console.log("RED players =", red?.players, "keys=", red?.players && Object.keys(red.players));
-    client.authoritative = red
     
     if (client.isHost && client.host){
       client.host.state = st;
@@ -5050,17 +5047,12 @@ async function joinRoomAsClient_Firebase(opts = {}){
   await t.sendIntent({ type: "join" });
 
   t.listenState((st)=>{
-    //if (!st || typeof st !== "object") return;
-    console.log("RAW st.players =", st?.players, "keys=", st?.players && Object.keys(st.players));
+    if (!st || typeof st !== "object") return;
     const red = redactStateForViewer(st, FB.uid);
     if (!red) return;
     client.authoritative = red;
     client.lastVersion = red.version || client.lastVersion;
     setStatusUI();
-
-    
-    console.log("RED players =", red?.players, "keys=", red?.players && Object.keys(red.players));
-    client.authoritative = red;
   });
 
   toast("Đã vào " + client.roomCode);
@@ -6297,6 +6289,33 @@ function drawCardAtScreen(
   ctx.restore();
 }
 
+function players4(s){
+  const src = s?.players;
+  const out = [null,null,null,null];
+
+  if (!src) return out;
+
+  // case 1: array
+  if (Array.isArray(src)){
+    for (let i=0;i<4;i++){
+      const p = src[i];
+      out[i] = (p && typeof p === "object") ? p : null;
+    }
+    return out;
+  }
+
+  // case 2: object {"0":{...},"1":{...}}
+  if (typeof src === "object"){
+    for (let i=0;i<4;i++){
+      const p = src[i] || src[String(i)] || null;
+      out[i] = (p && typeof p === "object") ? p : null;
+    }
+    return out;
+  }
+
+  return out;
+}
+
 function draw(){
   ctx.clearRect(0,0,innerWidth,innerHeight);
 
@@ -6313,27 +6332,18 @@ function draw(){
     return;
   }
 
-  const seatName = (seat)=>{
-    const ps = s.players || {};
-    const p = ps[seat] || ps[String(seat)] || null;
-    return p?.name || "(empty)";
-  };
+  // ✅ luôn dùng ps (đã normalize 0..3) cho mọi thứ liên quan players
+  const ps = players4(s);
 
-  console.log("s.players", s.players, s);
-  
+  const seatName = (seat)=> (ps[seat]?.name || "(empty)");
+
   drawZone(rects.table, "TABLE", "", false);
 
   const selfId = client.selfId || FB?.uid || "";
   let mySeat = -1;
-  const ps = s.players || {};
-  for (let i = 0; i < 4; i++){
-    const p = ps[i] || ps[String(i)] || null;
-    if (p && p.id === selfId){
-      mySeat = i;
-      break;
-    }
+  for (let i=0;i<4;i++){
+    if (ps[i] && ps[i].id === selfId){ mySeat = i; break; }
   }
-
 
   // ✅ privacy: chỉ chủ hand mới được thấy mặt trước
   const canSeeFront = (card) => {
@@ -6347,20 +6357,11 @@ function draw(){
     return (ownerId && ownerId === selfId) ? !!card.faceUp : false;
   };
 
-  const playerBySeat = (seat)=>{
-    const ps = s.players || {};
-    return ps[seat] || ps[String(seat)] || null;
-  };
-
-
-  const tintBySeat = (seat)=>{
-    const p = playerBySeat(seat);
+  const tintBySeat = (seat)=> {
+    const p = ps[seat];
     return p ? (COLORS?.[p.color] ?? null) : null;
   };
-  console.log("players raw", s.players, "len", s.players?.length);
-  console.log("p0", s.players?.[0], "p1", s.players?.[1], "p2", s.players?.[2], "p3", s.players?.[3]);
 
-  
   // ✅ 4 người
   drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0, tintBySeat(0));
   drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1, tintBySeat(1));
@@ -6370,45 +6371,45 @@ function draw(){
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
 
-  const objs = listDrawableObjects(s);
+  const objs = listDrawableObjects(s) || [];
   const backUrlDefault = s.assets?.backUrl || "";
 
   for (const o of objs){
     if (!o) continue;
-    const isSelected = client.selected && client.selected.type === o.type && client.selected.id === o.id;
-  
+
+    const isSelected =
+      client.selected &&
+      client.selected.type === o.type &&
+      client.selected.id === o.id;
+
     let wx = o.x, wy = o.y;
     if (client.dragging &&
-        client.dragging.target.type === o.type &&
-        client.dragging.target.id === o.id &&
+        client.dragging.target?.type === o.type &&
+        client.dragging.target?.id === o.id &&
         client.dragging.cur){
       wx = client.dragging.cur.x - (client.dragging.offset?.dx||0);
       wy = client.dragging.cur.y - (client.dragging.offset?.dy||0);
     }
-  
+
     const sp = toScreen({x: wx, y: wy});
-  
+
     if (o.type === "card"){
       const c = getCardById(s, o.id);
       if (!c) continue;
-  
+
+      // ✅ tìm owner chỉ bằng ps (không đụng s.players)
+      const oid = (c.ownerId || c.owner || "");
       let owner = null;
-      const ps = s.players || {};
-      for (let i = 0; i < 4; i++){
-        const p = ps[i] || ps[String(i)] || null;
-        if (p && p.id === (c.ownerId || c.owner)){
-          owner = p;
-          break;
-        }
+      for (let i=0;i<4;i++){
+        const p = ps[i];
+        if (p && p.id === oid){ owner = p; break; }
       }
+      const accent = owner ? (COLORS?.[owner.color] ?? null) : null;
 
-      const accent = owner ? COLORS[owner.color] : null;
-  
-      // ✅ model mới: frontUrl nằm trực tiếp trên card
-      // ✅ model cũ: frontUrl hoặc frontBase + id.png
-      const frontUrl = (c.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
+      const frontUrl =
+        (c.frontUrl || "") ||
+        (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
 
-      // ✅ privacy: hand người khác luôn vẽ back
       const showFront = canSeeFront(c);
 
       drawCardAtScreen(
@@ -6422,21 +6423,25 @@ function draw(){
         frontUrl,
         backUrlDefault
       );
+
     } else {
       const stack = getStackById(s, o.id);
       if (!stack) continue;
-    
+
       const topId = getStackTopCardId(s, stack);
       const top = topId ? getCardById(s, topId) : null;
-    
-      const topOwnerId = (top?.ownerId || top?.owner || stack.owner);
-      const owner = (s.players || []).find(p => p && p.id === topOwnerId) || null;
-      const accent = owner ? COLORS[owner.color] : null;
-    
+
+      const topOwnerId = (top?.ownerId || top?.owner || stack.owner || "");
+      let owner = null;
+      for (let i=0;i<4;i++){
+        const p = ps[i];
+        if (p && p.id === topOwnerId){ owner = p; break; }
+      }
+      const accent = owner ? (COLORS?.[owner.color] ?? null) : null;
+
       const count = (stack.cardIds?.length || 0);
-    
+
       if (top){
-        // ✅ 1) vẽ “bóng” các lá dưới TRƯỚC
         if (count > 1){
           ctx.save();
           ctx.globalAlpha = 0.22;
@@ -6447,11 +6452,11 @@ function draw(){
           }
           ctx.restore();
         }
-    
-        // ✅ 2) vẽ top card SAU (badge sẽ nằm trên cùng)
-        const frontUrl = (top.frontUrl || "") || (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
 
-        // ✅ privacy: nếu top card đang ở hand người khác -> luôn back
+        const frontUrl =
+          (top.frontUrl || "") ||
+          (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
+
         const showFrontTop = canSeeFront(top);
 
         drawCardAtScreen(
@@ -6465,7 +6470,6 @@ function draw(){
           frontUrl,
           backUrlDefault
         );
-    
       } else {
         ctx.save();
         ctx.globalAlpha = 0.25;
@@ -6477,9 +6481,9 @@ function draw(){
 
   requestAnimationFrame(draw);
   renderStatusBoard?.();
-  console.log("s.players 2", s.players);
 }
 requestAnimationFrame(draw);
+
 
 function drawCountBadge(ctx, x, y, w, h, count){
   if (count == null) return;
