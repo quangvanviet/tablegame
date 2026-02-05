@@ -4499,6 +4499,12 @@ function installLobbyRealtimeListeners(roomRef){
     if (client.isHost && client.host){
     await hostRebuildPlayersFromLobby(roomRef);
     await client.transport.writeState(client.host.state);
+    client.authoritative = redactStateForViewer(
+      client.host.state,
+      FB.uid
+    );
+    client.lastVersion = client.host.state.version;
+
     }
   };
 
