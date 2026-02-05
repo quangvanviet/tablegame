@@ -6324,7 +6324,10 @@ function draw(){
     const p = playerBySeat(seat);
     return p ? (COLORS?.[p.color] ?? null) : null;
   };
+  console.log("players raw", s.players, "len", s.players?.length);
+  console.log("p0", s.players?.[0], "p1", s.players?.[1], "p2", s.players?.[2], "p3", s.players?.[3]);
 
+  
   // ✅ 4 người
   drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0, tintBySeat(0));
   drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1, tintBySeat(1));
