@@ -4643,7 +4643,7 @@ async function createRoomAsHost_Firebase(){
   });
 
   t.listenState((st)=>{
-    if (!st || typeof st !== "object") return;
+    //if (!st || typeof st !== "object") return;
     console.log("RAW st.players =", st?.players, "keys=", st?.players && Object.keys(st.players));
     const red = redactStateForViewer(st, FB.uid);
     console.log("RED players =", red?.players, "keys=", red?.players && Object.keys(red.players));
@@ -5050,7 +5050,7 @@ async function joinRoomAsClient_Firebase(opts = {}){
   await t.sendIntent({ type: "join" });
 
   t.listenState((st)=>{
-    if (!st || typeof st !== "object") return;
+    //if (!st || typeof st !== "object") return;
     console.log("RAW st.players =", st?.players, "keys=", st?.players && Object.keys(st.players));
     const red = redactStateForViewer(st, FB.uid);
     if (!red) return;
