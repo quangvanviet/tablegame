@@ -5910,7 +5910,7 @@ const DRAG_THRESHOLD_PX = 6;
 
 canvas.addEventListener("mousedown", (ev)=>{
   const st = getState();
-  if (amSpectator()) return; // không cho thao tác
+  //if (amSpectator()) return; // không cho thao tác
   if (!st) return;
 
   const p = toWorld(mousePos(ev));
@@ -5943,7 +5943,7 @@ canvas.addEventListener("mousedown", (ev)=>{
 
 addEventListener("mousemove", (ev)=>{
   if (!client.dragging) return;
-  if (amSpectator()) return; // không cho thao tác
+  //if (amSpectator()) return; // không cho thao tác
   const st = getState();
   if (!st) return;
 
@@ -5977,7 +5977,7 @@ addEventListener("mousemove", (ev)=>{
 
 addEventListener("mouseup", (ev)=>{
   if (!client.dragging) return;
-  if (amSpectator()) return; // không cho thao tác
+  //if (amSpectator()) return; // không cho thao tác
   const st = getState();
   const drag = client.dragging;
   client.dragging = null;
@@ -6024,7 +6024,7 @@ addEventListener("mouseup", (ev)=>{
 ========================================================= */
 addEventListener("keydown", (ev)=>{
   if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
-  if (amSpectator()) return; // không cho thao tác
+  //if (amSpectator()) return; // không cho thao tác
   const st = getState();
   if (!st) return;
 
@@ -6091,7 +6091,7 @@ addEventListener("keydown", (ev)=>{
 });
 
 if (INS.btnShuffle) INS.btnShuffle.onclick = ()=>{
-  if (amSpectator()) return; // không cho thao tác
+  //if (amSpectator()) return; // không cho thao tác
   const st = getState();
   const sel = client.selected;
 
@@ -6295,6 +6295,8 @@ function draw(){
     return p?.name || "(empty)";
   };
 
+  console.log("s.players", s.players, s);
+  
   drawZone(rects.table, "TABLE", "", false);
 
   const selfId = client.selfId || FB?.uid || "";
@@ -6430,6 +6432,7 @@ function draw(){
 
   requestAnimationFrame(draw);
   renderStatusBoard?.();
+  console.log("s.players 2", s.players);
 }
 requestAnimationFrame(draw);
 
