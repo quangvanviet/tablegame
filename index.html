@@ -4485,7 +4485,7 @@ function installLobbyRealtimeListeners(roomRef){
 
   // ===== SEAT CLAIMS =====
   try{ if (_seatClaimsCb) roomRef.child("seatClaims/play").off("value", _seatClaimsCb); }catch(e){}
-  _seatClaimsCb = (snap)=>{
+  _seatClaimsCb = async (snap)=>{
     client.lobby.seatClaimsPlay = snap.val() || {};
     setStatusUI?.();
     renderLobby?.(
@@ -4494,7 +4494,14 @@ function installLobbyRealtimeListeners(roomRef){
       client.lobby.users,
       client.lobby.seatClaimsPlay
     );
+  
+    // 🔥 QUAN TRỌNG: nếu là host thì rebuild state.players
+    if (client.isHost && client.host){
+    await hostRebuildPlayersFromLobby(roomRef);
+    await client.transport.writeState(client.host.state);
+    }
   };
+
   roomRef.child("seatClaims/play").on("value", _seatClaimsCb);
 }
 
