@@ -2516,21 +2516,14 @@ if (UI.startGameBtn){
     if (!window.client) return toast("client chưa sẵn sàng");
     if (!client.isHost) return toast("Chỉ host mới bắt đầu");
 
+    // ✅ luôn dùng intent để host authority xử lý
     if (typeof window.sendIntent === "function"){
       sendIntent({ type:"startGame" });
       toast("Bắt đầu!");
       return;
     }
 
-    // fallback nếu chưa có sendIntent
-    try{
-      const roomRef = getRoomRef(client.roomId);
-      roomRef.child("meta").update({ phase: "match", startedAt: now() });
-      toast("Bắt đầu!");
-    }catch(e){
-      console.error(e);
-      toast(e?.message || e);
-    }
+    toast("sendIntent chưa sẵn sàng");
   };
 }
 
@@ -4314,6 +4307,13 @@ async function requestSit(roomId, seat){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
   const uid = FB.uid;
 
+  // ✅ đang chơi => cấm đổi ghế
+  const gs = (client.lobby?.meta?.gameStatus || "waiting");
+  if (gs === "playing"){
+    toast("Đang chơi rồi — không thể đổi ghế.");
+    return;
+  }
+
   const uSnap = await roomRef.child(`users/${uid}`).get();
   const u = uSnap.val() || {};
 
@@ -4340,16 +4340,25 @@ async function requestSit(roomId, seat){
     await client.transport?.sendIntent?.({ type:"sit", seat: seat|0 });
   }catch(e){}
 
+  // host seat
   if ((seat|0) === 0){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
   }
+
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
 
 async function requestUnseat(roomId){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
   const uid = FB.uid;
+
+  // ✅ đang chơi => cấm xuống ghế / đổi ghế
+  const gs = (client.lobby?.meta?.gameStatus || "waiting");
+  if (gs === "playing"){
+    toast("Đang chơi rồi — không thể xuống ghế.");
+    return;
+  }
 
   const uSnap = await roomRef.child(`users/${uid}`).get();
   const u = uSnap.val() || {};
@@ -4378,8 +4387,10 @@ async function requestUnseat(roomId){
     await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
     await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
   }
+
   toast("Đã xuống ghế chờ");
 }
+  
 function seatColorByUid(uid){
   if (!uid) return null;
 
@@ -4609,11 +4620,20 @@ async function createRoomAsHost_Firebase(){
     createdAt: Date.now(),
     maxPlayers: 4,
     mode: "Truyền thống",
+
+    // ✅ NEW
+    gameStatus: "waiting",   // waiting | playing
+    startedAt: 0,
   };
 
   client.isHost = true;
   client.host = new HostController(client.roomCode, FB.uid);
   client.host.addOrUpdatePlayerAtSeat(FB.uid, FB.username, 0);
+
+  // ✅ đảm bảo state có phase waiting ngay từ đầu
+  client.host.state.game = client.host.state.game || {};
+  client.host.state.game.phase = "waiting";
+  client.host.bumpVersion?.();
 
   const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`);
 
@@ -4642,7 +4662,7 @@ async function createRoomAsHost_Firebase(){
   const t = new FirebaseTransport(client.roomId);
   installTransport(t);
 
-  // ✅ đảm bảo state được write ra DB ngay (để move/draw không bị reject do state chưa sync)
+  // ✅ đảm bảo state được write ra DB ngay
   await t.writeState(client.host.state);
 
   client.authoritative = redactStateForViewer(client.host.state, FB.uid);
@@ -4667,35 +4687,84 @@ async function createRoomAsHost_Firebase(){
   await t.attachPresence();
   installHostPresenceReconcile(client.roomId);
 
+  // =========================
+  // HOST AUTHORITY (INTENTS)
+  // =========================
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
     const fromId = msg.fromId;
 
-    // --- JOIN/LEAVE/SIT/UNSIT: chỉ rebuild từ lobby ---
-    if (action?.type === "join"){
-      await hostRebuildPlayersFromLobby(roomRef);
+    // ✅ lấy meta realtime (đỡ .get() mỗi intent)
+    const gs = client.lobby?.meta?.gameStatus || "waiting";
+    const hostIdNow = client.lobby?.meta?.hostId || client.lobby?.meta?.hostUid || "";
+
+    // ✅ đang chơi => cấm sit/unsit
+    if (gs === "playing" && (action?.type === "sit" || action?.type === "unsit")){
+      await t.ackIntent(intentRef);
+      return;
+    }
+
+    const isSeatAction =
+      action?.type === "join" ||
+      action?.type === "leave" ||
+      action?.type === "sit"  ||
+      action?.type === "unsit";
+
+    // ✅ waiting => chỉ host được gameplay intents
+    if (gs === "waiting" && !isSeatAction){
+      if (fromId !== hostIdNow){
+        await t.ackIntent(intentRef);
+        return;
+      }
+    }
+
+    // ✅ start game (host only)
+    if (action?.type === "startGame"){
+      if (fromId !== hostIdNow){
+        await t.ackIntent(intentRef);
+        return;
+      }
+
+      // cập nhật meta (lock ghế)
+      await roomRef.child("meta").update({
+        gameStatus: "playing",
+        startedAt: now(),
+      }).catch(()=>{});
+
+      // cập nhật state (để client UI/draw đọc)
+      client.host.state.game = client.host.state.game || {};
+      client.host.state.game.phase = "playing";
+      client.host.bumpVersion?.();
+
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
-    if (action?.type === "sit"){
+
+    // --- JOIN/LEAVE/SIT/UNSIT: rebuild từ lobby ---
+    if (isSeatAction){
+      if (action?.type === "leave"){
+        try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
+      }
+
       await hostRebuildPlayersFromLobby(roomRef);
+
+      // ✅ giữ phase theo meta
+      client.host.state.game = client.host.state.game || {};
+      client.host.state.game.phase = (client.lobby?.meta?.gameStatus || gs);
+
       await t.writeState(client.host.state);
       await t.ackIntent(intentRef);
       return;
     }
-    if (action?.type === "unsit"){
-      await hostRebuildPlayersFromLobby(roomRef);
-      await t.writeState(client.host.state);
-      await t.ackIntent(intentRef);
-      return;
-    }
-    if (action?.type === "leave"){
-      try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
-      await hostRebuildPlayersFromLobby(roomRef);
-      await t.writeState(client.host.state);
-      await t.ackIntent(intentRef);
-      return;
+
+    // ✅ playing => chỉ người đã ngồi ghế (playSeat) mới được thao tác
+    if (gs === "playing"){
+      const u = client.lobby?.users?.[fromId] || null;
+      if (!u || !Number.isInteger(u.playSeat)){
+        await t.ackIntent(intentRef);
+        return;
+      }
     }
 
     // --- gameplay intents (move/flip/draw...) ---
@@ -4708,16 +4777,17 @@ async function createRoomAsHost_Firebase(){
     await t.ackIntent(intentRef);
   });
 
+  // state stream
   t.listenState((st)=>{
     if (!st || typeof st !== "object") return;
-    const red = redactStateForViewer(st, FB.uid);
-    
+
     if (client.isHost && client.host){
       client.host.state = st;
       client.authoritative = redactStateForViewer(st, FB.uid);
     } else {
       client.authoritative = redactStateForViewer(st, FB.uid);
     }
+
     client.lastVersion = st.version || client.lastVersion;
     setStatusUI();
   });
@@ -5982,6 +6052,30 @@ function calcDragOffset(state, target, p){
 
 
 // ======= CANVAS INPUT (click vs drag + smart inspector) =======
+function canInteractCanvas(){
+  const meta = client.lobby?.meta || {};
+  const gs = meta.gameStatus || "waiting";
+
+  const uid = FB.uid || "";
+  const hostId = meta.hostId || meta.hostUid || "";
+
+  // lấy user record từ lobby.users (đã listenUsers)
+  const u = client.lobby?.users?.[uid] || null;
+  const isSeated = !!(u && Number.isInteger(u.playSeat));
+
+  // waiting: chỉ host được thao tác
+  if (gs === "waiting"){
+    return uid && hostId && uid === hostId;
+  }
+
+  // playing: chỉ người đã ngồi ghế được thao tác
+  if (gs === "playing"){
+    return isSeated;
+  }
+
+  return false;
+}
+  
 function amSpectator(){
   const u = client.authoritative?._users?.[FB.uid];
   return !u || !Number.isInteger(u.playSeat);
@@ -5990,8 +6084,9 @@ function amSpectator(){
 const DRAG_THRESHOLD_PX = 6;
 
 canvas.addEventListener("mousedown", (ev)=>{
+  if (!canInteractCanvas()) return; // ✅ CHẶN
+
   const st = getState();
-  //if (amSpectator()) return; // không cho thao tác
   if (!st) return;
 
   const p = toWorld(mousePos(ev));
@@ -6001,20 +6096,14 @@ canvas.addEventListener("mousedown", (ev)=>{
     client.selected = hit;
     updateInspector();
 
-    // bắt đầu drag nhưng chưa chắc là drag (đợi vượt threshold)
     client.dragging = {
       target: hit,
       start: p,
       cur: p,
       offset: calcDragOffset(st, hit, p),
       moved: false,
-      started: false, // ✅ chỉ true khi vượt threshold
+      started: false,
     };
-
-    // chưa show inspector ngay, vì còn có thể là drag
-    // (nếu bạn muốn click-down là hiện ngay thì bật dòng dưới)
-    // showInspectorPopup();
-
   } else {
     client.selected = null;
     hideInspectorPopup();
@@ -6024,41 +6113,37 @@ canvas.addEventListener("mousedown", (ev)=>{
 
 addEventListener("mousemove", (ev)=>{
   if (!client.dragging) return;
-  //if (amSpectator()) return; // không cho thao tác
+  if (!canInteractCanvas()) return; // ✅ CHẶN
+
   const st = getState();
   if (!st) return;
 
   const p = toWorld(mousePos(ev));
   client.dragging.cur = p;
 
-  const dx = p.x - client.dragging.start.x;
-  const dy = p.y - client.dragging.start.y;
+  const sp0 = toScreen(client.dragging.start);
+  const sp1 = toScreen(p);
+  const ddx = sp1.x - sp0.x;
+  const ddy = sp1.y - sp0.y;
 
-  // ✅ chỉ coi là drag khi vượt threshold
   if (!client.dragging.started){
-    const sp0 = toScreen(client.dragging.start);
-    const sp1 = toScreen(p);
-    const ddx = sp1.x - sp0.x;
-    const ddy = sp1.y - sp0.y;
-
     if (Math.hypot(ddx, ddy) >= DRAG_THRESHOLD_PX){
       client.dragging.started = true;
       client.dragging.moved = true;
-      hideInspectorPopup(); // ✅ bắt đầu kéo thì ẩn inspector
+      hideInspectorPopup();
     } else {
-      // chưa đủ ngưỡng: coi như hover/click => không ẩn inspector
       return;
     }
   } else {
     client.dragging.moved = true;
-    // đang kéo: ẩn inspector (đề phòng bạn lỡ show trước đó)
     hideInspectorPopup();
   }
 });
 
 addEventListener("mouseup", (ev)=>{
   if (!client.dragging) return;
-  //if (amSpectator()) return; // không cho thao tác
+  if (!canInteractCanvas()) return; // ✅ CHẶN
+
   const st = getState();
   const drag = client.dragging;
   client.dragging = null;
@@ -6066,16 +6151,12 @@ addEventListener("mouseup", (ev)=>{
 
   const p = toWorld(mousePos(ev));
 
-  // ✅ Nếu không vượt threshold => coi như CLICK
   if (!drag.started){
-    // click lên object: show inspector smart
     showInspectorPopup();
-    // đảm bảo reposition sau khi DOM update
     requestAnimationFrame(positionInspectorNearTarget);
     return;
   }
 
-  // ✅ Nếu là DRAG thả
   const dropHit = hitTest(p.x, p.y);
 
   if (dropHit && !(dropHit.type === drag.target.type && dropHit.id === drag.target.id)){
@@ -6105,7 +6186,8 @@ addEventListener("mouseup", (ev)=>{
 ========================================================= */
 addEventListener("keydown", (ev)=>{
   if (ev.target && (ev.target.tagName==="INPUT" || ev.target.tagName==="TEXTAREA")) return;
-  //if (amSpectator()) return; // không cho thao tác
+  if (!canInteractCanvas()) return; // ✅ CHẶN
+
   const st = getState();
   if (!st) return;
 
@@ -6118,7 +6200,6 @@ addEventListener("keydown", (ev)=>{
     return;
   }
 
-  // ===== Host-only hard delete request =====
   if (key === "delete" || key === "backspace" || key === "x"){
     const sel = client.selected;
     if (!sel) return;
@@ -6129,17 +6210,14 @@ addEventListener("keydown", (ev)=>{
     return;
   }
 
-  // ===== Q: draw random 1 from SELECTED STACK (bắt buộc phải select stack) =====
   if (key === "q"){
     const sel = client.selected;
     if (!sel || sel.type !== "stack") return toast("Hãy select 1 stack bài để rút");
-
     sendIntent({ type:"draw", stackId: sel.id, count: 1, random: true });
     toast("Draw 1 (random)");
     return;
   }
 
-  // W: flip entity đang chọn
   if (key === "w"){
     const sel = client.selected;
     if (!sel) return;
@@ -6147,7 +6225,6 @@ addEventListener("keydown", (ev)=>{
     return;
   }
 
-  // E: shuffle SELECTED STACK
   if (key === "e"){
     const sel = client.selected;
     if (!sel || sel.type !== "stack") return toast("Hãy select 1 stack để shuffle");
@@ -6155,14 +6232,12 @@ addEventListener("keydown", (ev)=>{
     return;
   }
 
-  // R: unstack SELECTED STACK
   if (key === "r"){
     const sel = client.selected;
     if (sel && sel.type==="stack") sendIntent({type:"unstack", stackId: sel.id});
     return;
   }
 
-  // T: discard entity đang chọn
   if (key === "t"){
     const sel = client.selected;
     if (!sel) return;
@@ -6172,7 +6247,7 @@ addEventListener("keydown", (ev)=>{
 });
 
 if (INS.btnShuffle) INS.btnShuffle.onclick = ()=>{
-  //if (amSpectator()) return; // không cho thao tác
+  if (!canInteractCanvas()) return;
   const st = getState();
   const sel = client.selected;
 
