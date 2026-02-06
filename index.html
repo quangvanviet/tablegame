@@ -4247,13 +4247,11 @@ function setStatusUI(){
   // Nút bấm toolbar ////////////////////////////////////////////////
   // Bấm setCard
   function openPopupSetCard() {
-    if (document.getElementById("openPopupSetCard")){
-      document.getElementById("openPopupSetCard").style.display = (document.getElementById("openPopupSetCard").style.display === "none") ? "flex" : "none";
+    if (document.getElementById("popupSetCard")){
+      document.getElementById("popupSetCard").style.display = (document.getElementById("openPopupSetCard").style.display === "none") ? "flex" : "none";
     }
   }
   
-  
-
 async function sendIntent(action){
   if (!client.transport) return;
   // Firebase-only
@@ -4396,9 +4394,11 @@ async function requestSit(roomId, seat){
   if ((seat|0) === 0){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
+    document.getElementById("hostToolBar").style.display = "flex";
+  } else {
+    document.getElementById("hostToolBar").style.display = "none";
   }
-
-  client.isHost = seat===0?true:false;
+  
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
 
@@ -4439,8 +4439,11 @@ async function requestUnseat(roomId){
   if (mySeat === 0){
     await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
     await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
+    document.getElementById("hostToolBar").style.display = "flex";
+  } else {
+    document.getElementById("hostToolBar").style.display = "none";
   }
-  client.isHost = mySeat===0?true:false;
+  
   toast("Đã xuống ghế chờ");
 }
   
