@@ -4239,29 +4239,30 @@ function setStatusUI(){
       : "Đang chơi...";
   }
 
+  const isHost = !!client.isHost;
+  const isWaiting = (phase === "waiting");
+  // Toolbar: CHỈ host mới thấy
   if (UI.hostToolBar){
-    if (client.isHost){
-      if (phase === "waiting"){
-        UI.hostToolBar.style.display = "flex";
-      } else {
-        UI.hostToolBar.style.display = "none";
-      }
-      
+    UI.hostToolBar.style.display = isHost ? "flex" : "none";
+  }
+  
+  // Nút Start / Ready
+  if (UI.startGameBtn){
+    if (isHost){
+      UI.startGameBtn.textContent = isWaiting
+        ? "Bắt đầu"
+        : "Dừng chơi";
     } else {
-      UI.hostToolBar.style.display = "none";
+      UI.startGameBtn.textContent = isWaiting
+        ? "Sẵn sàng"
+        : "Đang chơi";
     }
   }
-  if (UI.blockStartGame){
-    if (client.isHost){
-      if (phase === "waiting"){
-        UI.blockStartGame.style.display = "flex";
-      } else {
-        UI.blockStartGame.style.display = "none";
-      }
-    } else {
-      UI.blockStartGame.style.display = "none";
-    }    
-  }
+
+
+
+  
+  
   renderChat?.();
 }
 
