@@ -4396,9 +4396,8 @@ async function requestSit(roomId, seat){
   if ((seat|0) === 0){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
-    client.isHost = true;
   }
-
+  if (seat===0){client.isHost = true;}
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
 
