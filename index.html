@@ -4154,7 +4154,6 @@ function setStatusUI(){
 
   // ===== ME =====
   const uid = client.selfId || FB?.uid || "";
-  client.isHost = !!uid && (client.authoritative?.hostId === uid);
   
   const myName = client.selfName || FB?.username || "Bạn";
   const uMe = client.lobby?.users?.[uid] || null;
@@ -4241,6 +4240,11 @@ function setStatusUI(){
       : "Đang chơi...";
   }
 
+  const isSeatHost = (mySeat === 0);
+  const isStateHost = (s.hostId === uid);
+  
+  client.isHost = !!uid && isSeatHost && isStateHost;
+  
   const isHost = !!client.isHost;
   const isWaiting = (phase === "waiting");
   // Toolbar: CHỈ host mới thấy
