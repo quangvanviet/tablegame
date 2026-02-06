@@ -1395,6 +1395,26 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       outline: none;
     }
 
+    /* Host toolbar */
+    #hostToolBar > div {
+        cursor: pointer;
+    }
+    #hostToolBar > div:hover {
+        background: #ff6666;
+    }
+    
+    #popupSetCard {
+      position: absolute;
+      display: none;
+      z-index: 100;
+  
+      transform: none; /* bỏ translate(-50%, -50%) */
+    }
+    
+    #popupSetCard.show {
+      display: block;
+    }
+    
   </style>
 </head>
 <body>
@@ -2100,8 +2120,8 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
   <!-- POPUP Host setting -->
   <!-- Thanh công cụ -->
-  <div id="hostToolBar" style="display: none;position: absolute;left: 380px;top: 10px;flex-direction: row;
-    justify-content: center;align-items: center;align-content: center;gap: 3px;">
+  <div id="hostToolBar"style="display:none; position:absolute; left:380px; top:10px; flex-direction:row; justify-content:center;
+      align-items:center; gap:3px; background:#0b1430; padding:6px; border-radius:12px;">
     <!-- add SetCard -->
     <div id="openPopupSetCard" style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;" onclick="openPopupSetCard()">
       
@@ -4248,14 +4268,43 @@ function setStatusUI(){
 
   // Nút bấm toolbar ////////////////////////////////////////////////
   // Bấm setCard
-  function openPopupSetCard() {
-    if (document.getElementById("popupSetCard").style.display === "none"){
-      document.getElementById("popupSetCard").style.display = "flex";
-      refreshHostSetSelect();
-    } else {
-      document.getElementById("popupSetCard").style.display = "none";
-    }
+  function openPopupSetCard(){
+    const btn = document.getElementById("openPopupSetCard");
+    const popup = document.getElementById("popupSetCard");
+  
+    if (!btn || !popup) return;
+  
+    const isOpen = popup.classList.contains("show");
+  
+    // đóng trước
+    popup.classList.remove("show");
+  
+    if (isOpen) return;
+  
+    // lấy vị trí button
+    const rect = btn.getBoundingClientRect();
+    const toolbarRect = document
+      .getElementById("hostToolBar")
+      .getBoundingClientRect();
+  
+    popup.style.left = (rect.left - toolbarRect.left) + "px";
+    popup.style.top  = (rect.bottom - toolbarRect.top + 6) + "px";
+  
+    popup.classList.add("show");
   }
+
+  document.addEventListener("mousedown", (e)=>{
+    const popup = document.getElementById("popupSetCard");
+    const btn = document.getElementById("openPopupSetCard");
+  
+    if (!popup || !btn) return;
+    if (!popup.classList.contains("show")) return;
+  
+    if (!popup.contains(e.target) && !btn.contains(e.target)){
+      popup.classList.remove("show");
+    }
+  });
+
   
 async function sendIntent(action){
   if (!client.transport) return;
