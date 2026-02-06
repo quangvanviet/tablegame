@@ -4168,7 +4168,7 @@ function setStatusUI(){
     } else {
       // role theo lobby trước (đổi ghế là đổi ngay)
       const isHost = (mySeat === 0); // ghế 0 là host
-      const role = (mySeat === null) ? "Xem" : (isHost ? "HOST" : `Ghế ${mySeat+1}`);
+      const role = (mySeat === null) ? "Xem" : (isHost ? "Chủ phòng" : `Ghế ${mySeat+1}`);
   
       // màu theo ghế (giống canvas)
       const c = (mySeat === null) ? "rgba(255,255,255,.25)" : seatColor(mySeat);
@@ -4193,7 +4193,7 @@ function setStatusUI(){
         `<span style="display:inline-flex;align-items:center;gap:8px">
           <span style="width:10px;height:10px;border-radius:999px;background:${dot};
             border:1px solid rgba(255,255,255,.18)"></span>
-          <span>${escapeHtml(hostP.name || "Host")}</span>
+          <span>${escapeHtml(hostP.name || "Chủ phòng")}</span>
         </span>`;
     } else {
       // host có thể là spectator (chưa có trong state.players) hoặc state chưa kịp sync
@@ -4463,7 +4463,7 @@ async function requestSit(roomId, seat){
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
   }
   
-  toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
+  toast((seat|0) === 0 ? "Bạn đã ngồi ghế chủ phòng" : `Đã ngồi ghế ${seat+1}`);
 }
 
 async function requestUnseat(roomId){
@@ -4587,7 +4587,7 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
 
       // nếu claim có nhưng user chưa sync thì vẫn hiện “đang đồng bộ”
       const name = occUser?.username || "Đang đồng bộ...";
-      const label = isHostSeat ? "HOST" : `Ghế ${seat+1}`;
+      const label = isHostSeat ? "Chủ phòng" : `Ghế ${seat+1}`;
 
       const base = seatColor(seat);
       // occupied: đậm hơn
@@ -6621,7 +6621,7 @@ function draw(){
   // ✅ luôn dùng ps (đã normalize 0..3) cho mọi thứ liên quan players
   const ps = players4(s);
 
-  const seatName = (seat)=> (ps[seat]?.name || "(empty)");
+  const seatName = (seat)=> (ps[seat]?.name || "(Trống)");
 
   drawZone(rects.table, "TABLE", "", false);
 
