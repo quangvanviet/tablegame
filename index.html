@@ -2149,8 +2149,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   </div>
 
   <!-- Popup setCard -->
-  <div id="popupSetCard" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 50;
-    flex-direction: column; justify-content: center; align-items: center;">
+  <div id="popupSetCard" style="">
     <div style="width: 320px;padding-bottom: 16px;padding-top: 12px; padding-left: 16px; padding-right: 16px;
     background: #0d1b36; border-radius: 20px; gap: 8px; display: flex; flex-direction: column; justify-content: center;
     border: 2px solid #4b75d97a;">
@@ -4287,8 +4286,8 @@ function setStatusUI(){
       .getElementById("hostToolBar")
       .getBoundingClientRect();
   
-    popup.style.left = (rect.left - toolbarRect.left) + "px";
-    popup.style.top  = (rect.bottom - toolbarRect.top + 6) + "px";
+    popup.style.left = (rect.left) + "px";
+    popup.style.top  = (rect.bottom - toolbarRect.top + 13) + "px";
   
     popup.classList.add("show");
   }
