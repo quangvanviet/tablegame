@@ -4491,9 +4491,6 @@ async function requestUnseat(roomId){
   if (mySeat === 0){
     await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
     await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
-    document.getElementById("hostToolBar").style.display = "flex";
-  } else {
-    document.getElementById("hostToolBar").style.display = "none";
   }
   
   toast("Đã xuống ghế chờ");
