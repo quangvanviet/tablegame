@@ -4154,6 +4154,8 @@ function setStatusUI(){
 
   // ===== ME =====
   const uid = client.selfId || FB?.uid || "";
+  client.isHost = !!uid && (client.authoritative?.hostId === uid);
+  
   const myName = client.selfName || FB?.username || "Bạn";
   const uMe = client.lobby?.users?.[uid] || null;
   const mySeat = Number.isInteger(uMe?.playSeat) ? (uMe.playSeat|0) : null;
@@ -4258,11 +4260,6 @@ function setStatusUI(){
         : "Đang chơi";
     }
   }
-
-
-
-  
-  
   renderChat?.();
 }
 
