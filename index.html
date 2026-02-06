@@ -2975,11 +2975,9 @@ class FirebaseTransport extends NetTransport {
 
   /* ---------- Actions ---------- */
   async sendIntent(action){
-    // thống nhất payload theo code bạn đang dùng ở create/join:
-    // { fromId/fromName/at/action }
     const payload = {
-      fromId: FB.uid,
-      fromName: FB.username,
+      fromId: client.selfId,
+      fromName: client.selfName,
       at: now(),
       action
     };
