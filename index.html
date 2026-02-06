@@ -4290,6 +4290,7 @@ function setStatusUI(){
     popup.style.top  = (rect.bottom - toolbarRect.top + 13) + "px";
   
     popup.classList.add("show");
+    refreshHostSetSelect();
   }
 
   document.addEventListener("mousedown", (e)=>{
