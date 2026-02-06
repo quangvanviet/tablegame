@@ -1940,8 +1940,8 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     
               <!-- Spectators -->
               <div class="wr2-spec">
-                <div class="cap row" style="justify-content:space-between; align-items:center;">
-                  <span>NGƯỜI XEM</span>
+                <div class="row" style="justify-content:space-between; align-items:center;">
+                  <span style="font-size: 12px; opacity: .75; font-weight: 900; letter-spacing: .8px; border-radius: 35px;">NGƯỜI XEM</span>
                   <span class="pill" id="specCount">0</span>
                 </div>
                 <div id="specList" class="spec-list"></div>
@@ -4233,7 +4233,7 @@ function setStatusUI(){
   // Bấm setCard
   function openPopupSetCard() {
     if (document.getElementById("openPopupSetCard")){
-      document.getElementById("openPopupSetCard").style.display = ( UI.openPopupSetCard.style.display === "none") ? "flex" : "none";
+      document.getElementById("openPopupSetCard").style.display = (document.getElementById("openPopupSetCard").style.display === "none") ? "flex" : "none";
     }
   }
   
