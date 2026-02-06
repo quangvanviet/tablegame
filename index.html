@@ -2989,7 +2989,7 @@ function makeFreshTableState(roomCode, hostId){
 
     version: 1,
     assets: { backUrl:"" },  // back chung
-    game: { phase:"setup" },
+    game: { phase:"waiting" },
 
     // ===== Card pool theo zone =====
     all: {
@@ -3091,7 +3091,7 @@ function ensureStateShape(state){
 
   // phần còn lại giữ nguyên logic của bạn
   if (!s.assets) s.assets = { backUrl:"" };
-  if (!s.game) s.game = { phase:"setup" };
+  if (!s.game) s.game = { phase:"waiting" };
   if (!s.ui) s.ui = { statHeaders:["ATK","DEF","HP","COIN"], statsByPlayer:{} };
 
   s.all = s.all || {};
@@ -4182,17 +4182,17 @@ function setStatusUI(){
   }
 
   // ===== Setup box UI =====
-  const phase = s.game?.phase || "setup";
+  const phase = s.game?.phase || "waiting";
   if (UI.setupPhaseLine){
-    UI.setupPhaseLine.textContent = (phase === "setup")
+    UI.setupPhaseLine.textContent = (phase === "waiting")
       ? "Đang ở phòng chờ. Host chọn deck và bấm Bắt đầu."
       : "Đang chơi...";
   }
 
   const hostCanSetup = !!client.isHost;
   if (UI.hostSetupControls){
-    UI.hostSetupControls.style.display = (hostCanSetup && phase === "setup") ? "" : "none";
-    if (hostCanSetup && phase === "setup"){
+    UI.hostSetupControls.style.display = (hostCanSetup && phase === "waiting") ? "" : "none";
+    if (hostCanSetup && phase === "waiting"){
       if (UI.hostSetSelect && UI.hostSetSelect.options.length === 0){
         refreshHostSetSelect?.().catch(()=>{});
       }
