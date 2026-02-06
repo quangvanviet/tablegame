@@ -2103,7 +2103,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   <div id="hostToolBar" style="display: none;position: absolute;left: 380px;top: 10px;flex-direction: row;
     justify-content: center;align-items: center;align-content: center;gap: 3px;">
     <!-- add SetCard -->
-    <div id="openPopupSetCard" style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;">
+    <div id="openPopupSetCard" style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;" onclick="openPopupSetCard()">
       
     </div>
     
@@ -4229,6 +4229,15 @@ function setStatusUI(){
   renderChat?.();
 }
 
+  // Nút bấm toolbar ////////////////////////////////////////////////
+  // Bấm setCard
+  function openPopupSetCard() {
+    if (document.getElementById("openPopupSetCard")){
+      document.getElementById("openPopupSetCard").style.display = ( UI.openPopupSetCard.style.display === "none") ? "flex" : "none";
+    }
+  }
+  
+  
 
 async function sendIntent(action){
   if (!client.transport) return;
