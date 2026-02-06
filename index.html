@@ -4218,14 +4218,29 @@ function setStatusUI(){
       : "Đang chơi...";
   }
 
-  const hostCanSetup = !!client.isHost;
   if (UI.hostToolBar){
-    UI.hostToolBar.style.display = (hostCanSetup && phase === "waiting") ? "flex" : "none";
+    if (client.isHost==="true"){
+      if (phase === "waiting"){
+        UI.hostToolBar.style.display = "flex";
+      } else {
+        UI.hostToolBar.style.display = "none";
+      }
+      
+    } else {
+      UI.hostToolBar.style.display = "none";
+    }
   }
   if (UI.blockStartGame){
-    UI.blockStartGame.style.display = (hostCanSetup && phase === "waiting") ? "flex" : "none";
+    if (client.isHost==="true"){
+      if (phase === "waiting"){
+        UI.blockStartGame.style.display = "flex";
+      } else {
+        UI.blockStartGame.style.display = "none";
+      }
+    } else {
+      UI.blockStartGame.style.display = "none";
+    }    
   }
-  
   renderChat?.();
 }
 
@@ -4381,8 +4396,9 @@ async function requestSit(roomId, seat){
   if ((seat|0) === 0){
     await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
     await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
+    client.isHost = true;
   }
-  if (seat === 0) {client.isHost = true;};
+
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế HOST" : `Đã ngồi ghế ${seat+1}`);
 }
 
