@@ -4219,7 +4219,7 @@ function setStatusUI(){
   }
 
   if (UI.hostToolBar){
-    if (client.isHost==="true"){
+    if (client.isHost){
       if (phase === "waiting"){
         UI.hostToolBar.style.display = "flex";
       } else {
@@ -4231,7 +4231,7 @@ function setStatusUI(){
     }
   }
   if (UI.blockStartGame){
-    if (client.isHost==="true"){
+    if (client.isHost){
       if (phase === "waiting"){
         UI.blockStartGame.style.display = "flex";
       } else {
