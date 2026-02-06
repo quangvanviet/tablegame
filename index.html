@@ -2132,12 +2132,14 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
   <div id="popupSetCard" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 50;
     flex-direction: column; justify-content: center; align-items: center;">
     <div style="width: 320px;padding-bottom: 16px;padding-top: 12px; padding-left: 16px; padding-right: 16px;
-    background: #6c7fac30; border-radius: 20px; gap: 8px; display: flex; flex-direction: column; justify-content: center;
+    background: #0d1b36; border-radius: 20px; gap: 8px; display: flex; flex-direction: column; justify-content: center;
     border: 2px solid #4b75d97a;">
-      <div style="font-size: 13px; opacity: .75; font-weight: 900; letter-spacing: .8px; background: #70b6fd6b; padding: 6px;
-      border-radius: 35px;">Thêm bộ bài để chơi</div>
-      <label class="lbl">Bộ bài bạn có"</label>
-      <select id="hostSetSelect" class="input"></select>
+      <button class="collapse-btn" style=" position: absolute;  top: -10px;  right: -10px; background: black;"
+        onclick="openPopupSetCard()" >−</button>
+      <div style="font-size: 13px; opacity: .75; font-weight: 900; letter-spacing: .8px; padding: 4px;
+    border-bottom: 1px solid rgb(255 255 255 / 41%);">Thêm bộ bài để chơi</div>
+      <label class="lbl">Bộ bài bạn có:</label>
+      <select id="hostSetSelect" style="width: 100%;padding: 4px 2px;background: rgb(182 199 213 / 22%); outline: none; color: bisque;"></select>
   
       <div class="row" style="gap:10px">
         <button id="hostRefreshSetsBtn" class="secondary" style="flex:1">Làm mới</button>
@@ -4247,8 +4249,11 @@ function setStatusUI(){
   // Nút bấm toolbar ////////////////////////////////////////////////
   // Bấm setCard
   function openPopupSetCard() {
-    if (document.getElementById("popupSetCard")){
-      document.getElementById("popupSetCard").style.display = (document.getElementById("popupSetCard").style.display === "none") ? "flex" : "none";
+    if (document.getElementById("popupSetCard").style.display === "none"){
+      document.getElementById("popupSetCard").style.display = "flex";
+      refreshHostSetSelect();
+    } else {
+      document.getElementById("popupSetCard").style.display = "none";
     }
   }
   
