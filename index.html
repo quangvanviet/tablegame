@@ -4245,15 +4245,26 @@ function setStatusUI(){
   
   client.isHost = !!uid && isSeatHost && isStateHost;
   
-  const isHost = !!client.isHost;
+  const isSpectator = (mySeat === null || mySeat === undefined);
+  const isHost = client.isHost;
   const isWaiting = (phase === "waiting");
-  // Toolbar: CHỈ host mới thấy
+
   if (UI.hostToolBar){
     UI.hostToolBar.style.display = isHost ? "flex" : "none";
   }
   
-  // Nút Start / Ready
+  // ===== START / READY BUTTON =====
   if (UI.startGameBtn){
+  
+    // Spectator → ẩn hoàn toàn
+    if (isSpectator){
+      UI.startGameBtn.style.display = "none";
+      return;
+    }
+  
+    // Player hoặc Host → hiện
+    UI.startGameBtn.style.display = "inline-flex";
+  
     if (isHost){
       UI.startGameBtn.textContent = isWaiting
         ? "Bắt đầu"
@@ -5941,10 +5952,38 @@ function fmtTime(ts){
   }
 }
 
-function getPlayerById(s, id){
-  return (s.players || []).find(p => p && p.id === id) || null;
-}
+function getChatUserInfo(s, uid){
+  // 1️⃣ Ưu tiên player (đang ngồi ghế)
+  const p = (s.players || []).find(p => p && p.id === uid);
+  if (p){
+    return {
+      name: p.name || "Player",
+      color: COLORS?.[p.color] || "rgba(255,255,255,.55)",
+      seat: p.seat ?? null,
+      isPlayer: true,
+    };
+  }
 
+  // 2️⃣ Fallback: lobby user (spectator / chưa sync player)
+  const u = client.lobby?.users?.[uid];
+  if (u){
+    return {
+      name: u.name || "Player",
+      color: "rgba(255,255,255,.35)", // spectator = xám
+      seat: Number.isInteger(u.playSeat) ? u.playSeat : null,
+      isPlayer: false,
+    };
+  }
+
+  // 3️⃣ Không tìm thấy (hiếm)
+  return {
+    name: "Unknown",
+    color: "rgba(255,255,255,.25)",
+    seat: null,
+    isPlayer: false,
+  };
+}
+  
 function renderChat(){
   const s = getState();
   if (!s) return;
@@ -5964,9 +6003,9 @@ function renderChat(){
   const n = visible.length;
   for (let i = 0; i < n; i++){
     const m = visible[i];
-    const p = getPlayerById(s, m.fromId);
-    const name = p?.name || "Player";
-    const dot = p ? (COLORS?.[p.color] || "rgba(255,255,255,.55)") : "rgba(255,255,255,.35)";
+    const info = getChatUserInfo(s, m.fromId);
+    const name = info.name;
+    const dot  = info.color;
     const time = m.at ? fmtTime(m.at) : "";
 
     let ageCls = "";
