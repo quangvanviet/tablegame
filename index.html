@@ -1415,6 +1415,34 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       display: block;
     }
     
+    /* nút tool */
+    #hostToolBar .tb-btn{
+      width:34px; height:34px; border-radius:10px;
+      border:1px solid rgba(255,255,255,.12);
+      background:#12204a; color:#fff; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      user-select:none;
+    }
+    #hostToolBar .tb-btn.active{
+      outline:2px solid rgba(100,180,255,.85);
+      background:#18306f;
+    }
+    /* dropdown panel */
+    #hostToolBar{ position:relative; }
+    #annoPanel.tb-panel{
+      position:absolute;
+      top: 46px;           /* nằm dưới toolbar */
+      left: 42px;          /* canh dưới nút ✏️ (bạn chỉnh nếu muốn) */
+      display:flex;
+      gap:6px;
+      padding:6px;
+      background:#0b1430;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      z-index:60;
+    }
+    
   </style>
 </head>
 <body>
@@ -2120,16 +2148,23 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
 
   <!-- POPUP Host setting -->
   <!-- Thanh công cụ -->
-  <div id="hostToolBar"style="display:none; position:absolute; left:380px; top:10px; flex-direction:row; justify-content:center;
-      align-items:center; gap:3px; background:#0b1430; padding:6px; border-radius:12px;">
+  <div id="hostToolBar" style="
+    display:none;
+    position:absolute; left:380px; top:10px;
+    display:flex; flex-direction:row; align-items:center; gap:6px;
+    background:#0b1430; padding:6px; border-radius:12px;
+    z-index:50;
+  ">
     <!-- add SetCard -->
-    <div id="openPopupSetCard" style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;" onclick="openPopupSetCard()">
-      
-    </div>
-    
+    <div id="openPopupSetCard" style="
+      width:25px; height:25px; padding:3px;
+      background:red; border-radius:10px; cursor:pointer;
+    " onclick="openPopupSetCard()"></div>
+  
+    <!-- nút bật/tắt xổ panel -->
     <button id="annoToggleBtn" type="button" class="tb-btn" title="Chế độ vẽ">✏️</button>
-
-    <!-- panel xổ xuống -->
+  
+    <!-- panel xổ xuống (dropdown) -->
     <div id="annoPanel" class="tb-panel" style="display:none;">
       <button class="tb-btn" data-anno-tool="select"  title="Chọn/Kéo">🖱️</button>
       <button class="tb-btn" data-anno-tool="rect"    title="Rect">▭</button>
@@ -2141,6 +2176,38 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <!-- input ảnh -->
     <input id="annoImgInput" type="file" accept="image/*" style="display:none">
   </div>
+  
+  <style>
+    /* nút tool */
+    #hostToolBar .tb-btn{
+      width:34px; height:34px; border-radius:10px;
+      border:1px solid rgba(255,255,255,.12);
+      background:#12204a; color:#fff; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      user-select:none;
+    }
+    #hostToolBar .tb-btn.active{
+      outline:2px solid rgba(100,180,255,.85);
+      background:#18306f;
+    }
+  
+    /* dropdown panel */
+    #hostToolBar{ position:relative; }
+    #annoPanel.tb-panel{
+      position:absolute;
+      top: 46px;           /* nằm dưới toolbar */
+      left: 42px;          /* canh dưới nút ✏️ (bạn chỉnh nếu muốn) */
+      display:flex;
+      gap:6px;
+      padding:6px;
+      background:#0b1430;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      z-index:60;
+    }
+  </style>
+
 
   <!-- Popup setCard -->
   <div id="popupSetCard" style="">
