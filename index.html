@@ -2126,28 +2126,21 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <div id="openPopupSetCard" style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;" onclick="openPopupSetCard()">
       
     </div>
-    <button id="annoToggleBtn" type="button" class="tb-btn" title="Bật/Tắt chế độ vẽ">✏️</button>
-    <!-- add token -->
-    <div style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;">
-      
-    </div>
     
-    <!-- add image -->
-    <div style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;">
-      
+    <button id="annoToggleBtn" type="button" class="tb-btn" title="Chế độ vẽ">✏️</button>
+
+    <!-- panel xổ xuống -->
+    <div id="annoPanel" class="tb-panel" style="display:none;">
+      <button class="tb-btn" data-anno-tool="select"  title="Chọn/Kéo">🖱️</button>
+      <button class="tb-btn" data-anno-tool="rect"    title="Rect">▭</button>
+      <button class="tb-btn" data-anno-tool="ellipse" title="Ellipse">⬭</button>
+      <button class="tb-btn" data-anno-tool="text"    title="Text">T</button>
+      <button class="tb-btn" data-anno-tool="image"   title="Image">🖼️</button>
     </div>
-    
-    <!-- add text -->
-    <div style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;">
-      
-    </div>
-    
-    <!-- add Shapes -->
-    <div style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;">
-      
-    </div>
+  
+    <!-- input ảnh -->
+    <input id="annoImgInput" type="file" accept="image/*" style="display:none">
   </div>
-  <input id="annoImgInput" type="file" accept="image/*" style="display:none">
 
   <!-- Popup setCard -->
   <div id="popupSetCard" style="">
@@ -6883,7 +6876,6 @@ function draw(){
     if ((a.layer || "above") === "below") drawAnno(ctx, a);
   }
 
-
   const objs = listDrawableObjects(s) || [];
   const backUrlDefault = s.assets?.backUrl || "";
 
@@ -7017,14 +7009,13 @@ requestAnimationFrame(draw);
     return { x: ev.clientX - r.left, y: ev.clientY - r.top };
   }
 
-  // ✅ bắt ở CAPTURE để "ăn" event trước hệ kéo card nếu cần
+  // pointerdown: CAPTURE để chặn hệ kéo card khi đang vẽ
   canvas.addEventListener("pointerdown", (ev)=>{
-    if (!ANNO.enabled) return; // 👈 tắt vẽ => để game xử lý bình thường
+    if (!ANNO.enabled) return;
 
     const s = getState();
     if (!s) return;
 
-    // 👇 đang bật vẽ => chặn hệ card nhận event
     ev.preventDefault();
     ev.stopPropagation();
 
@@ -7034,10 +7025,7 @@ requestAnimationFrame(draw);
     if (ANNO.tool === "select"){
       const hit = hitAnnoAtScreen(s, sp);
       ANNO.selectedId = hit ? hit.id : null;
-
-      if (hit){
-        ANNO.dragging = { id: hit.id, p0: wp, ox: hit.x, oy: hit.y };
-      }
+      if (hit) ANNO.dragging = { id: hit.id, p0: wp, ox: hit.x, oy: hit.y };
       return;
     }
 
@@ -7053,7 +7041,6 @@ requestAnimationFrame(draw);
         lineWidth: 2,
         alpha: 1
       });
-
       ANNO.selectedId = id;
       ANNO.creating = { id, p0: wp };
       return;
@@ -7077,15 +7064,19 @@ requestAnimationFrame(draw);
         color: "#fff",
         alpha: 1
       });
-
       ANNO.selectedId = id;
-      setAnnoTool("select");
+      ANNO.tool = "select";
+      // update UI active button nếu bạn muốn (không bắt buộc)
+      document.querySelectorAll("#annoPanel [data-anno-tool]").forEach(b=>{
+        b.classList.toggle("active", b.dataset.annoTool === "select");
+      });
       return;
     }
-  }, true); // 👈 capture = true
+  }, true);
 
   window.addEventListener("pointermove", (ev)=>{
     if (!ANNO.enabled) return;
+
     const s = getState();
     if (!s) return;
     if (!ANNO.creating && !ANNO.dragging) return;
@@ -7100,8 +7091,8 @@ requestAnimationFrame(draw);
     if (ANNO.creating){
       const a = annos.find(x => x.id === ANNO.creating.id);
       if (!a) return;
-
       const p0 = ANNO.creating.p0;
+
       a.x = Math.min(p0.x, wp.x);
       a.y = Math.min(p0.y, wp.y);
       a.w = Math.max(1, Math.abs(wp.x - p0.x));
@@ -7112,8 +7103,8 @@ requestAnimationFrame(draw);
     if (ANNO.dragging){
       const a = annos.find(x => x.id === ANNO.dragging.id);
       if (!a) return;
-
       const d = ANNO.dragging;
+
       a.x = d.ox + (wp.x - d.p0.x);
       a.y = d.oy + (wp.y - d.p0.y);
       return;
@@ -7125,19 +7116,8 @@ requestAnimationFrame(draw);
     ANNO.creating = null;
     ANNO.dragging = null;
   });
-
-  window.addEventListener("keydown", (ev)=>{
-    if (!ANNO.enabled) return;
-    if (ev.key !== "Delete" && ev.key !== "Backspace") return;
-
-    const s = getState();
-    if (!s) return;
-    if (!ANNO.selectedId) return;
-
-    s.annos = ensureAnnos(s).filter(a => a && a.id !== ANNO.selectedId);
-    ANNO.selectedId = null;
-  });
 })();
+
 
 /* =========================================================
    ANNO IMAGE INSERT
@@ -7184,6 +7164,70 @@ function openAnnoImagePicker(){
   ANNO.tool = "image";
   document.getElementById("annoImgInput")?.click();
 }
+
+// ===== Dropdown Toolbar for Annotation =====
+(function bindAnnoDropdownToolbar(){
+  const bar   = document.getElementById("hostToolBar");
+  const btn   = document.getElementById("annoToggleBtn");
+  const panel = document.getElementById("annoPanel");
+  const input = document.getElementById("annoImgInput");
+  if (!bar || !btn || !panel || !input) return;
+
+  // trạng thái
+  ANNO.enabled = false;
+  ANNO.tool = "select";
+
+  function setTool(t){
+    ANNO.tool = t;
+    panel.querySelectorAll("[data-anno-tool]").forEach(b=>{
+      b.classList.toggle("active", b.dataset.annoTool === t);
+    });
+  }
+
+  function openPanel(){
+    panel.style.display = "flex";
+    ANNO.enabled = true;
+    btn.classList.add("active");
+    setTool(ANNO.tool || "select");
+  }
+
+  function closePanel(){
+    panel.style.display = "none";
+    ANNO.enabled = false;
+    btn.classList.remove("active");
+    // reset thao tác đang dang dở để không bị kẹt drag
+    ANNO.creating = null;
+    ANNO.dragging = null;
+  }
+
+  btn.addEventListener("click", ()=>{
+    if (panel.style.display === "none" || !panel.style.display) openPanel();
+    else closePanel();
+  });
+
+  panel.addEventListener("click", (e)=>{
+    const b = e.target.closest("[data-anno-tool]");
+    if (!b) return;
+    const t = b.dataset.annoTool;
+
+    if (t === "image"){
+      input.click();
+      return;
+    }
+    setTool(t);
+  });
+
+  // ESC để thoát chế độ vẽ
+  window.addEventListener("keydown", (ev)=>{
+    if (ev.key === "Escape") closePanel();
+  });
+
+  // init
+  closePanel();
+})();
+
+  ///Hết phần toolbar
+  
 
 function drawCountBadge(ctx, x, y, w, h, count){
   if (count == null) return;
