@@ -4927,19 +4927,22 @@ async function createRoomAsHost_Firebase(){
       action?.type === "join" ||
       action?.type === "leave" ||
       action?.type === "sit"  ||
-      action?.type === "unsit"||
+      action?.type === "unsit";
+
+    const isAnnoAction =
       action?.type === "annoAdd" ||
       action?.type === "annoUpdate" ||
       action?.type === "annoDelete";
 
 
-    // ✅ waiting => chỉ host được gameplay intents
-    if (gs === "waiting" && !isSeatAction){
+    // ✅ waiting: cho phép seat actions + anno actions; còn lại chỉ host
+    if (gs === "waiting" && !isSeatAction && !isAnnoAction){
       if (fromId !== hostIdNow){
         await t.ackIntent(intentRef);
         return;
       }
     }
+
 
     // ✅ start game (host only)
     if (action?.type === "startGame"){
@@ -4990,41 +4993,43 @@ async function createRoomAsHost_Firebase(){
       }
     }
 
-    // ===== ANNO INTENTS (shared drawings) =====
-    if (action?.type === "annoAdd"){
+    // =========================
+    // ANNO INTENTS (DRAWING)
+    // =========================
+    if (isAnnoAction){
       const st = client.host.state;
       st.annos = Array.isArray(st.annos) ? st.annos : [];
-      st.annos.push(action.payload); // payload là object anno đầy đủ
-      client.host.bumpVersion?.();
-      await t.writeState(st);
-      await t.ackIntent(intentRef);
-      return;
-    }
     
-    if (action?.type === "annoUpdate"){
-      const st = client.host.state;
-      st.annos = Array.isArray(st.annos) ? st.annos : [];
-      const a = st.annos.find(x => x && x.id === action.id);
-      if (a && action.patch && typeof action.patch === "object"){
-        Object.assign(a, action.patch);
+      if (action.type === "annoAdd"){
+        if (action.payload && action.payload.id){
+          st.annos.push(action.payload);
+          client.host.bumpVersion?.();
+          await t.writeState(st);
+        }
+        await t.ackIntent(intentRef);
+        return;
+      }
+    
+      if (action.type === "annoUpdate"){
+        const a = st.annos.find(x => x && x.id === action.id);
+        if (a && action.patch && typeof action.patch === "object"){
+          Object.assign(a, action.patch);
+          client.host.bumpVersion?.();
+          await t.writeState(st);
+        }
+        await t.ackIntent(intentRef);
+        return;
+      }
+    
+      if (action.type === "annoDelete"){
+        st.annos = st.annos.filter(x => x && x.id !== action.id);
         client.host.bumpVersion?.();
         await t.writeState(st);
+        await t.ackIntent(intentRef);
+        return;
       }
-      await t.ackIntent(intentRef);
-      return;
-    }
-    
-    if (action?.type === "annoDelete"){
-      const st = client.host.state;
-      st.annos = Array.isArray(st.annos) ? st.annos : [];
-      st.annos = st.annos.filter(x => x && x.id !== action.id);
-      client.host.bumpVersion?.();
-      await t.writeState(st);
-      await t.ackIntent(intentRef);
-      return;
     }
 
-    
     // --- gameplay intents (move/flip/draw...) ---
     const r = client.host.applyIntent(fromId, action);
     if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
