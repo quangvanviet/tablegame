@@ -2126,7 +2126,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
     <div id="openPopupSetCard" style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;" onclick="openPopupSetCard()">
       
     </div>
-    
+    <button id="annoToggleBtn" type="button" class="tb-btn" title="Bật/Tắt chế độ vẽ">✏️</button>
     <!-- add token -->
     <div style="width: 25px;height: 25px;padding: 3px;background: red;border-radius: 10px;">
       
@@ -2147,6 +2147,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       
     </div>
   </div>
+  <input id="annoImgInput" type="file" accept="image/*" style="display:none">
 
   <!-- Popup setCard -->
   <div id="popupSetCard" style="">
@@ -6600,6 +6601,226 @@ function players4(s){
   return out;
 }
 
+//Toolbar vẽ thêm shape và insert hình ảnh
+/* =========================================================
+   ANNOTATION SYSTEM (Rect / Ellipse / Text / Image)
+   - world coords: x,y,w,h nằm trong "world"
+   - render: convert sang screen bằng toScreen + camera.scale
+========================================================= */
+
+const ANNO = {
+  tool: "select",       // select | rect | ellipse | text | image
+  selectedId: null,
+  creating: null,       // { id, p0:{x,y} }
+  dragging: null,       // { id, p0:{x,y}, ox, oy }
+  imgCache: new Map(),  // src -> Image
+};
+
+// ===== Drawing Mode (Annotation) =====
+ANNO.enabled = false;           // ✅ mặc định: tắt chế độ vẽ
+ANNO.tool = "select";           // tool trong chế độ vẽ
+
+function setAnnoEnabled(on){
+  ANNO.enabled = !!on;
+
+  // reset thao tác đang dang dở
+  ANNO.creating = null;
+  ANNO.dragging = null;
+
+  // UI: toggle button
+  const btn = document.getElementById("annoToggleBtn");
+  if (btn){
+    btn.classList.toggle("active", ANNO.enabled);
+    btn.textContent = ANNO.enabled ? "✏️" : "🃏"; // tuỳ bạn (vẽ / bài)
+    btn.title = ANNO.enabled ? "Đang bật chế độ vẽ (click để tắt)" : "Đang ở chế độ kéo bài (click để bật vẽ)";
+  }
+
+  // UI: highlight tool buttons chỉ khi enabled
+  const bar = document.getElementById("hostToolBar");
+  if (bar){
+    bar.querySelectorAll("[data-anno-tool]").forEach(b=>{
+      b.classList.toggle("disabled", !ANNO.enabled);
+      b.classList.toggle("active", ANNO.enabled && b.dataset.annoTool === ANNO.tool);
+    });
+  }
+}
+
+function setAnnoTool(tool){
+  ANNO.tool = tool;
+
+  const bar = document.getElementById("hostToolBar");
+  if (bar){
+    bar.querySelectorAll("[data-anno-tool]").forEach(b=>{
+      b.classList.toggle("active", ANNO.enabled && b.dataset.annoTool === tool);
+    });
+  }
+}
+
+// hook toolbar clicks
+(function bindAnnoToolbar(){
+  const bar = document.getElementById("hostToolBar");
+  if (!bar) return;
+
+  const toggleBtn = document.getElementById("annoToggleBtn");
+  if (toggleBtn){
+    toggleBtn.addEventListener("click", ()=>{
+      setAnnoEnabled(!ANNO.enabled);
+    });
+  }
+
+  bar.addEventListener("click", (e)=>{
+    const btn = e.target.closest("[data-anno-tool]");
+    if (!btn) return;
+
+    // chỉ đổi tool khi đang bật chế độ vẽ
+    if (!ANNO.enabled) return;
+
+    const tool = btn.dataset.annoTool;
+    if (tool === "image"){
+      document.getElementById("annoImgInput")?.click();
+      return;
+    }
+    setAnnoTool(tool);
+  });
+
+  // init UI
+  setAnnoEnabled(false);
+  setAnnoTool("select");
+})();
+
+    
+// ✅ tạo id nhanh
+function annoId(){
+  return "a_" + Math.random().toString(36).slice(2,9);
+}
+
+/* ========= (1) ĐẢM BẢO STATE CÓ s.annos ========= */
+function ensureAnnos(s){
+  if (!s) return [];
+  if (!Array.isArray(s.annos)) s.annos = [];
+  return s.annos;
+}
+
+/* ========= (2) WORLD -> SCREEN RECT ========= */
+function annoWorldToScreenRect(o){
+  const p = toScreen({ x:o.x, y:o.y });
+  return {
+    x: p.x,
+    y: p.y,
+    w: o.w * camera.scale,
+    h: o.h * camera.scale
+  };
+}
+
+/* ========= (3) LOAD IMAGE (cache) ========= */
+function annoGetImage(src){
+  if (!src) return null;
+  let img = ANNO.imgCache.get(src);
+  if (!img){
+    img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    ANNO.imgCache.set(src, img);
+  }
+  return img;
+}
+
+/* ========= (4) VẼ 1 ANNO ========= */
+function drawAnno(ctx, o){
+  const r = annoWorldToScreenRect(o);
+
+  ctx.save();
+  ctx.globalAlpha = (o.alpha ?? 1);
+
+  // lineWidth tính theo zoom
+  const lw = (o.lineWidth ?? 2) * camera.scale;
+  ctx.lineWidth = Math.max(1, lw);
+
+  if (o.kind === "rect"){
+    if (o.fill){
+      ctx.fillStyle = o.fill;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+    if (o.stroke){
+      ctx.strokeStyle = o.stroke;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+  }
+
+  if (o.kind === "ellipse"){
+    ctx.beginPath();
+    ctx.ellipse(
+      r.x + r.w/2,
+      r.y + r.h/2,
+      Math.abs(r.w/2),
+      Math.abs(r.h/2),
+      0, 0, Math.PI*2
+    );
+    if (o.fill){
+      ctx.fillStyle = o.fill;
+      ctx.fill();
+    }
+    if (o.stroke){
+      ctx.strokeStyle = o.stroke;
+      ctx.stroke();
+    }
+  }
+
+  if (o.kind === "text"){
+    const fs = Math.max(10, (o.fontSize ?? 24) * camera.scale);
+    ctx.font = `${fs}px ${o.fontFamily ?? "system-ui, Arial"}`;
+    ctx.fillStyle = o.color ?? "#fff";
+    ctx.textBaseline = "top";
+    ctx.fillText(o.text ?? "", r.x, r.y);
+  }
+
+  if (o.kind === "image"){
+    const img = annoGetImage(o.src);
+    if (img && img.complete && img.naturalWidth){
+      ctx.drawImage(img, r.x, r.y, r.w, r.h);
+    }else{
+      ctx.fillStyle = "rgba(255,255,255,.08)";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "rgba(255,255,255,.25)";
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+  }
+
+  ctx.restore();
+}
+
+/* ========= (5) HIT-TEST (screen) ========= */
+function hitAnnoAtScreen(s, sp){
+  const annos = ensureAnnos(s);
+  for (let i = annos.length - 1; i >= 0; i--){
+    const a = annos[i];
+    if (!a) continue;
+    const r = annoWorldToScreenRect(a);
+    if (sp.x >= r.x && sp.x <= r.x + r.w && sp.y >= r.y && sp.y <= r.y + r.h){
+      return a;
+    }
+  }
+  return null;
+}
+
+function annoToWorldFromScreen(sp){
+  // screen -> world theo đúng camera của bạn
+  return toWorld(sp);
+}
+
+
+/* ========= (7) FILE -> DATA URL ========= */
+function fileToDataURL(file){
+  return new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=> res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+  
+  
 function draw(){
   ctx.clearRect(0,0,innerWidth,innerHeight);
 
@@ -6654,6 +6875,14 @@ function draw(){
 
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
+
+  // ===== ANNOTATIONS (BELOW CARDS) =====
+  const annos = ensureAnnos(s);
+  for (const a of annos){
+    if (!a) continue;
+    if ((a.layer || "above") === "below") drawAnno(ctx, a);
+  }
+
 
   const objs = listDrawableObjects(s) || [];
   const backUrlDefault = s.assets?.backUrl || "";
@@ -6762,12 +6991,199 @@ function draw(){
       }
     }
   }
+  
+  // ===== ANNOTATIONS (ABOVE CARDS) =====
+  for (const a of annos){
+    if (!a) continue;
+    if ((a.layer || "above") === "above") drawAnno(ctx, a);
+  }
 
   requestAnimationFrame(draw);
   renderStatusBoard?.();
 }
 requestAnimationFrame(draw);
 
+//Toolbar thêm shape và insert hình ảnh
+/* =========================================================
+   ANNO INPUT (select/move + draw rect/ellipse + text + image)
+========================================================= */
+
+(function initAnnoInput(){
+  const canvas = document.getElementById("c");
+  if (!canvas) return;
+
+  function getScreenPoint(ev){
+    const r = canvas.getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  }
+
+  // ✅ bắt ở CAPTURE để "ăn" event trước hệ kéo card nếu cần
+  canvas.addEventListener("pointerdown", (ev)=>{
+    if (!ANNO.enabled) return; // 👈 tắt vẽ => để game xử lý bình thường
+
+    const s = getState();
+    if (!s) return;
+
+    // 👇 đang bật vẽ => chặn hệ card nhận event
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    const sp = getScreenPoint(ev);
+    const wp = toWorld(sp);
+
+    if (ANNO.tool === "select"){
+      const hit = hitAnnoAtScreen(s, sp);
+      ANNO.selectedId = hit ? hit.id : null;
+
+      if (hit){
+        ANNO.dragging = { id: hit.id, p0: wp, ox: hit.x, oy: hit.y };
+      }
+      return;
+    }
+
+    if (ANNO.tool === "rect" || ANNO.tool === "ellipse"){
+      const id = annoId();
+      ensureAnnos(s).push({
+        id,
+        kind: ANNO.tool,
+        layer: "above",
+        x: wp.x, y: wp.y, w: 1, h: 1,
+        fill: "rgba(255,255,255,.12)",
+        stroke: "rgba(255,255,255,.55)",
+        lineWidth: 2,
+        alpha: 1
+      });
+
+      ANNO.selectedId = id;
+      ANNO.creating = { id, p0: wp };
+      return;
+    }
+
+    if (ANNO.tool === "text"){
+      const t = prompt("Nhập text:", "Hello") || "";
+      if (!t.trim()) return;
+
+      const id = annoId();
+      ensureAnnos(s).push({
+        id,
+        kind: "text",
+        layer: "above",
+        x: wp.x, y: wp.y,
+        w: Math.max(60, t.length * 14),
+        h: 30,
+        text: t,
+        fontSize: 24,
+        fontFamily: "system-ui",
+        color: "#fff",
+        alpha: 1
+      });
+
+      ANNO.selectedId = id;
+      setAnnoTool("select");
+      return;
+    }
+  }, true); // 👈 capture = true
+
+  window.addEventListener("pointermove", (ev)=>{
+    if (!ANNO.enabled) return;
+    const s = getState();
+    if (!s) return;
+    if (!ANNO.creating && !ANNO.dragging) return;
+
+    ev.preventDefault();
+    ev.stopPropagation();
+
+    const sp = getScreenPoint(ev);
+    const wp = toWorld(sp);
+    const annos = ensureAnnos(s);
+
+    if (ANNO.creating){
+      const a = annos.find(x => x.id === ANNO.creating.id);
+      if (!a) return;
+
+      const p0 = ANNO.creating.p0;
+      a.x = Math.min(p0.x, wp.x);
+      a.y = Math.min(p0.y, wp.y);
+      a.w = Math.max(1, Math.abs(wp.x - p0.x));
+      a.h = Math.max(1, Math.abs(wp.y - p0.y));
+      return;
+    }
+
+    if (ANNO.dragging){
+      const a = annos.find(x => x.id === ANNO.dragging.id);
+      if (!a) return;
+
+      const d = ANNO.dragging;
+      a.x = d.ox + (wp.x - d.p0.x);
+      a.y = d.oy + (wp.y - d.p0.y);
+      return;
+    }
+  }, { passive:false });
+
+  window.addEventListener("pointerup", ()=>{
+    if (!ANNO.enabled) return;
+    ANNO.creating = null;
+    ANNO.dragging = null;
+  });
+
+  window.addEventListener("keydown", (ev)=>{
+    if (!ANNO.enabled) return;
+    if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+
+    const s = getState();
+    if (!s) return;
+    if (!ANNO.selectedId) return;
+
+    s.annos = ensureAnnos(s).filter(a => a && a.id !== ANNO.selectedId);
+    ANNO.selectedId = null;
+  });
+})();
+
+/* =========================================================
+   ANNO IMAGE INSERT
+========================================================= */
+(function initAnnoImageInput(){
+  const input = document.getElementById("annoImgInput");
+  const canvas = document.getElementById("c");
+  if (!input || !canvas) return;
+
+  input.addEventListener("change", async ()=>{
+    const s = getState();
+    if (!s) return;
+
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const src = await fileToDataURL(file);
+    const id = annoId();
+
+    // đặt ảnh ở giữa màn hình (screen center -> world)
+    const spCenter = { x: innerWidth/2, y: innerHeight/2 };
+    const wpCenter = annoToWorldFromScreen(spCenter);
+
+    ensureAnnos(s).push({
+      id,
+      kind: "image",
+      layer: "above",
+      x: wpCenter.x - 120,
+      y: wpCenter.y - 90,
+      w: 240,
+      h: 180,
+      src,
+      alpha: 1
+    });
+
+    ANNO.selectedId = id;
+    ANNO.tool = "select";
+
+    input.value = "";
+  });
+})();
+
+function openAnnoImagePicker(){
+  ANNO.tool = "image";
+  document.getElementById("annoImgInput")?.click();
+}
 
 function drawCountBadge(ctx, x, y, w, h, count){
   if (count == null) return;
