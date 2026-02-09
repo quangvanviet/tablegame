@@ -2424,6 +2424,39 @@ function toWorld(p){
   return { x: (p.x - camera.offsetX) / camera.scale, y: (p.y - camera.offsetY) / camera.scale };
 }
 
+function sendAnnoIntent(action){
+  // luôn gửi qua intents để host xử lý -> writeState -> sync cho mọi người
+  if (!client.transport || typeof client.transport.sendIntent !== "function"){
+    console.warn("sendAnnoIntent: transport chưa sẵn sàng");
+    return;
+  }
+  client.transport.sendIntent(action);
+}
+function throttleMs(ms, fn){
+  let last = 0;
+  let timer = null;
+  let lastArgs = null;
+  return function(...args){
+    const nowT = Date.now();
+    lastArgs = args;
+    const remain = ms - (nowT - last);
+    if (remain <= 0){
+      last = nowT;
+      fn(...lastArgs);
+      lastArgs = null;
+      return;
+    }
+    if (!timer){
+      timer = setTimeout(()=>{
+        timer = null;
+        last = Date.now();
+        if (lastArgs) fn(...lastArgs);
+        lastArgs = null;
+      }, remain);
+    }
+  };
+}
+
 /* =========================================================
    3) UI refs (giữ nguyên id của bạn) - Firebase-only
 ========================================================= */
@@ -2590,7 +2623,14 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
     throw new Error("hostCreateDeckFromSet chưa tồn tại (bạn chưa dán function phần B)");
   }
 
+  // ✅ backup annos để không bị mất khi rebuild deck/state
+  const _annosKeep = structuredClone ? structuredClone(st.annos || []) : JSON.parse(JSON.stringify(st.annos || []));
+  
   hostCreateDeckFromSet(st, types, deckItem.name);
+  
+  // ✅ restore annos
+  st.annos = _annosKeep;
+
 
   if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
   await client.transport.writeState(st);
@@ -3099,6 +3139,7 @@ function makeFreshTableState(roomCode, hostId){
     version: 1,
     assets: { backUrl:"" },  // back chung
     game: { phase:"waiting" },
+    
 
     // ===== Card pool theo zone =====
     all: {
@@ -3113,6 +3154,7 @@ function makeFreshTableState(roomCode, hostId){
     stacks: {}, // stackId -> {id, zone, ownerId|null, x,y, cardIds:[]}
     chat: [],
     ui: { statHeaders:["ATK","DEF","HP","COIN"], statsByPlayer:{} },
+    annos: [],
   };
 
   return st;
@@ -3223,6 +3265,7 @@ function redactStateForViewer(state, viewerId){
 
   // ✅ clone nông để tránh mutate trực tiếp state gốc
   const s = { ...base };
+  s.annos = Array.isArray(base.annos) ? base.annos : [];
 
   // ✅ normalize players về đúng 4 ghế (0..3), dù Firebase trả array hay object
   const srcP = base.players;
@@ -4884,7 +4927,11 @@ async function createRoomAsHost_Firebase(){
       action?.type === "join" ||
       action?.type === "leave" ||
       action?.type === "sit"  ||
-      action?.type === "unsit";
+      action?.type === "unsit"||
+      action?.type === "annoAdd" ||
+      action?.type === "annoUpdate" ||
+      action?.type === "annoDelete";
+
 
     // ✅ waiting => chỉ host được gameplay intents
     if (gs === "waiting" && !isSeatAction){
@@ -4943,6 +4990,41 @@ async function createRoomAsHost_Firebase(){
       }
     }
 
+    // ===== ANNO INTENTS (shared drawings) =====
+    if (action?.type === "annoAdd"){
+      const st = client.host.state;
+      st.annos = Array.isArray(st.annos) ? st.annos : [];
+      st.annos.push(action.payload); // payload là object anno đầy đủ
+      client.host.bumpVersion?.();
+      await t.writeState(st);
+      await t.ackIntent(intentRef);
+      return;
+    }
+    
+    if (action?.type === "annoUpdate"){
+      const st = client.host.state;
+      st.annos = Array.isArray(st.annos) ? st.annos : [];
+      const a = st.annos.find(x => x && x.id === action.id);
+      if (a && action.patch && typeof action.patch === "object"){
+        Object.assign(a, action.patch);
+        client.host.bumpVersion?.();
+        await t.writeState(st);
+      }
+      await t.ackIntent(intentRef);
+      return;
+    }
+    
+    if (action?.type === "annoDelete"){
+      const st = client.host.state;
+      st.annos = Array.isArray(st.annos) ? st.annos : [];
+      st.annos = st.annos.filter(x => x && x.id !== action.id);
+      client.host.bumpVersion?.();
+      await t.writeState(st);
+      await t.ackIntent(intentRef);
+      return;
+    }
+
+    
     // --- gameplay intents (move/flip/draw...) ---
     const r = client.host.applyIntent(fromId, action);
     if (!r.ok && fromId === FB.uid) toast("Action fail: " + r.reason);
@@ -6889,9 +6971,10 @@ function annoDrawControls(ctx, o){
 // box X screen
 function annoGetDeleteBoxScreen(screenRect){
   const size = 18;
+  const gap  = 6;  // khoảng cách ra ngoài bbox
   return {
-    x: screenRect.x + screenRect.w - size - 2,
-    y: screenRect.y + 2,
+    x: screenRect.x + screenRect.w + gap,   
+    y: screenRect.y - size - gap,        
     w: size,
     h: size
   };
@@ -6900,14 +6983,15 @@ function annoGetDeleteBoxScreen(screenRect){
 // resize handle screen
 function annoGetResizeHandleScreen(screenRect){
   const size = 12;
+  const gap  = 6;  // khoảng cách ra ngoài bbox
   return {
-    x: screenRect.x + screenRect.w - size,
-    y: screenRect.y + screenRect.h - size,
+    x: screenRect.x + screenRect.w + gap,
+    y: screenRect.y + screenRect.h + gap, 
     w: size,
     h: size
   };
 }
-
+  
 function pointInRect(p, r){
   return p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h;
 }
@@ -7135,7 +7219,6 @@ requestAnimationFrame(draw);
 /* =========================================================
    ANNO INPUT (select/move + draw rect/ellipse + text + image)
 ========================================================= */
-
 (function initAnnoInput(){
   const canvas = document.getElementById("c");
   if (!canvas) return;
@@ -7144,6 +7227,10 @@ requestAnimationFrame(draw);
     const r = canvas.getBoundingClientRect();
     return { x: ev.clientX - r.left, y: ev.clientY - r.top };
   }
+
+  const sendUpdate = throttleMs(50, (id, patch)=>{
+    sendAnnoIntent({ type:"annoUpdate", id, patch });
+  });
 
   canvas.addEventListener("pointerdown", (ev)=>{
     if (!ANNO.enabled) return;
@@ -7157,63 +7244,56 @@ requestAnimationFrame(draw);
     const sp = getScreenPoint(ev);
     const wp = toWorld(sp);
 
-    const annos = ensureAnnos(s);
-
-    // helper lấy anno theo id
-    const getById = (id)=> annos.find(a => a && a.id === id) || null;
-
-    // nếu đang select: check click X hoặc resize handle
+    // ===== SELECT MODE =====
     if (ANNO.tool === "select"){
-      // ưu tiên: nếu đang có selected thì check controls của nó trước
-      const cur = ANNO.selectedId ? getById(ANNO.selectedId) : null;
-      if (cur){
-        const sr = annoWorldToScreenRect(cur);
+      const hit = hitAnnoAtScreen(s, sp);
+      ANNO.selectedId = hit ? hit.id : null;
 
-        const delBox = annoGetDeleteBoxScreen(sr);
-        if (pointInRect(sp, delBox)){
-          // ✅ click X => delete
-          s.annos = annos.filter(a => a && a.id !== cur.id);
-          ANNO.selectedId = null;
-          ANNO.creating = null;
-          ANNO.dragging = null;
-          return;
-        }
+      // nếu click vào selected -> check X/resize
+      if (ANNO.selectedId){
+        const cur = (s.annos || []).find(a => a && a.id === ANNO.selectedId) || null;
+        if (cur){
+          const sr = annoWorldToScreenRect(cur);
 
-        const rh = annoGetResizeHandleScreen(sr);
-        if (pointInRect(sp, rh)){
-          // ✅ start resize (world)
+          const delBox = annoGetDeleteBoxScreen(sr);
+          if (pointInRect(sp, delBox)){
+            sendAnnoIntent({ type:"annoDelete", id: cur.id });
+            ANNO.selectedId = null;
+            ANNO.dragging = null;
+            ANNO.creating = null;
+            return;
+          }
+
+          const rh = annoGetResizeHandleScreen(sr);
+          if (pointInRect(sp, rh)){
+            ANNO.dragging = {
+              id: cur.id,
+              mode: "resize",
+              p0: wp,
+              ow: cur.w,
+              oh: cur.h
+            };
+            return;
+          }
+
+          // move
           ANNO.dragging = {
             id: cur.id,
-            mode: "resize",
+            mode: "move",
             p0: wp,
-            ox: cur.x, oy: cur.y,
-            ow: cur.w, oh: cur.h
+            ox: cur.x,
+            oy: cur.y
           };
           return;
         }
       }
-
-      // nếu không click vào control => hit test object (top-most)
-      const hit = hitAnnoAtScreen(s, sp);
-      ANNO.selectedId = hit ? hit.id : null;
-
-      if (hit){
-        ANNO.dragging = {
-          id: hit.id,
-          mode: "move",
-          p0: wp,
-          ox: hit.x, oy: hit.y
-        };
-      }else{
-        ANNO.dragging = null;
-      }
       return;
     }
 
-    // draw rect/ellipse
+    // ===== CREATE SHAPE =====
     if (ANNO.tool === "rect" || ANNO.tool === "ellipse"){
       const id = annoId();
-      ensureAnnos(s).push({
+      const payload = {
         id,
         kind: ANNO.tool,
         layer: "above",
@@ -7222,20 +7302,21 @@ requestAnimationFrame(draw);
         stroke: "rgba(255,255,255,.55)",
         lineWidth: 2,
         alpha: 1
-      });
+      };
 
+      sendAnnoIntent({ type:"annoAdd", payload });
       ANNO.selectedId = id;
       ANNO.creating = { id, p0: wp };
       return;
     }
 
-    // text
+    // ===== CREATE TEXT =====
     if (ANNO.tool === "text"){
       const t = prompt("Nhập text:", "Hello") || "";
       if (!t.trim()) return;
 
       const id = annoId();
-      ensureAnnos(s).push({
+      const payload = {
         id,
         kind: "text",
         layer: "above",
@@ -7247,21 +7328,19 @@ requestAnimationFrame(draw);
         fontFamily: "system-ui",
         color: "#fff",
         alpha: 1
-      });
+      };
 
+      sendAnnoIntent({ type:"annoAdd", payload });
       ANNO.selectedId = id;
       ANNO.tool = "select";
-      // nếu bạn có UI highlight thì gọi setAnnoTool("select") ở đây
       return;
     }
   }, true);
 
   window.addEventListener("pointermove", (ev)=>{
     if (!ANNO.enabled) return;
-
     const s = getState();
     if (!s) return;
-
     if (!ANNO.creating && !ANNO.dragging) return;
 
     ev.preventDefault();
@@ -7269,39 +7348,39 @@ requestAnimationFrame(draw);
 
     const sp = getScreenPoint(ev);
     const wp = toWorld(sp);
-    const annos = ensureAnnos(s);
 
-    // tạo shape
+    // creating: update w/h/x/y
     if (ANNO.creating){
-      const a = annos.find(x => x.id === ANNO.creating.id);
-      if (!a) return;
       const p0 = ANNO.creating.p0;
-
-      a.x = Math.min(p0.x, wp.x);
-      a.y = Math.min(p0.y, wp.y);
-      a.w = Math.max(1, Math.abs(wp.x - p0.x));
-      a.h = Math.max(1, Math.abs(wp.y - p0.y));
+      const patch = {
+        x: Math.min(p0.x, wp.x),
+        y: Math.min(p0.y, wp.y),
+        w: Math.max(1, Math.abs(wp.x - p0.x)),
+        h: Math.max(1, Math.abs(wp.y - p0.y)),
+      };
+      sendUpdate(ANNO.creating.id, patch);
       return;
     }
 
-    // drag move/resize
+    // dragging: move/resize
     if (ANNO.dragging){
-      const a = annos.find(x => x.id === ANNO.dragging.id);
-      if (!a) return;
       const d = ANNO.dragging;
 
       if (d.mode === "move"){
-        a.x = d.ox + (wp.x - d.p0.x);
-        a.y = d.oy + (wp.y - d.p0.y);
+        const patch = {
+          x: d.ox + (wp.x - d.p0.x),
+          y: d.oy + (wp.y - d.p0.y),
+        };
+        sendUpdate(d.id, patch);
         return;
       }
 
       if (d.mode === "resize"){
-        // resize theo world
-        const nw = Math.max(10 / camera.scale, d.ow + (wp.x - d.p0.x));
-        const nh = Math.max(10 / camera.scale, d.oh + (wp.y - d.p0.y));
-        a.w = nw;
-        a.h = nh;
+        const patch = {
+          w: Math.max(10 / camera.scale, d.ow + (wp.x - d.p0.x)),
+          h: Math.max(10 / camera.scale, d.oh + (wp.y - d.p0.y)),
+        };
+        sendUpdate(d.id, patch);
         return;
       }
     }
@@ -7316,12 +7395,9 @@ requestAnimationFrame(draw);
   window.addEventListener("keydown", (ev)=>{
     if (!ANNO.enabled) return;
     if (ev.key !== "Delete" && ev.key !== "Backspace") return;
-
-    const s = getState();
-    if (!s) return;
     if (!ANNO.selectedId) return;
 
-    s.annos = ensureAnnos(s).filter(a => a && a.id !== ANNO.selectedId);
+    sendAnnoIntent({ type:"annoDelete", id: ANNO.selectedId });
     ANNO.selectedId = null;
   });
 })();
