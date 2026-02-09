@@ -6849,6 +6849,70 @@ function drawAnno(ctx, o){
   ctx.restore();
 }
 
+/* ===============================
+   ANNO OVERLAY: bbox + resize + X
+   chỉ vẽ khi ANNO.enabled
+================================ */
+
+function annoDrawControls(ctx, o){
+  if (!ANNO.enabled) return;
+  if (!o) return;
+
+  const r = annoWorldToScreenRect(o);
+
+  // bbox
+  ctx.save();
+  ctx.strokeStyle = "rgba(120,200,255,0.95)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6,4]);
+  ctx.strokeRect(r.x, r.y, r.w, r.h);
+  ctx.setLineDash([]);
+
+  // nút X (top-right)
+  const bx = annoGetDeleteBoxScreen(r);
+  ctx.fillStyle = "rgba(255,70,70,0.95)";
+  ctx.fillRect(bx.x, bx.y, bx.w, bx.h);
+  ctx.fillStyle = "#fff";
+  ctx.font = "14px system-ui, Arial";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.fillText("×", bx.x + bx.w/2, bx.y + bx.h/2 + 0.5);
+
+  // resize handle (bottom-right)
+  const rh = annoGetResizeHandleScreen(r);
+  ctx.fillStyle = "rgba(120,200,255,0.95)";
+  ctx.fillRect(rh.x, rh.y, rh.w, rh.h);
+
+  ctx.restore();
+}
+
+// box X screen
+function annoGetDeleteBoxScreen(screenRect){
+  const size = 18;
+  return {
+    x: screenRect.x + screenRect.w - size - 2,
+    y: screenRect.y + 2,
+    w: size,
+    h: size
+  };
+}
+
+// resize handle screen
+function annoGetResizeHandleScreen(screenRect){
+  const size = 12;
+  return {
+    x: screenRect.x + screenRect.w - size,
+    y: screenRect.y + screenRect.h - size,
+    w: size,
+    h: size
+  };
+}
+
+function pointInRect(p, r){
+  return p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h;
+}
+
+  
 /* ========= (5) HIT-TEST (screen) ========= */
 function hitAnnoAtScreen(s, sp){
   const annos = ensureAnnos(s);
@@ -7056,6 +7120,11 @@ function draw(){
     if (!a) continue;
     if ((a.layer || "above") === "above") drawAnno(ctx, a);
   }
+  
+  if (ANNO.enabled && ANNO.selectedId){
+    const sel = (s.annos || []).find(a => a && a.id === ANNO.selectedId);
+    if (sel) annoDrawControls(ctx, sel);
+  }
 
   requestAnimationFrame(draw);
   renderStatusBoard?.();
@@ -7076,7 +7145,6 @@ requestAnimationFrame(draw);
     return { x: ev.clientX - r.left, y: ev.clientY - r.top };
   }
 
-  // pointerdown: CAPTURE để chặn hệ kéo card khi đang vẽ
   canvas.addEventListener("pointerdown", (ev)=>{
     if (!ANNO.enabled) return;
 
@@ -7089,13 +7157,60 @@ requestAnimationFrame(draw);
     const sp = getScreenPoint(ev);
     const wp = toWorld(sp);
 
+    const annos = ensureAnnos(s);
+
+    // helper lấy anno theo id
+    const getById = (id)=> annos.find(a => a && a.id === id) || null;
+
+    // nếu đang select: check click X hoặc resize handle
     if (ANNO.tool === "select"){
+      // ưu tiên: nếu đang có selected thì check controls của nó trước
+      const cur = ANNO.selectedId ? getById(ANNO.selectedId) : null;
+      if (cur){
+        const sr = annoWorldToScreenRect(cur);
+
+        const delBox = annoGetDeleteBoxScreen(sr);
+        if (pointInRect(sp, delBox)){
+          // ✅ click X => delete
+          s.annos = annos.filter(a => a && a.id !== cur.id);
+          ANNO.selectedId = null;
+          ANNO.creating = null;
+          ANNO.dragging = null;
+          return;
+        }
+
+        const rh = annoGetResizeHandleScreen(sr);
+        if (pointInRect(sp, rh)){
+          // ✅ start resize (world)
+          ANNO.dragging = {
+            id: cur.id,
+            mode: "resize",
+            p0: wp,
+            ox: cur.x, oy: cur.y,
+            ow: cur.w, oh: cur.h
+          };
+          return;
+        }
+      }
+
+      // nếu không click vào control => hit test object (top-most)
       const hit = hitAnnoAtScreen(s, sp);
       ANNO.selectedId = hit ? hit.id : null;
-      if (hit) ANNO.dragging = { id: hit.id, p0: wp, ox: hit.x, oy: hit.y };
+
+      if (hit){
+        ANNO.dragging = {
+          id: hit.id,
+          mode: "move",
+          p0: wp,
+          ox: hit.x, oy: hit.y
+        };
+      }else{
+        ANNO.dragging = null;
+      }
       return;
     }
 
+    // draw rect/ellipse
     if (ANNO.tool === "rect" || ANNO.tool === "ellipse"){
       const id = annoId();
       ensureAnnos(s).push({
@@ -7108,11 +7223,13 @@ requestAnimationFrame(draw);
         lineWidth: 2,
         alpha: 1
       });
+
       ANNO.selectedId = id;
       ANNO.creating = { id, p0: wp };
       return;
     }
 
+    // text
     if (ANNO.tool === "text"){
       const t = prompt("Nhập text:", "Hello") || "";
       if (!t.trim()) return;
@@ -7131,12 +7248,10 @@ requestAnimationFrame(draw);
         color: "#fff",
         alpha: 1
       });
+
       ANNO.selectedId = id;
       ANNO.tool = "select";
-      // update UI active button nếu bạn muốn (không bắt buộc)
-      document.querySelectorAll("#annoPanel [data-anno-tool]").forEach(b=>{
-        b.classList.toggle("active", b.dataset.annoTool === "select");
-      });
+      // nếu bạn có UI highlight thì gọi setAnnoTool("select") ở đây
       return;
     }
   }, true);
@@ -7146,6 +7261,7 @@ requestAnimationFrame(draw);
 
     const s = getState();
     if (!s) return;
+
     if (!ANNO.creating && !ANNO.dragging) return;
 
     ev.preventDefault();
@@ -7155,6 +7271,7 @@ requestAnimationFrame(draw);
     const wp = toWorld(sp);
     const annos = ensureAnnos(s);
 
+    // tạo shape
     if (ANNO.creating){
       const a = annos.find(x => x.id === ANNO.creating.id);
       if (!a) return;
@@ -7167,14 +7284,26 @@ requestAnimationFrame(draw);
       return;
     }
 
+    // drag move/resize
     if (ANNO.dragging){
       const a = annos.find(x => x.id === ANNO.dragging.id);
       if (!a) return;
       const d = ANNO.dragging;
 
-      a.x = d.ox + (wp.x - d.p0.x);
-      a.y = d.oy + (wp.y - d.p0.y);
-      return;
+      if (d.mode === "move"){
+        a.x = d.ox + (wp.x - d.p0.x);
+        a.y = d.oy + (wp.y - d.p0.y);
+        return;
+      }
+
+      if (d.mode === "resize"){
+        // resize theo world
+        const nw = Math.max(10 / camera.scale, d.ow + (wp.x - d.p0.x));
+        const nh = Math.max(10 / camera.scale, d.oh + (wp.y - d.p0.y));
+        a.w = nw;
+        a.h = nh;
+        return;
+      }
     }
   }, { passive:false });
 
@@ -7182,6 +7311,18 @@ requestAnimationFrame(draw);
     if (!ANNO.enabled) return;
     ANNO.creating = null;
     ANNO.dragging = null;
+  });
+
+  window.addEventListener("keydown", (ev)=>{
+    if (!ANNO.enabled) return;
+    if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+
+    const s = getState();
+    if (!s) return;
+    if (!ANNO.selectedId) return;
+
+    s.annos = ensureAnnos(s).filter(a => a && a.id !== ANNO.selectedId);
+    ANNO.selectedId = null;
   });
 })();
 
@@ -7278,9 +7419,36 @@ function openAnnoImagePicker(){
     const t = b.dataset.annoTool;
 
     if (t === "image"){
-      input.click();
+      if (!ANNO.enabled) return;
+    
+      const url = prompt("Nhập URL hình ảnh:", "https://");
+      if (!url || !url.trim()) return;
+    
+      const s = getState();
+      if (!s) return;
+    
+      // đặt ảnh ở giữa màn hình
+      const centerScreen = { x: innerWidth/2, y: innerHeight/2 };
+      const centerWorld = toWorld(centerScreen);
+    
+      const id = annoId();
+      ensureAnnos(s).push({
+        id,
+        kind: "image",
+        layer: "above",
+        x: centerWorld.x - 120,
+        y: centerWorld.y - 90,
+        w: 240,
+        h: 180,
+        src: url.trim(),
+        alpha: 1
+      });
+    
+      ANNO.selectedId = id;
+      setAnnoTool("select");
       return;
     }
+
     setTool(t);
   });
 
