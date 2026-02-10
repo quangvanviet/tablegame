@@ -6762,7 +6762,7 @@ const ANNO = {
   dragging: null,       // { id, p0:{x,y}, ox, oy }
   imgCache: new Map(),  // src -> Image
 };
-  
+ANNO.marquee = null; 
 ANNO.selectedIds = new Set()
   
 // ===== Drawing Mode (Annotation) =====
@@ -7206,29 +7206,40 @@ function draw(){
     }
   }
   
+  // ===== DRAW ALL ANNOS (ALWAYS) =====
+  const annos = Array.isArray(s.annos) ? s.annos : [];
+  for (const a of annos){
+    if (!a) continue;
+    drawAnno(ctx, a);
+  }
+  
   if (ANNO.enabled){
-    const annos = s.annos || [];
-    // vẽ controls cho selected (ưu tiên selectedId), còn lại vẽ bbox mỏng cho selectedIds
     const mainId = ANNO.selectedId;
     if (mainId){
       const main = annos.find(a => a && a.id === mainId);
       if (main) annoDrawControls(ctx, main);
     }
-  
-    // nếu multi-select thì vẽ bbox cho các item còn lại (không vẽ X/resize để khỏi rối)
-    for (const id of (ANNO.selectedIds || [])){
-      if (!id || id === mainId) continue;
-      const a = annos.find(x => x && x.id === id);
-      if (!a) continue;
-      const r = annoWorldToScreenRect(a);
-      ctx.save();
-      ctx.strokeStyle = "rgba(120,200,255,0.55)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6,4]);
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.restore();
-    }
   }
+
+  // ===== DRAW MARQUEE (only in drawing mode) =====
+  if (ANNO.enabled && ANNO.marquee && ANNO.marquee.active){
+    const p0 = ANNO.marquee.p0, p1 = ANNO.marquee.p1;
+    const x = Math.min(p0.x, p1.x);
+    const y = Math.min(p0.y, p1.y);
+    const w = Math.abs(p1.x - p0.x);
+    const h = Math.abs(p1.y - p0.y);
+  
+    ctx.save();
+    ctx.strokeStyle = "rgba(120,200,255,0.95)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,4]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "rgba(120,200,255,0.10)";
+    ctx.fillRect(x, y, w, h);
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
 
 
   requestAnimationFrame(draw);
@@ -7307,16 +7318,17 @@ requestAnimationFrame(draw);
 
     // ===== SELECT TOOL =====
     if (ANNO.tool === "select"){
-      // 1) nếu đang có selectedId, check nút X/resize TRƯỚC (vì nằm ngoài bbox)
+      const shift = !!ev.shiftKey;
+    
+      // 1) nếu có selected -> check controls trước (X/resize ngoài bbox)
       if (ANNO.selectedId){
-        const cur = findAnnoById(s, ANNO.selectedId);
+        const cur = (s.annos || []).find(a => a && a.id === ANNO.selectedId) || null;
         if (cur){
           const sr = annoWorldToScreenRect(cur);
           const delBox = annoGetDeleteBoxScreen(sr);
           const rh = annoGetResizeHandleScreen(sr);
-
+    
           if (pointInRect(sp, delBox)){
-            // delete selected
             sendAnnoIntent({ type:"annoDelete", id: cur.id });
             if (ANNO.selectedIds) ANNO.selectedIds.delete(cur.id);
             ANNO.selectedId = null;
@@ -7324,54 +7336,49 @@ requestAnimationFrame(draw);
             ANNO.creating = null;
             return;
           }
-
+    
           if (pointInRect(sp, rh)){
-            ANNO.dragging = {
-              id: cur.id,
-              mode: "resize",
-              p0: wp,
-              ow: cur.w,
-              oh: cur.h
-            };
+            ANNO.dragging = { id: cur.id, mode:"resize", p0: wp, ow: cur.w, oh: cur.h };
             return;
           }
         }
       }
-
-      // 2) không click vào controls -> hit test object
+    
+      // 2) hit test object
       const hit = hitAnnoAtScreen(s, sp);
-
-      if (!hit){
-        // click trống: clear selection (nếu không giữ shift)
-        if (!shift){
-          ANNO.selectedId = null;
-          clearMulti();
+      if (hit){
+        if (shift){
+          // multi toggle
+          if (!ANNO.selectedIds) ANNO.selectedIds = new Set();
+          if (ANNO.selectedIds.has(hit.id)) ANNO.selectedIds.delete(hit.id);
+          else ANNO.selectedIds.add(hit.id);
+          ANNO.selectedId = hit.id;
+        } else {
+          // single
+          if (!ANNO.selectedIds) ANNO.selectedIds = new Set();
+          ANNO.selectedIds.clear();
+          ANNO.selectedId = hit.id;
         }
+    
+        // start move
+        ANNO.dragging = { id: hit.id, mode:"move", p0: wp, ox: hit.x, oy: hit.y };
         return;
       }
-
-      // click object
-      if (shift){
-        // multi-toggle
-        toggleMulti(hit.id);
-        // chọn mainId là cái vừa bấm (để hiện X/resize)
-        ANNO.selectedId = hit.id;
-      } else {
-        // single select
-        clearMulti();
-        ANNO.selectedId = hit.id;
+    
+      // 3) click trống -> bắt đầu marquee
+      ANNO.dragging = null;
+      ANNO.creating = null;
+    
+      if (!shift){
+        if (!ANNO.selectedIds) ANNO.selectedIds = new Set();
+        ANNO.selectedIds.clear();
+        ANNO.selectedId = null;
       }
-
-      // start move
-      ANNO.dragging = {
-        id: hit.id,
-        mode: "move",
-        p0: wp,
-        ox: hit.x,
-        oy: hit.y
-      };
+    
+      ANNO.marquee = { p0: sp, p1: sp, active: true, shift };
       return;
     }
+
 
     // ===== CREATE RECT/ELLIPSE =====
     if (ANNO.tool === "rect" || ANNO.tool === "ellipse"){
@@ -7434,6 +7441,12 @@ requestAnimationFrame(draw);
     const sp = getScreenPoint(ev);
     const wp = toWorld(sp);
 
+    // nếu đang marquee thì update p1 và return
+    if (ANNO.marquee && ANNO.marquee.active){
+      ANNO.marquee.p1 = sp;
+      return;
+    }
+
     if (ANNO.creating){
       const p0 = ANNO.creating.p0;
       sendUpdate(ANNO.creating.id, {
@@ -7482,6 +7495,40 @@ requestAnimationFrame(draw);
 
   window.addEventListener("pointerup", ()=>{
     if (!ANNO.enabled) return;
+
+    if (ANNO.marquee && ANNO.marquee.active){
+      const p0 = ANNO.marquee.p0, p1 = ANNO.marquee.p1;
+      const x1 = Math.min(p0.x, p1.x), y1 = Math.min(p0.y, p1.y);
+      const x2 = Math.max(p0.x, p1.x), y2 = Math.max(p0.y, p1.y);
+    
+      const annos = (getState()?.annos || []);
+      const picked = [];
+    
+      for (const a of annos){
+        if (!a) continue;
+        const r = annoWorldToScreenRect(a); // screen bbox của anno
+        const ax1 = r.x, ay1 = r.y, ax2 = r.x + r.w, ay2 = r.y + r.h;
+    
+        // intersect test
+        const inter = !(ax2 < x1 || ax1 > x2 || ay2 < y1 || ay1 > y2);
+        if (inter) picked.push(a.id);
+      }
+    
+      if (!ANNO.selectedIds) ANNO.selectedIds = new Set();
+      if (!ANNO.marquee.shift){
+        ANNO.selectedIds.clear();
+      }
+      for (const id of picked) ANNO.selectedIds.add(id);
+    
+      // set main selectedId (để hiện X/resize cho 1 cái)
+      ANNO.selectedId = picked[picked.length - 1] || ANNO.selectedId || null;
+    
+      ANNO.marquee.active = false;
+      ANNO.marquee = null;
+    }
+
+
+    
     ANNO.creating = null;
     ANNO.dragging = null;
   });
