@@ -7211,8 +7211,25 @@ function draw(){
     }
   }
 
-  // ===== CONTROLS (only in drawing mode) =====
+  // ===== CONTROLS + MULTI BBOX (only in drawing mode) =====
   if (ANNO.enabled){
+    const selSet = ANNO.selectedIds instanceof Set ? ANNO.selectedIds : new Set();
+  
+    // vẽ bbox cho tất cả selectedIds (để nhìn thấy đang chọn nhiều)
+    for (const id of selSet){
+      const a = annosAll.find(x => x && x.id === id);
+      if (!a) continue;
+      const r = annoWorldToScreenRect(a);
+      ctx.save();
+      ctx.strokeStyle = "rgba(120,200,255,0.65)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6,4]);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  
+    // controls cho selectedId (X + resize handle)
     const mainId = ANNO.selectedId;
     if (mainId){
       const main = annosAll.find(a => a && a.id === mainId);
@@ -7249,6 +7266,14 @@ requestAnimationFrame(draw);
 /* =========================================================
    ANNO INPUT (select/move + draw rect/ellipse + text + image)
 ========================================================= */
+function applyLocalAnnoPatch(s, id, patch){
+  if (!s) return;
+  s.annos = Array.isArray(s.annos) ? s.annos : [];
+  const a = s.annos.find(x => x && x.id === id);
+  if (!a) return;
+  Object.assign(a, patch);
+}
+  
 (function initAnnoInput(){
   const canvas = document.getElementById("c");
   if (!canvas) return;
@@ -7280,9 +7305,12 @@ requestAnimationFrame(draw);
     };
   }
 
-  const sendUpdate = throttleMs(50, (id, patch)=>{
-    sendAnnoIntent({ type:"annoUpdate", id, patch });
+  const sendUpdate = throttleMs(40, (id, patch)=>{
+    const sNow = getState();
+    if (sNow) applyLocalAnnoPatch(sNow, id, patch); // ✅ thấy ngay
+    sendAnnoIntent({ type:"annoUpdate", id, patch }); // ✅ sync
   });
+
 
   function findAnnoById(s, id){
     return (s.annos || []).find(a => a && a.id === id) || null;
@@ -7384,15 +7412,14 @@ requestAnimationFrame(draw);
       ANNO.marquee = { p0: sp, p1: sp, active: true, shift };
       return;
     }
-
-
+    
     // ===== CREATE RECT/ELLIPSE =====
     if (ANNO.tool === "rect" || ANNO.tool === "ellipse"){
       const id = annoId();
       const payload = {
         id,
         kind: ANNO.tool,
-        layer: "above",
+        layer: "below",
         x: wp.x, y: wp.y, w: 1, h: 1,
         fill: "rgba(255,255,255,.12)",
         stroke: "rgba(255,255,255,.55)",
@@ -7416,7 +7443,7 @@ requestAnimationFrame(draw);
       const payload = {
         id,
         kind: "text",
-        layer: "above",
+        layer: "below",
         x: wp.x, y: wp.y,
         w: Math.max(60, t.length * 14),
         h: 30,
@@ -7591,22 +7618,33 @@ requestAnimationFrame(draw);
     const src = await fileToDataURL(file);
     const id = annoId();
 
-    // đặt ảnh ở giữa màn hình (screen center -> world)
+    // screen center -> world (dùng toWorld của bạn)
     const spCenter = { x: innerWidth/2, y: innerHeight/2 };
-    const wpCenter = annoToWorldFromScreen(spCenter);
+    const wpCenter = toWorld(spCenter);
 
-    ensureAnnos(s).push({
+    const payload = {
       id,
       kind: "image",
-      layer: "above",
+      layer: "below", // ✅ theo yêu cầu: luôn dưới card
       x: wpCenter.x - 120,
       y: wpCenter.y - 90,
       w: 240,
       h: 180,
       src,
       alpha: 1
-    });
+    };
 
+    // ✅ optimistic add để thấy ngay
+    s.annos = Array.isArray(s.annos) ? s.annos : [];
+    s.annos.push(payload);
+
+    // ✅ sync để người khác thấy + không bị "mất"
+    sendAnnoIntent({ type:"annoAdd", payload });
+
+    // select
+    if (!ANNO.selectedIds) ANNO.selectedIds = new Set();
+    ANNO.selectedIds.clear();
+    ANNO.selectedIds.add(id);
     ANNO.selectedId = id;
     ANNO.tool = "select";
 
@@ -7681,7 +7719,7 @@ function openAnnoImagePicker(){
       ensureAnnos(s).push({
         id,
         kind: "image",
-        layer: "above",
+        layer: "below",
         x: centerWorld.x - 120,
         y: centerWorld.y - 90,
         w: 240,
