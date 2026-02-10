@@ -7034,8 +7034,6 @@ function fileToDataURL(file){
   });
 }
 
-  
-  
 function draw(){
   ctx.clearRect(0,0,innerWidth,innerHeight);
 
@@ -7052,9 +7050,8 @@ function draw(){
     return;
   }
 
-  // ✅ luôn dùng ps (đã normalize 0..3) cho mọi thứ liên quan players
+  // ✅ normalize players 0..3
   const ps = players4(s);
-
   const seatName = (seat)=> (ps[seat]?.name || "(Trống)");
 
   drawZone(rects.table, "TABLE", "", false);
@@ -7065,14 +7062,10 @@ function draw(){
     if (ps[i] && ps[i].id === selfId){ mySeat = i; break; }
   }
 
-  // ✅ privacy: chỉ chủ hand mới được thấy mặt trước
+  // ✅ privacy: chỉ owner được thấy mặt trước khi ở hand
   const canSeeFront = (card) => {
     if (!card) return false;
-
-    // ngoài hand: theo faceUp bình thường
     if (card.zone !== ZONES.hand) return !!card.faceUp;
-
-    // trong hand: chỉ owner mới thấy faceUp, người khác luôn thấy back
     const ownerId = (card.ownerId ?? card.owner ?? null);
     return (ownerId && ownerId === selfId) ? !!card.faceUp : false;
   };
@@ -7082,7 +7075,7 @@ function draw(){
     return p ? (COLORS?.[p.color] ?? null) : null;
   };
 
-  // ✅ 4 người
+  // ✅ 4 hands
   drawZone(rects.handTopLeft,     "Người chơi 1", seatName(0), mySeat===0, tintBySeat(0));
   drawZone(rects.handBottomLeft,  "Người chơi 2", seatName(1), mySeat===1, tintBySeat(1));
   drawZone(rects.handTopRight,    "Người chơi 3", seatName(2), mySeat===2, tintBySeat(2));
@@ -7091,13 +7084,14 @@ function draw(){
   drawZone(rects.deck, "DECK");
   drawZone(rects.discard, "DISCARD");
 
-  // ===== ANNOTATIONS (BELOW CARDS) =====
-  const annos = ensureAnnos(s);
-  for (const a of annos){
+  // ===== ✅ ANNOTATIONS: ALWAYS BELOW CARDS =====
+  const annosAll = Array.isArray(s.annos) ? s.annos : [];
+  for (const a of annosAll){
     if (!a) continue;
-    if ((a.layer || "above") === "below") drawAnno(ctx, a);
+    drawAnno(ctx, a); // luôn vẽ trước cards
   }
 
+  // ===== DRAW CARDS / STACKS =====
   const objs = listDrawableObjects(s) || [];
   const backUrlDefault = s.assets?.backUrl || "";
 
@@ -7124,7 +7118,6 @@ function draw(){
       const c = getCardById(s, o.id);
       if (!c) continue;
 
-      // ✅ tìm owner chỉ bằng ps (không đụng s.players)
       const oid = (c.ownerId || c.owner || "");
       let owner = null;
       for (let i=0;i<4;i++){
@@ -7137,11 +7130,9 @@ function draw(){
         (c.frontUrl || "") ||
         (s.assets?.frontBase ? (s.assets.frontBase + c.id + ".png") : "");
 
-      const showFront = canSeeFront(c);
-
       drawCardAtScreen(
         sp.x, sp.y,
-        showFront,
+        canSeeFront(c),
         c.frontSeed,
         accent,
         isSelected,
@@ -7184,11 +7175,9 @@ function draw(){
           (top.frontUrl || "") ||
           (s.assets?.frontBase ? (s.assets.frontBase + topId + ".png") : "");
 
-        const showFrontTop = canSeeFront(top);
-
         drawCardAtScreen(
           sp.x, sp.y,
-          showFrontTop,
+          canSeeFront(top),
           top.frontSeed,
           accent,
           isSelected,
@@ -7205,30 +7194,24 @@ function draw(){
       }
     }
   }
-  
-  // ===== DRAW ALL ANNOS (ALWAYS) =====
-  const annos = Array.isArray(s.annos) ? s.annos : [];
-  for (const a of annos){
-    if (!a) continue;
-    drawAnno(ctx, a);
-  }
-  
+
+  // ===== CONTROLS (only in drawing mode) =====
   if (ANNO.enabled){
     const mainId = ANNO.selectedId;
     if (mainId){
-      const main = annos.find(a => a && a.id === mainId);
+      const main = annosAll.find(a => a && a.id === mainId);
       if (main) annoDrawControls(ctx, main);
     }
   }
 
-  // ===== DRAW MARQUEE (only in drawing mode) =====
+  // ===== MARQUEE =====
   if (ANNO.enabled && ANNO.marquee && ANNO.marquee.active){
     const p0 = ANNO.marquee.p0, p1 = ANNO.marquee.p1;
     const x = Math.min(p0.x, p1.x);
     const y = Math.min(p0.y, p1.y);
     const w = Math.abs(p1.x - p0.x);
     const h = Math.abs(p1.y - p0.y);
-  
+
     ctx.save();
     ctx.strokeStyle = "rgba(120,200,255,0.95)";
     ctx.lineWidth = 2;
@@ -7240,12 +7223,11 @@ function draw(){
     ctx.restore();
   }
 
-
-
   requestAnimationFrame(draw);
   renderStatusBoard?.();
 }
 requestAnimationFrame(draw);
+
 
 //Toolbar thêm shape và insert hình ảnh
 /* =========================================================
