@@ -6978,7 +6978,7 @@ function annoDrawControls(ctx, o){
 // box X screen
 function annoGetDeleteBoxScreen(screenRect){
   const size = 18;
-  const gap  = 6;  // khoảng cách ra ngoài bbox
+  const gap  = 3;  // khoảng cách ra ngoài bbox
   return {
     x: screenRect.x + screenRect.w + gap,   
     y: screenRect.y - size - gap,        
@@ -6990,7 +6990,7 @@ function annoGetDeleteBoxScreen(screenRect){
 // resize handle screen
 function annoGetResizeHandleScreen(screenRect){
   const size = 12;
-  const gap  = 6;  // khoảng cách ra ngoài bbox
+  const gap  = 3;  // khoảng cách ra ngoài bbox
   return {
     x: screenRect.x + screenRect.w + gap,
     y: screenRect.y + screenRect.h + gap, 
