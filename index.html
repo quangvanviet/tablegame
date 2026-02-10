@@ -5899,10 +5899,16 @@ const DECKUI = {
   saveBtn: document.getElementById("saveSetBtn"),
 };
 
-function isSeat0Host(){
-  const seat0 = client.lobby?.seatClaimsPlay?.[0] || client.lobby?.seatClaimsPlay?.["0"] || "";
-  return seat0 && seat0 === (FB.uid || "");
+function getSeat0Uid(){
+  const sc = client?.lobby?.seatClaimsPlay || {};
+  return sc[0] || sc["0"] || "";
 }
+
+function isSeat0Host(){
+  const uid = FB?.uid || "";
+  return !!uid && (getSeat0Uid() === uid);
+}
+
   
 let deckSetsCache = {};
 let deckCurrentSetId = null;
