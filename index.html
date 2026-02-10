@@ -4997,6 +4997,13 @@ async function createRoomAsHost_Firebase(){
     // ANNO INTENTS (DRAWING)
     // =========================
     if (isAnnoAction){
+      
+      const hostIdNow = client.lobby?.meta?.hostId || client.lobby?.meta?.hostUid || "";
+      if (fromId !== hostIdNow){
+        await t.ackIntent(intentRef);
+        return;
+      }
+      
       const st = client.host.state;
       st.annos = Array.isArray(st.annos) ? st.annos : [];
     
@@ -7330,6 +7337,7 @@ function applyLocalAnnoPatch(s, id, patch){
 
   canvas.addEventListener("pointerdown", (ev)=>{
     if (!ANNO.enabled) return;
+    if (!client?.isHost) return;
 
     const s = getState();
     if (!s) return;
@@ -7464,6 +7472,8 @@ function applyLocalAnnoPatch(s, id, patch){
 
   window.addEventListener("pointermove", (ev)=>{
     if (!ANNO.enabled) return;
+    if (!client?.isHost) return;
+    
     const s = getState();
     if (!s) return;
 
@@ -7539,7 +7549,8 @@ function applyLocalAnnoPatch(s, id, patch){
 
   window.addEventListener("pointerup", ()=>{
     if (!ANNO.enabled) return;
-
+    if (!client?.isHost) return;
+    
     if (ANNO.marquee && ANNO.marquee.active){
       const p0 = ANNO.marquee.p0, p1 = ANNO.marquee.p1;
       const x1 = Math.min(p0.x, p1.x), y1 = Math.min(p0.y, p1.y);
@@ -7580,6 +7591,8 @@ function applyLocalAnnoPatch(s, id, patch){
   // Delete/backspace: xóa 1 lần (xóa tất cả selected)
   window.addEventListener("keydown", (ev)=>{
     if (!ANNO.enabled) return;
+    if (!client?.isHost) return;
+    
     if (ev.key !== "Delete" && ev.key !== "Backspace") return;
 
     // ưu tiên multi-select nếu có
@@ -7653,6 +7666,7 @@ function applyLocalAnnoPatch(s, id, patch){
 })();
 
 function openAnnoImagePicker(){
+  if (!client?.isHost) return;
   ANNO.tool = "image";
   document.getElementById("annoImgInput")?.click();
 }
