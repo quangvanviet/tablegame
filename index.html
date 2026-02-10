@@ -5470,7 +5470,6 @@ async function maybeElectNewHost(roomRef){
   const uid = FB.uid;
   if (!uid) return;
 
-  // lấy snapshot cần thiết
   const [metaSnap, usersSnap, presSnap] = await Promise.all([
     roomRef.child("meta").get(),
     roomRef.child("users").get(),
@@ -5481,150 +5480,182 @@ async function maybeElectNewHost(roomRef){
   const users = usersSnap.val() || {};
   const pres  = presSnap.val()  || {};
 
-  const curHostId = meta.hostId || "";
-  if (!curHostId) return; // phòng chưa set hostId
+  const curHostId = meta.hostId || meta.hostUid || "";
+  if (!curHostId) return;
 
-  // nếu host vẫn online -> thôi
-  const hostOnline = !!pres[curHostId];
-  if (hostOnline) return;
+  // host vẫn online => thôi
+  if (pres[curHostId]) return;
 
-  // build list candidates online
+  // online candidates
   const onlineUsers = Object.entries(users)
     .map(([id,u])=>({ id, ...(u||{}) }))
-    .filter(u => u.id && pres[u.id]); // online only
+    .filter(u => u.id && pres[u.id]);
 
   if (onlineUsers.length === 0) return;
 
-  // xác định hostSeat (nếu biết)
   const hostUser = users[curHostId] || null;
   const hostSeatRaw = (hostUser?.playSeat ?? hostUser?.seat);
   const hostSeat = Number.isInteger(hostSeatRaw) ? (hostSeatRaw|0) : -1;
 
-  // helper chọn ứng viên "gần nhất"
   const seatOf = (u)=>{
     const s = (u?.playSeat ?? u?.seat);
     return Number.isInteger(s) ? (s|0) : null;
   };
-  
+
   const playUsers = onlineUsers.filter(u => seatOf(u) !== null);
+
   let best = null;
-
   if (playUsers.length){
-    // sắp theo khoảng cách vòng từ hostSeat
     const dist = (seat)=>{
-      if (hostSeat < 0) return 999; // không biết host seat
+      if (hostSeat < 0) return 999;
       const d = (seat - hostSeat + 4) % 4;
-      return d === 0 ? 4 : d; // tránh chọn lại hostSeat
+      return d === 0 ? 4 : d;
     };
-
-      best = playUsers
-      .slice()
-      .sort((a,b)=>{
-        const sa = seatOf(a);
-        const sb = seatOf(b);
-        const da = dist(sa);
-        const db = dist(sb);
-
-        if (da !== db) return da - db;
-        // tie-break: joinedAt sớm hơn
-        return (a.joinedAt||0) - (b.joinedAt||0);
-      })[0];
+    best = playUsers.slice().sort((a,b)=>{
+      const da = dist(seatOf(a));
+      const db = dist(seatOf(b));
+      if (da !== db) return da - db;
+      return (a.joinedAt||0) - (b.joinedAt||0);
+    })[0];
   } else {
-    // fallback: spectator joined sớm nhất
-    best = onlineUsers
-      .slice()
-      .sort((a,b)=> (a.joinedAt||0) - (b.joinedAt||0))[0];
+    best = onlineUsers.slice().sort((a,b)=> (a.joinedAt||0) - (b.joinedAt||0))[0];
   }
 
   if (!best?.id) return;
+  if (best.id !== uid) return; // chỉ người được chọn mới attempt takeover
 
-  // chỉ người được chọn mới attempt takeover
-  if (best.id !== uid) return;
+  // ✅ transaction trên meta để set hostId + hostEpoch cùng lúc
+  const nowTs = Date.now();
+  await roomRef.child("meta").transaction((m)=>{
+    m = m || {};
+    const cur = m.hostId || m.hostUid || "";
+    if (cur !== curHostId) return; // abort nếu đã có người takeover
 
-  // transaction để tránh 2 người cùng giành host
-  await roomRef.child("meta/hostId").transaction((cur)=>{
-    // chỉ takeover nếu host hiện tại vẫn là curHostId (tránh đè người khác đã takeover)
-    if (cur === curHostId) return uid;
-    return; // abort
-  });
-
-  // optional: ghi log
-  await roomRef.child("meta/hostChangedAt").set(Date.now()).catch(()=>{});
+    m.hostId = uid;
+    m.hostUid = uid;
+    m.hostEpoch = nowTs;        // ✅ epoch mới (chặn state cũ)
+    m.hostChangedAt = nowTs;
+    return m;
+  }).catch(()=>{});
 }
 
 let _stopHostIntents = null;
-let _hostGuardCb = null; // cache hostId hiện tại để host-lock nhẹ
+let _hostGuardCb = null;
 
 async function startHostAuthority(roomId){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
 
-  // 1) đảm bảo transport tồn tại
   const t = client.transport;
   if (!t) return;
 
-  // 2) tạo HostController nếu chưa có
   if (!client.host){
     client.host = new HostController(client.roomCode, FB.uid);
   }
 
-  // 3) lấy state hiện tại từ DB để takeover tiếp tục (không reset bàn)
+  // ===== helper: kiểm tra còn là host ngay lúc này không
+  const stillHost = ()=>{
+    const hid = client._hostIdNow || "";
+    return hid === (FB.uid || "");
+  };
+
+  // ===== helper: writeState có guard (chặn host cũ viết sau khi mất host)
+  const guardedWriteState = async (intentRefOpt)=>{
+    if (!stillHost()){
+      if (intentRefOpt) { try{ await t.ackIntent(intentRefOpt); }catch(e){} }
+      return false;
+    }
+    // gắn epoch vào state trước khi write
+    client.host.state.hostId = FB.uid;
+    client.host.state.hostEpoch = client._hostEpochNow || client.host.state.hostEpoch || 0;
+    client.host.bumpVersion?.();
+    await t.writeState(client.host.state);
+    return true;
+  };
+
+  // ===== (1) load state hiện tại để takeover (không reset)
   const stSnap = await roomRef.child("state").get();
   const st = stSnap.val();
   if (st && typeof st === "object"){
     client.host.state = st;
   }
-  
-  // ✅ đảm bảo fields tồn tại để router chạy ổn định
+
+  // đảm bảo shape
   client.host.state.annos = Array.isArray(client.host.state.annos) ? client.host.state.annos : [];
   client.host.state.game = client.host.state.game || { phase:"waiting" };
   client.host.state.assets = client.host.state.assets || { backUrl:"" };
 
-  // 4) sync hostId trong state theo meta.hostId (để quyền host-only trong applyIntent hoạt động)
-  client.host.state.hostId = FB.uid;
-
-  // 5) host lock nhẹ: cache meta/hostId bằng listener 1 lần
+  // ===== (2) meta guard: cache hostId + hostEpoch (listen 1 lần)
   if (!_hostGuardCb){
     _hostGuardCb = (snap)=>{
-      client._hostIdNow = snap.val() || "";
+      const m = snap.val() || {};
+      client._hostIdNow = (m.hostId || m.hostUid || "");
+      client._hostEpochNow = (m.hostEpoch || 0);
     };
-    roomRef.child("meta/hostId").on("value", _hostGuardCb);
-    // nạp ngay
-    try{ client._hostIdNow = (await roomRef.child("meta/hostId").get()).val() || ""; }catch(e){}
+    roomRef.child("meta").on("value", _hostGuardCb);
+    try{
+      const m = (await roomRef.child("meta").get()).val() || {};
+      client._hostIdNow = (m.hostId || m.hostUid || "");
+      client._hostEpochNow = (m.hostEpoch || 0);
+    }catch(e){}
   }
 
-  // 6) bật listen intents (chỉ bật 1 lần)
+  // nếu lúc gọi mà mình không phải host thì thôi
+  if (!stillHost()) return;
+
+  // ===== (3) stabilize ngay 1 lần để hand zone không “trống rồi hiện”
+  // rebuild mapping players theo lobby rồi write state
+  await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
+  client.host.state.hostId = FB.uid;
+  client.host.state.hostEpoch = client._hostEpochNow || (Date.now());
+  await guardedWriteState(null);
+
+  // ===== (4) intents listener: chỉ bật 1 lần
   if (_stopHostIntents) return;
 
   const unsub = t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
     const fromId = msg.fromId;
 
-    // ✅ host lock: nếu mình không còn là host thì chỉ ack rồi bỏ
-    const hostIdNow = client._hostIdNow || "";
-    if (hostIdNow !== (FB.uid || "")){
+    // guard đầu handler
+    if (!stillHost()){
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
-    // --- A) JOIN: chỉ sync name/players nếu user đang NGỒI GHẾ (playSeat != null) ---
+    // --- A) JOIN ---
     if (action?.type === "join"){
-      await hostRebuildPlayersFromLobby(roomRef);
+      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
+
+      // re-check trước khi tiếp tục
+      if (!stillHost()){
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+
       try{
         const u = (await roomRef.child(`users/${fromId}`).get()).val() || {};
         if (Number.isInteger(u.playSeat)){
           const seat = u.playSeat|0;
           const uname = u.username || msg.fromName || "Player";
           client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
-          await t.writeState(client.host.state);
+
+          // ✅ re-check trước write
+          if (!(await guardedWriteState(intentRef))) return;
         }
       }catch(e){}
+
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
-    // --- B) SIT/UNSIT: lobby seat -> state.players mapping ---
+    // --- B) SIT ---
     if (action?.type === "sit"){
-      await hostRebuildPlayersFromLobby(roomRef);
+      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
+      if (!stillHost()){
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+
       const seat = action.seat|0;
       if (seat < 0 || seat > 3){
         try{ await t.ackIntent(intentRef); }catch(e){}
@@ -5639,26 +5670,41 @@ async function startHostAuthority(roomId){
 
       const rr = client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
       if (rr?.ok){
-        await t.writeState(client.host.state);
+        if (!(await guardedWriteState(intentRef))) return;
       }
+
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
+    // --- UNSIT ---
     if (action?.type === "unsit"){
-      await hostRebuildPlayersFromLobby(roomRef);
+      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
+      if (!stillHost()){
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+
       client.host.removePlayer(fromId);
-      await t.writeState(client.host.state);
+      if (!(await guardedWriteState(intentRef))) return;
+
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
-    // --- C) LEAVE: remove khỏi state.players, xoá user entry (seatClaims đã release ở client leave/unseat) ---
+    // --- LEAVE ---
     if (action?.type === "leave"){
-      await hostRebuildPlayersFromLobby(roomRef);
+      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
+      if (!stillHost()){
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+
       client.host.removePlayer(fromId);
       try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
-      await t.writeState(client.host.state);
+
+      if (!(await guardedWriteState(intentRef))) return;
+
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
@@ -5666,78 +5712,66 @@ async function startHostAuthority(roomId){
     // =========================
     // D) ROUTER: ANNO + GAMEPLAY
     // =========================
-    
-    // ✅ chỉ host được phép thao tác anno (và mọi action host-only nếu bạn muốn)
+
+    // ✅ chỉ host được thao tác anno
     const hostIdNow2 = client._hostIdNow || "";
     const isHostSender = (fromId === hostIdNow2);
-    
-    // 1) ANNO intents: xử lý trực tiếp, KHÔNG qua applyIntent
+
     const isAnnoAction =
       action?.type === "annoAdd" ||
       action?.type === "annoUpdate" ||
       action?.type === "annoDelete";
-    
+
     if (isAnnoAction){
-      // chỉ host mới được thao tác
       if (!isHostSender){
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
-    
-      const st = client.host.state;
-      st.annos = Array.isArray(st.annos) ? st.annos : [];
-    
+      const st2 = client.host.state;
+      st2.annos = Array.isArray(st2.annos) ? st2.annos : [];
+
       if (action.type === "annoAdd"){
         const p = action.payload;
         if (p && p.id){
-          st.annos.push(p);
-          client.host.bumpVersion?.();
-          await t.writeState(st);
+          st2.annos.push(p);
+          if (!(await guardedWriteState(intentRef))) return;
         }
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
-    
+
       if (action.type === "annoUpdate"){
-        const a = st.annos.find(x => x && x.id === action.id);
+        const a = st2.annos.find(x => x && x.id === action.id);
         if (a && action.patch && typeof action.patch === "object"){
           Object.assign(a, action.patch);
-          client.host.bumpVersion?.();
-          await t.writeState(st);
+          if (!(await guardedWriteState(intentRef))) return;
         }
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
-    
+
       if (action.type === "annoDelete"){
-        st.annos = st.annos.filter(x => x && x.id !== action.id);
-        client.host.bumpVersion?.();
-        await t.writeState(st);
+        st2.annos = st2.annos.filter(x => x && x.id !== action.id);
+        if (!(await guardedWriteState(intentRef))) return;
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
     }
-    
-    // 2) Gameplay intents: dùng applyIntent như cũ
+
+    // gameplay intents
     const r = client.host.applyIntent(fromId, action);
-    
-    // ✅ Unknown action: ACK im lặng để không spam toast (đặc biệt khi takeover)
+
     if (!r?.ok){
-      // chỉ toast khi chính host bấm và muốn debug
-      if (fromId === (FB.uid || "") && r.reason && r.reason !== "Unknown action"){
-        toast("Action fail: " + r.reason);
-      }
+      // takeover: ack im lặng, tránh spam
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
-    
-    await t.writeState(client.host.state);
 
+    if (!(await guardedWriteState(intentRef))) return;
     try{ await t.ackIntent(intentRef); }catch(e){}
   });
 
   _stopHostIntents = (typeof unsub === "function") ? unsub : null;
-
   console.log("[host] authority started");
 }
 
@@ -5751,11 +5785,13 @@ function stopHostAuthority(){
     const roomId = client.roomId;
     if (roomId && _hostGuardCb){
       const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
-      roomRef.child("meta/hostId").off("value", _hostGuardCb);
+      roomRef.child("meta").off("value", _hostGuardCb); // ✅ off meta (không phải meta/hostId)
     }
   }catch(e){}
   _hostGuardCb = null;
+
   client._hostIdNow = "";
+  client._hostEpochNow = 0;
 
   console.log("[host] authority stopped");
 }
