@@ -4543,10 +4543,12 @@ function isMeHost(){
   return !!uid && seat0 === uid;
 }
 
-// ghế click: tạm thời cho người dùng tự xin ngồi
 async function requestSit(roomId, seat){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
   const uid = FB.uid;
+  seat = seat|0;
+
+  if (seat < 0 || seat > 3) return toast("Ghế không hợp lệ");
 
   // ✅ đang chơi => cấm đổi ghế
   const gs = (client.lobby?.meta?.gameStatus || "waiting");
@@ -4560,11 +4562,12 @@ async function requestSit(roomId, seat){
 
   // nếu đang ngồi ghế đó -> click lại để xuống
   if (Number.isInteger(u.playSeat)){
-    if ((u.playSeat|0) === (seat|0)) return requestUnseat(roomId);
+    if ((u.playSeat|0) === seat) return requestUnseat(roomId);
     toast("Bạn đang ngồi ghế khác. Hãy xuống ghế chờ trước.");
     return;
   }
 
+  // ✅ claim ghế bằng transaction
   const claimRef = roomRef.child(`seatClaims/play/${seat}`);
   const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
   if (!tx.committed || tx.snapshot.val() !== uid){
@@ -4572,16 +4575,25 @@ async function requestSit(roomId, seat){
     return;
   }
 
+  // ✅ update users
   await roomRef.child(`users/${uid}`).update({
     role: "player",
-    playSeat: seat|0,
+    playSeat: seat,
   });
 
+  // ✅ báo intent để host authority rebuild players/state
   try{
-    await client.transport?.sendIntent?.({ type:"sit", seat: seat|0 });
+    await client.transport?.sendIntent?.({ type:"sit", seat });
   }catch(e){}
-  
-  toast((seat|0) === 0 ? "Bạn đã ngồi ghế chủ phòng" : `Đã ngồi ghế ${seat+1}`);
+
+  // ⛔ KHÔNG set meta.hostId / meta.hostUid nữa
+  // host = seatClaims/play/0 là nguồn sự thật
+
+  toast(seat === 0 ? "Bạn đã ngồi ghế chủ phòng" : `Đã ngồi ghế ${seat+1}`);
+
+  // (tuỳ kiến trúc) Nếu bạn dùng “host authority chạy trên máy host”
+  // thì người vừa ngồi seat 0 nên bật authority:
+  if (seat === 0) startHostAuthority(client.roomId).catch(()=>{});
 }
 
 async function requestUnseat(roomId){
@@ -4604,26 +4616,31 @@ async function requestUnseat(roomId){
     return;
   }
 
+  // ✅ release claim ghế
   await roomRef.child(`seatClaims/play/${mySeat}`).transaction(cur=>{
     if (cur === uid) return null;
     return; // abort
   }).catch(()=>{});
 
+  // ✅ update users
   await roomRef.child(`users/${uid}`).update({
     role: "spectator",
     playSeat: null,
   });
 
+  // ✅ báo intent để host authority rebuild players/state
   try{
     await client.transport?.sendIntent?.({ type:"unsit" });
   }catch(e){}
 
-  if (mySeat === 0){
-    await roomRef.child(`meta/hostId`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
-    await roomRef.child(`meta/hostUid`).transaction(cur => (cur === uid ? "" : undefined)).catch(()=>{});
-  }
-  
+  // ⛔ KHÔNG clear meta.hostId / meta.hostUid nữa
+  // vì host = seatClaims/play/0; khi seat0 trống thì “chưa có host”
+
   toast("Đã xuống ghế chờ");
+
+  // (tuỳ kiến trúc) nếu bạn đang là host authority mà vừa rời seat0
+  // thì nên stop:
+  if (mySeat === 0) stopHostAuthority();
 }
   
 function seatColorByUid(uid){
