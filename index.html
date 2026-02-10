@@ -2573,10 +2573,17 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   if (typeof client === "undefined") {
     throw new Error("client chưa được khởi tạo (đặt code này SAU đoạn const client = {...})");
   }
-  if (!client.isHost) return toast("Chỉ host mới load deck");
-  if (!(client.transport instanceof FirebaseTransport)) return toast("Chức năng này chỉ dùng trong Firebase");
 
   await fbEnsureAuth();
+
+  // ✅ host = seat0
+  if (!isSeat0Host()) return toast("Chỉ chủ phòng (ngồi ghế 1 / seat 0) mới load deck");
+
+  // ✅ đang chơi thì cấm load deck để tránh phá state
+  const gs = client.lobby?.meta?.gameStatus || "waiting";
+  if (gs === "playing") return toast("Đang chơi rồi — không thể load deck.");
+
+  if (!(client.transport instanceof FirebaseTransport)) return toast("Chức năng này chỉ dùng trong Firebase");
 
   if (!client.roomId) return toast("Chưa vào phòng / roomId trống");
   if (!client.host?.state) return toast("Host state chưa sẵn sàng");
@@ -2600,7 +2607,7 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   if (total <= 0) return toast("Set rỗng (chưa có URL / count)");
 
   const backUrl = (data.backUrl || "").trim();
-  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`)
+  const roomRef = FB.db.ref(`AllRoom/${String(client.roomId).toLowerCase()}`);
 
   // meta: lưu lịch sử nhiều deck (append)
   const deckItem = {
@@ -2614,30 +2621,32 @@ async function hostLoadSelectedSetToRoom_FromSaved(){
   };
   await roomRef.child("meta/decks").push(deckItem);
 
-  // build deck vào state
   const st = client.host.state;
+
+  // ✅ hostId trong state luôn = seat0 (đúng rule)
+  st.hostId = getSeat0Uid() || FB.uid;
+
   st.assets = st.assets || { backUrl:"" };
   st.assets.backUrl = backUrl;
 
   if (typeof hostCreateDeckFromSet !== "function"){
-    throw new Error("hostCreateDeckFromSet chưa tồn tại (bạn chưa dán function phần B)");
+    throw new Error("hostCreateDeckFromSet chưa tồn tại");
   }
 
-  // ✅ backup annos để không bị mất khi rebuild deck/state
-  const _annosKeep = structuredClone ? structuredClone(st.annos || []) : JSON.parse(JSON.stringify(st.annos || []));
-  
-  hostCreateDeckFromSet(st, types, deckItem.name);
-  
-  // ✅ restore annos
-  st.annos = _annosKeep;
+  // ✅ backup annos để không bị mất
+  const _annosKeep = (typeof structuredClone === "function")
+    ? structuredClone(st.annos || [])
+    : JSON.parse(JSON.stringify(st.annos || []));
 
+  hostCreateDeckFromSet(st, types, deckItem.name);
+
+  st.annos = _annosKeep;
 
   if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
   await client.transport.writeState(st);
 
   toast(`Đã tạo deck mới: ${types.length} loại / ${total} lá`);
 }
-
 
 /* =========================================================
    7) Wire UI buttons
@@ -2655,6 +2664,10 @@ if (UI.hostRefreshSetsBtn){
 if (UI.hostLoadDeckBtn){
   UI.hostLoadDeckBtn.onclick = async ()=>{
     try{
+      if (!isSeat0Host()) return toast("Chỉ chủ phòng (seat 0) mới load deck");
+      if (!_hostSetsCache || Object.keys(_hostSetsCache).length === 0){
+        await refreshHostSetSelect().catch(()=>{});
+      }
       await hostLoadSelectedSetToRoom_FromSaved();
     }catch(e){
       console.error(e);
@@ -2666,18 +2679,17 @@ if (UI.hostLoadDeckBtn){
 if (UI.startGameBtn){
   UI.startGameBtn.onclick = ()=>{
     if (!window.client) return toast("client chưa sẵn sàng");
-    if (!client.isHost) return toast("Chỉ host mới bắt đầu");
+    if (!isSeat0Host()) return toast("Chỉ chủ phòng (seat 0) mới bắt đầu");
 
-    // ✅ luôn dùng intent để host authority xử lý
     if (typeof window.sendIntent === "function"){
       sendIntent({ type:"startGame" });
       toast("Bắt đầu!");
       return;
     }
-
     toast("sendIntent chưa sẵn sàng");
   };
 }
+
 
 /* =========================================================
    Inspector (card inspector popup)
@@ -3226,7 +3238,11 @@ function ensureStateShape(state){
   // ✅ normalize players: array OR object -> fixed 4 slots
   const outPlayers = [null, null, null, null];
   const srcP = s.players;
+  
+  s.annos = Array.isArray(s.annos) ? s.annos : [];
+  s.hostId = (s.hostId || "").toString();
 
+  
   if (Array.isArray(srcP)){
     for (let i=0;i<4;i++){
       const p = srcP[i];
@@ -3331,9 +3347,11 @@ function redactStateForViewer(state, viewerId){
 ========================================================= */
 function canInteract(card, actorId){
   if (!card) return false;
-  if (card.zone === ZONES.hand) return card.owner === actorId;
-  return true; // table/deck/discard allow (deck dragging is blocked separately)
+  const owner = (card.ownerId ?? card.owner ?? null);
+  if (card.zone === ZONES.hand) return owner === actorId;
+  return true;
 }
+
 function canInteractStack(stack, actorId){
   if (!stack) return false;
   const owner = stack.owner ?? stack.ownerId ?? null;
@@ -3765,7 +3783,7 @@ class HostController {
 
       // ✅ Delete: host-only
       case "delete": {
-        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+        if (!st.hostId || fromId !== st.hostId) return { ok:false, reason:"Host only" };
 
         const { targetType, id } = action || {};
         if (!targetType || !id) return { ok:false, reason:"Missing target" };
@@ -4003,7 +4021,7 @@ class HostController {
       }
 
       case "reset": {
-        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+        if (!st.hostId || fromId !== st.hostId) return { ok:false, reason:"Host only" };
 
         const keepPlayers = deepClone(st.players);
         this.state = makeFreshTableState(st.roomCode, st.hostId);
@@ -4015,7 +4033,7 @@ class HostController {
       }
 
       case "setAssets": {
-        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+        if (!st.hostId || fromId !== st.hostId) return { ok:false, reason:"Host only" };
 
         st.assets = st.assets || {};
         st.assets.frontBase = (action.frontBase || "").trim();
@@ -4031,7 +4049,7 @@ class HostController {
       }
 
       case "startGame": {
-        if (fromId !== st.hostId) return { ok:false, reason:"Host only" };
+        if (!st.hostId || fromId !== st.hostId) return { ok:false, reason:"Host only" };
 
         st.game = st.game || {};
         st.game.phase = "playing";
@@ -4042,7 +4060,7 @@ class HostController {
       }
 
       case "set_stat_header": {
-        if (st.hostId && fromId !== st.hostId) return { ok:false, reason:"Host only" };
+        if (!st.hostId || fromId !== st.hostId) return { ok:false, reason:"Host only" };
         ensureUIState(st);
 
         const idx = (action.idx | 0);
@@ -4205,10 +4223,12 @@ function setNetBadge(text, color=null){
 
 function getState(){
   if (client.isHost && client.host){
-    return client.authoritative || redactStateForViewer(client.host.state, client.selfId);
+    // host: ưu tiên state thật
+    return redactStateForViewer(client.host.state, client.selfId);
   }
   return client.authoritative;
 }
+
 function seatColorKey(seat){
   seat = seat|0;
   // ưu tiên COLOR_ORDER nếu bạn có
@@ -4249,32 +4269,37 @@ function setStatusUI(){
     client.lobby.meta?.roomName ||
     client.roomMeta?.roomName ||
     client.roomCode || "—";
-  
-  UI.roomBadge.textContent = `PHÒNG: ${roomName}`;
 
+  UI.roomBadge.textContent = `PHÒNG: ${roomName}`;
   UI.chatBadge && (UI.chatBadge.textContent = "v" + (s.version || 0));
 
-  // ===== ME =====
+  // ===== UID / ME =====
   const uid = client.selfId || FB?.uid || "";
-  
   const myName = client.selfName || FB?.username || "Bạn";
+
   const uMe = client.lobby?.users?.[uid] || null;
   const mySeat = Number.isInteger(uMe?.playSeat) ? (uMe.playSeat|0) : null;
 
-  // tìm trong state.players (nếu mình đã được add vào players)
-  const me = (s.players || []).find(p => p && p.id === uid) || null;
+  // ===== HOST = SEAT 0 (theo seatClaimsPlay) =====
+  const seat0Uid =
+    client.lobby?.seatClaimsPlay?.[0] ||
+    client.lobby?.seatClaimsPlay?.["0"] ||
+    "";
 
+  // ✅ ai ngồi seat0 => host, KHÔNG phụ thuộc state.hostId
+  const isSeat0Host = !!uid && (seat0Uid === uid);
+
+  // cập nhật client.isHost ở đây (để UI + input routing dùng)
+  client.isHost = isSeat0Host;
+
+  // ===== ME LINE =====
   if (UI.meLine){
     if (!uid){
       UI.meLine.textContent = "(chưa đăng nhập)";
     } else {
-      // role theo lobby trước (đổi ghế là đổi ngay)
-      const isHost = (mySeat === 0); // ghế 0 là host
-      const role = (mySeat === null) ? "Xem" : (isHost ? "Chủ phòng" : `Ghế ${mySeat+1}`);
-  
-      // màu theo ghế (giống canvas)
+      const role = (mySeat === null) ? "Xem" : (isSeat0Host ? "Chủ phòng" : `Ghế ${mySeat+1}`);
       const c = (mySeat === null) ? "rgba(255,255,255,.25)" : seatColor(mySeat);
-  
+
       UI.meLine.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
         <span style="width:10px;height:10px;border-radius:999px;background:${c};
           box-shadow:0 0 0 3px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.18)"></span>
@@ -4283,32 +4308,36 @@ function setStatusUI(){
     }
   }
 
-
-  // ===== HOST LINE =====
-  const hostId = s.hostId || "";
-  const hostP = (s.players || []).find(p=>p && p.id === hostId) || null;
+  // ===== HOST LINE (hiển thị theo seat0Uid trước, fallback state.hostId) =====
+  const hostUid = seat0Uid || (s.hostId || "");
 
   if (UI.hostLine){
-    if (hostP){
-      const dot = COLORS?.[hostP.color] || "rgba(255,255,255,.35)";
+    if (!hostUid){
+      UI.hostLine.textContent = "—";
+    } else {
+      // lấy tên host ưu tiên từ lobby.users (realtime nhanh nhất)
+      const hostUser = client.lobby?.users?.[hostUid] || null;
+      const hostName = hostUser?.username || "(Chủ phòng)";
+
+      // màu: nếu host có playSeat thì lấy màu theo ghế, fallback trắng
+      const hostSeat = Number.isInteger(hostUser?.playSeat) ? (hostUser.playSeat|0) : null;
+      const dot = (hostSeat === null) ? "rgba(255,255,255,.35)" : seatColor(hostSeat);
+
       UI.hostLine.innerHTML =
         `<span style="display:inline-flex;align-items:center;gap:8px">
           <span style="width:10px;height:10px;border-radius:999px;background:${dot};
             border:1px solid rgba(255,255,255,.18)"></span>
-          <span>${escapeHtml(hostP.name || "Chủ phòng")}</span>
+          <span>${escapeHtml(hostName)}</span>
         </span>`;
-    } else {
-      // host có thể là spectator (chưa có trong state.players) hoặc state chưa kịp sync
-      UI.hostLine.textContent = hostId ? "(đang đồng bộ...)" : "—";
     }
   }
 
-  // ===== PLAYERS LIST =====
+  // ===== PLAYERS LIST (từ state.players như bạn đang làm) =====
   if (UI.playersLine){
     UI.playersLine.innerHTML = (s.players || []).map(p=>{
       if (!p) return "";
       const dot = COLORS?.[p.color] || "rgba(255,255,255,.35)";
-      const isHost = (p.id === hostId);
+      const isHost = (p.id === hostUid);
       return `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
         <span style="width:10px;height:10px;border-radius:999px;background:${dot};
           border:1px solid rgba(255,255,255,.18)"></span>
@@ -4322,7 +4351,7 @@ function setStatusUI(){
 
   updateInspector?.();
 
-  // nếu inspector đang mở mà target mất -> hide, còn thì reposition
+  // inspector reposition như bạn
   const ins = document.getElementById("inspector");
   if (ins && ins.style.display === "block"){
     const sel = client.selected;
@@ -4342,41 +4371,30 @@ function setStatusUI(){
       : "Đang chơi...";
   }
 
-  const isSeatHost = (mySeat === 0);
-  const isStateHost = (s.hostId === uid);
-  
-  client.isHost = !!uid && isSeatHost && isStateHost;
-  
   const isSpectator = (mySeat === null || mySeat === undefined);
-  const isHost = client.isHost;
   const isWaiting = (phase === "waiting");
 
+  // ✅ toolbar: CHỈ hiện cho seat0 host
   if (UI.hostToolBar){
-    UI.hostToolBar.style.display = isHost ? "flex" : "none";
+    UI.hostToolBar.style.display = (client.isHost ? "flex" : "none");
   }
-  
+
   // ===== START / READY BUTTON =====
   if (UI.startGameBtn){
-  
-    // Spectator → ẩn hoàn toàn
     if (isSpectator){
       UI.startGameBtn.style.display = "none";
       return;
     }
-  
-    // Player hoặc Host → hiện
+
     UI.startGameBtn.style.display = "inline-flex";
-  
-    if (isHost){
-      UI.startGameBtn.textContent = isWaiting
-        ? "Bắt đầu"
-        : "Dừng chơi";
+
+    if (client.isHost){
+      UI.startGameBtn.textContent = isWaiting ? "Bắt đầu" : "Dừng chơi";
     } else {
-      UI.startGameBtn.textContent = isWaiting
-        ? "Sẵn sàng"
-        : "Đang chơi";
+      UI.startGameBtn.textContent = isWaiting ? "Sẵn sàng" : "Đang chơi";
     }
   }
+
   renderChat?.();
 }
 
@@ -4516,9 +4534,13 @@ async function sha256Hex(text){
 //  - write AllRoom (full)
 //  - write AllRoomMeta (light)
 // ===============================
-function isMeHost(meta){
-  const hid = meta?.hostId || meta?.hostUid || "";
-  return hid && hid === (FB.uid || "");
+function isMeHost(){
+  const uid = FB.uid || "";
+  const seat0 =
+    client.lobby?.seatClaimsPlay?.[0] ||
+    client.lobby?.seatClaimsPlay?.["0"] ||
+    "";
+  return !!uid && seat0 === uid;
 }
 
 // ghế click: tạm thời cho người dùng tự xin ngồi
@@ -4558,12 +4580,6 @@ async function requestSit(roomId, seat){
   try{
     await client.transport?.sendIntent?.({ type:"sit", seat: seat|0 });
   }catch(e){}
-
-  // host seat
-  if ((seat|0) === 0){
-    await roomRef.child(`meta/hostId`).set(uid).catch(()=>{});
-    await roomRef.child(`meta/hostUid`).set(uid).catch(()=>{});
-  }
   
   toast((seat|0) === 0 ? "Bạn đã ngồi ghế chủ phòng" : `Đã ngồi ghế ${seat+1}`);
 }
@@ -4655,7 +4671,7 @@ function renderLobby(roomId, meta, users, seatClaimsPlay){
 
   // host controls show/hide
   const hostBox = document.getElementById("hostSetupControls");
-  if (hostBox) hostBox.style.display = isMeHost(meta) ? "" : "none";
+  if (hostBox) hostBox.style.display = isMeHost() ? "" : "none";
 
   const wr = document.getElementById("waitingRoom");
   if (!wr) return;
@@ -4764,7 +4780,6 @@ function installLobbyRealtimeListeners(roomRef){
   _metaCb = (snap)=>{
     client.lobby.meta = snap.val() || {};
 
-    // sync roomMeta cho status UI
     if (client.lobby.meta?.roomName){
       client.roomMeta.roomName = client.lobby.meta.roomName;
     }
@@ -4779,9 +4794,9 @@ function installLobbyRealtimeListeners(roomRef){
   };
   roomRef.child("meta").on("value", _metaCb);
 
-  // ===== SEAT CLAIMS =====
+  // ===== SEAT CLAIMS (PLAY) =====
   try{ if (_seatClaimsCb) roomRef.child("seatClaims/play").off("value", _seatClaimsCb); }catch(e){}
-  _seatClaimsCb = async (snap)=>{
+  _seatClaimsCb = (snap)=>{
     client.lobby.seatClaimsPlay = snap.val() || {};
     setStatusUI?.();
     renderLobby?.(
@@ -4790,22 +4805,10 @@ function installLobbyRealtimeListeners(roomRef){
       client.lobby.users,
       client.lobby.seatClaimsPlay
     );
-  
-    // 🔥 QUAN TRỌNG: nếu là host thì rebuild state.players
-    if (client.isHost && client.host){
-    await hostRebuildPlayersFromLobby(roomRef);
-    await client.transport.writeState(client.host.state);
-    client.authoritative = redactStateForViewer(
-      client.host.state,
-      FB.uid
-    );
-    client.lastVersion = client.host.state.version;
-
-    }
   };
-
   roomRef.child("seatClaims/play").on("value", _seatClaimsCb);
 }
+
 
 async function createRoomAsHost_Firebase(){
   await fbEnsureAuth();
@@ -4912,10 +4915,13 @@ async function createRoomAsHost_Firebase(){
   t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
     const action = msg.action;
     const fromId = msg.fromId;
+    const seat0Uid =
+      client.lobby?.seatClaimsPlay?.[0] ||
+      client.lobby?.seatClaimsPlay?.["0"] ||
+      "";
 
     // ✅ lấy meta realtime (đỡ .get() mỗi intent)
     const gs = client.lobby?.meta?.gameStatus || "waiting";
-    const hostIdNow = client.lobby?.meta?.hostId || client.lobby?.meta?.hostUid || "";
 
     // ✅ đang chơi => cấm sit/unsit
     if (gs === "playing" && (action?.type === "sit" || action?.type === "unsit")){
@@ -4937,7 +4943,7 @@ async function createRoomAsHost_Firebase(){
 
     // ✅ waiting: cho phép seat actions + anno actions; còn lại chỉ host
     if (gs === "waiting" && !isSeatAction && !isAnnoAction){
-      if (fromId !== hostIdNow){
+      if (fromId !== seat0Uid){
         await t.ackIntent(intentRef);
         return;
       }
@@ -4946,7 +4952,7 @@ async function createRoomAsHost_Firebase(){
 
     // ✅ start game (host only)
     if (action?.type === "startGame"){
-      if (fromId !== hostIdNow){
+      if (fromId !== seat0Uid){
         await t.ackIntent(intentRef);
         return;
       }
@@ -4997,9 +5003,8 @@ async function createRoomAsHost_Firebase(){
     // ANNO INTENTS (DRAWING)
     // =========================
     if (isAnnoAction){
-      
-      const hostIdNow = client.lobby?.meta?.hostId || client.lobby?.meta?.hostUid || "";
-      if (fromId !== hostIdNow){
+
+      if (fromId !== seat0Uid){
         await t.ackIntent(intentRef);
         return;
       }
@@ -5072,15 +5077,13 @@ async function createRoomAsHost_Firebase(){
 }
 
 async function hostRebuildPlayersFromLobby(roomRef){
-  const [usersSnap, seatSnap, metaSnap] = await Promise.all([
+  const [usersSnap, seatSnap] = await Promise.all([
     roomRef.child("users").get(),
     roomRef.child("seatClaims/play").get(),
-    roomRef.child("meta").get(),
   ]);
 
   const users = usersSnap.val() || {};
   const seatClaims = seatSnap.val() || {};
-  const meta = metaSnap.val() || {};
 
   const st = client.host._ensureState ? client.host._ensureState() : client.host.state;
   st.players = Array.isArray(st.players) ? st.players : [];
@@ -5114,7 +5117,9 @@ async function hostRebuildPlayersFromLobby(roomRef){
   }
 
   // hostId trong state = meta.hostId (để host-only ok)
-  st.hostId = meta.hostId || meta.hostUid || st.hostId || "";
+  const seat0Uid = seatClaims?.[0] || seatClaims?.["0"] || "";
+  st.hostId = seat0Uid || "";
+
 
   client.host.bumpVersion?.();
   return st;
@@ -5325,37 +5330,32 @@ if (ROOMUI.passInput){
 // ===============================
 async function claimSeat(roomRef, maxPlayers = 4){
   const uid = FB.uid;
+  if (!uid) throw new Error("Chưa đăng nhập");
 
-  // nếu uid đã có trong users thì giữ nguyên seat
-  const usersSnap0 = await roomRef.child("users").get();
-  const users0 = usersSnap0.val() || {};
-  if (users0[uid] && Number.isInteger(users0[uid].seat)) return users0[uid].seat;
+  // nếu đã có playSeat thì giữ nguyên
+  const meSnap = await roomRef.child(`users/${uid}`).get();
+  const me = meSnap.val() || {};
+  if (Number.isInteger(me.playSeat)) return me.playSeat|0;
 
-  // thử claim seat bằng transaction để tránh trùng
   for (let attempt = 0; attempt < maxPlayers; attempt++){
-    const usersSnap = await roomRef.child("users").get();
-    const users = usersSnap.val() || {};
-
-    const taken = new Set(
-      Object.values(users)
-        .map(u => u?.seat)
-        .filter(s => Number.isInteger(s))
-    );
+    // đọc seatClaims/play để biết ghế nào trống
+    const seatSnap = await roomRef.child("seatClaims/play").get();
+    const seatClaims = seatSnap.val() || {};
 
     let seat = -1;
-    for (let i = 0; i < maxPlayers; i++){
-      if (!taken.has(i)) { seat = i; break; }
+    for (let i=0; i<maxPlayers; i++){
+      const occ = seatClaims?.[i] || seatClaims?.[String(i)] || null;
+      if (!occ) { seat = i; break; }
     }
     if (seat < 0) throw new Error("Phòng đã đủ người (4/4).");
 
-    // claim seat
-    const claimRef = roomRef.child(`seatClaims/${seat}`);
+    // transaction claim ghế
+    const claimRef = roomRef.child(`seatClaims/play/${seat}`);
     const tx = await claimRef.transaction(cur => (cur === null ? uid : undefined));
-
     if (tx.committed && tx.snapshot.val() === uid){
       return seat;
     }
-    // nếu không commit => seat vừa bị người khác lấy, loop lại
+    // không commit => loop lại
   }
 
   throw new Error("Không giữ được seat (race). Thử vào lại.");
@@ -5429,16 +5429,22 @@ async function joinRoomAsClient_Firebase(opts = {}){
 
   // ✅ avoid duplicate presence listener
   try{ if (_presenceCb) roomRef.child("presence").off("value", _presenceCb); }catch(e){}
-  _presenceCb = ()=> { maybeElectNewHost(roomRef).catch(()=>{}); };
+  _presenceCb = ()=> {
+    // không elect host nữa vì host = seat 0
+    // (có thể call setStatusUI/renderLobby nếu bạn muốn phản ứng realtime theo presence)
+  };
   roomRef.child("presence").on("value", _presenceCb);
-  maybeElectNewHost(roomRef).catch(()=>{});
 
   // ✅ listen hostId -> bật/tắt authority
-  try{ if (_hostIdCb) roomRef.child("meta/hostId").off("value", _hostIdCb); }catch(e){}
+  // ✅ listen seat0 -> bật/tắt authority (host = người ngồi seat 0)
+  try{ if (_hostIdCb) roomRef.child("seatClaims/play/0").off("value", _hostIdCb); }catch(e){}
   _hostIdCb = (snap)=>{
-    const hostId = snap.val() || "";
-    const amHost = (hostId === (FB.uid || ""));
-
+    const seat0Uid = snap.val() || "";
+    const amHost = (seat0Uid === (FB.uid || ""));
+  
+    // cache để các chỗ khác dùng (optional)
+    client._seat0Uid = seat0Uid;
+  
     if (amHost && !client.isHost){
       client.isHost = true;
       startHostAuthority(client.roomId).catch(()=>{});
@@ -5448,7 +5454,9 @@ async function joinRoomAsClient_Firebase(opts = {}){
     }
     setStatusUI?.();
   };
-  roomRef.child("meta/hostId").on("value", _hostIdCb);
+  
+  // lắng nghe seat 0
+  roomRef.child("seatClaims/play/0").on("value", _hostIdCb);
 
   await t.sendIntent({ type: "join" });
 
@@ -5466,85 +5474,11 @@ async function joinRoomAsClient_Firebase(opts = {}){
   goMatch();
 }
 
-async function maybeElectNewHost(roomRef){
-  const uid = FB.uid;
-  if (!uid) return;
-
-  const [metaSnap, usersSnap, presSnap] = await Promise.all([
-    roomRef.child("meta").get(),
-    roomRef.child("users").get(),
-    roomRef.child("presence").get(),
-  ]);
-
-  const meta = metaSnap.val() || {};
-  const users = usersSnap.val() || {};
-  const pres  = presSnap.val()  || {};
-
-  const curHostId = meta.hostId || meta.hostUid || "";
-  if (!curHostId) return;
-
-  // host vẫn online => thôi
-  if (pres[curHostId]) return;
-
-  // online candidates
-  const onlineUsers = Object.entries(users)
-    .map(([id,u])=>({ id, ...(u||{}) }))
-    .filter(u => u.id && pres[u.id]);
-
-  if (onlineUsers.length === 0) return;
-
-  const hostUser = users[curHostId] || null;
-  const hostSeatRaw = (hostUser?.playSeat ?? hostUser?.seat);
-  const hostSeat = Number.isInteger(hostSeatRaw) ? (hostSeatRaw|0) : -1;
-
-  const seatOf = (u)=>{
-    const s = (u?.playSeat ?? u?.seat);
-    return Number.isInteger(s) ? (s|0) : null;
-  };
-
-  const playUsers = onlineUsers.filter(u => seatOf(u) !== null);
-
-  let best = null;
-  if (playUsers.length){
-    const dist = (seat)=>{
-      if (hostSeat < 0) return 999;
-      const d = (seat - hostSeat + 4) % 4;
-      return d === 0 ? 4 : d;
-    };
-    best = playUsers.slice().sort((a,b)=>{
-      const da = dist(seatOf(a));
-      const db = dist(seatOf(b));
-      if (da !== db) return da - db;
-      return (a.joinedAt||0) - (b.joinedAt||0);
-    })[0];
-  } else {
-    best = onlineUsers.slice().sort((a,b)=> (a.joinedAt||0) - (b.joinedAt||0))[0];
-  }
-
-  if (!best?.id) return;
-  if (best.id !== uid) return; // chỉ người được chọn mới attempt takeover
-
-  // ✅ transaction trên meta để set hostId + hostEpoch cùng lúc
-  const nowTs = Date.now();
-  await roomRef.child("meta").transaction((m)=>{
-    m = m || {};
-    const cur = m.hostId || m.hostUid || "";
-    if (cur !== curHostId) return; // abort nếu đã có người takeover
-
-    m.hostId = uid;
-    m.hostUid = uid;
-    m.hostEpoch = nowTs;        // ✅ epoch mới (chặn state cũ)
-    m.hostChangedAt = nowTs;
-    return m;
-  }).catch(()=>{});
-}
-
 let _stopHostIntents = null;
 let _hostGuardCb = null;
 
 async function startHostAuthority(roomId){
   const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
-
   const t = client.transport;
   if (!t) return;
 
@@ -5552,64 +5486,54 @@ async function startHostAuthority(roomId){
     client.host = new HostController(client.roomCode, FB.uid);
   }
 
-  // ===== helper: kiểm tra còn là host ngay lúc này không
+  // ===== guard: host = seatClaims/play/0
   const stillHost = ()=>{
-    const hid = client._hostIdNow || "";
-    return hid === (FB.uid || "");
+    const seat0 = client._seat0Uid || "";
+    return seat0 && seat0 === (FB.uid || "");
   };
 
-  // ===== helper: writeState có guard (chặn host cũ viết sau khi mất host)
   const guardedWriteState = async (intentRefOpt)=>{
     if (!stillHost()){
       if (intentRefOpt) { try{ await t.ackIntent(intentRefOpt); }catch(e){} }
       return false;
     }
-    // gắn epoch vào state trước khi write
-    client.host.state.hostId = FB.uid;
-    client.host.state.hostEpoch = client._hostEpochNow || client.host.state.hostEpoch || 0;
+    // luôn sync hostId trong state theo seat0
+    client.host.state.hostId = (FB.uid || "");
     client.host.bumpVersion?.();
     await t.writeState(client.host.state);
     return true;
   };
 
-  // ===== (1) load state hiện tại để takeover (không reset)
+  // (1) load state hiện tại để takeover (không reset)
   const stSnap = await roomRef.child("state").get();
   const st = stSnap.val();
   if (st && typeof st === "object"){
     client.host.state = st;
   }
 
-  // đảm bảo shape
+  // ensure shape tối thiểu
   client.host.state.annos = Array.isArray(client.host.state.annos) ? client.host.state.annos : [];
   client.host.state.game = client.host.state.game || { phase:"waiting" };
   client.host.state.assets = client.host.state.assets || { backUrl:"" };
 
-  // ===== (2) meta guard: cache hostId + hostEpoch (listen 1 lần)
+  // (2) listen seat0Uid realtime (chỉ 1 lần)
   if (!_hostGuardCb){
     _hostGuardCb = (snap)=>{
-      const m = snap.val() || {};
-      client._hostIdNow = (m.hostId || m.hostUid || "");
-      client._hostEpochNow = (m.hostEpoch || 0);
+      client._seat0Uid = snap.val() || "";
     };
-    roomRef.child("meta").on("value", _hostGuardCb);
-    try{
-      const m = (await roomRef.child("meta").get()).val() || {};
-      client._hostIdNow = (m.hostId || m.hostUid || "");
-      client._hostEpochNow = (m.hostEpoch || 0);
-    }catch(e){}
+    roomRef.child("seatClaims/play/0").on("value", _hostGuardCb);
+    try{ client._seat0Uid = (await roomRef.child("seatClaims/play/0").get()).val() || ""; }catch(e){}
   }
 
   // nếu lúc gọi mà mình không phải host thì thôi
   if (!stillHost()) return;
 
-  // ===== (3) stabilize ngay 1 lần để hand zone không “trống rồi hiện”
-  // rebuild mapping players theo lobby rồi write state
+  // (3) stabilize: rebuild players từ lobby rồi write state 1 lần
   await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
-  client.host.state.hostId = FB.uid;
-  client.host.state.hostEpoch = client._hostEpochNow || (Date.now());
+  client.host.state.hostId = FB.uid || "";
   await guardedWriteState(null);
 
-  // ===== (4) intents listener: chỉ bật 1 lần
+  // (4) intents listener: chỉ bật 1 lần
   if (_stopHostIntents) return;
 
   const unsub = t.listenIntentsAsHost(async (msg, intentKey, intentRef)=>{
@@ -5622,100 +5546,35 @@ async function startHostAuthority(roomId){
       return;
     }
 
-    // --- A) JOIN ---
-    if (action?.type === "join"){
+    // --- SEAT FLOW: join/sit/unsit/leave => rebuild players ---
+    if (action?.type === "join" || action?.type === "sit" || action?.type === "unsit" || action?.type === "leave"){
+      // nếu leave thì dọn users (như bạn đang làm)
+      if (action?.type === "leave"){
+        try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
+      }
+
       await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
 
-      // re-check trước khi tiếp tục
+      // re-check
       if (!stillHost()){
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
 
-      try{
-        const u = (await roomRef.child(`users/${fromId}`).get()).val() || {};
-        if (Number.isInteger(u.playSeat)){
-          const seat = u.playSeat|0;
-          const uname = u.username || msg.fromName || "Player";
-          client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
+      // optional: giữ phase theo meta.gameStatus nếu bạn dùng
+      const gs = client.lobby?.meta?.gameStatus || "waiting";
+      client.host.state.game = client.host.state.game || {};
+      client.host.state.game.phase = gs;
 
-          // ✅ re-check trước write
-          if (!(await guardedWriteState(intentRef))) return;
-        }
-      }catch(e){}
-
-      try{ await t.ackIntent(intentRef); }catch(e){}
-      return;
-    }
-
-    // --- B) SIT ---
-    if (action?.type === "sit"){
-      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
-      if (!stillHost()){
-        try{ await t.ackIntent(intentRef); }catch(e){}
-        return;
-      }
-
-      const seat = action.seat|0;
-      if (seat < 0 || seat > 3){
-        try{ await t.ackIntent(intentRef); }catch(e){}
-        return;
-      }
-
-      let uname = msg.fromName || "Player";
-      try{
-        const u = (await roomRef.child(`users/${fromId}`).get()).val() || {};
-        uname = u.username || uname;
-      }catch(e){}
-
-      const rr = client.host.addOrUpdatePlayerAtSeat(fromId, uname, seat);
-      if (rr?.ok){
-        if (!(await guardedWriteState(intentRef))) return;
-      }
-
-      try{ await t.ackIntent(intentRef); }catch(e){}
-      return;
-    }
-
-    // --- UNSIT ---
-    if (action?.type === "unsit"){
-      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
-      if (!stillHost()){
-        try{ await t.ackIntent(intentRef); }catch(e){}
-        return;
-      }
-
-      client.host.removePlayer(fromId);
-      if (!(await guardedWriteState(intentRef))) return;
-
-      try{ await t.ackIntent(intentRef); }catch(e){}
-      return;
-    }
-
-    // --- LEAVE ---
-    if (action?.type === "leave"){
-      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
-      if (!stillHost()){
-        try{ await t.ackIntent(intentRef); }catch(e){}
-        return;
-      }
-
-      client.host.removePlayer(fromId);
-      try{ await roomRef.child(`users/${fromId}`).remove(); }catch(e){}
-
-      if (!(await guardedWriteState(intentRef))) return;
-
+      await guardedWriteState(intentRef);
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
     // =========================
-    // D) ROUTER: ANNO + GAMEPLAY
+    // HOST = seat0: chỉ host thao tác anno + gameplay (tuỳ bạn)
     // =========================
-
-    // ✅ chỉ host được thao tác anno
-    const hostIdNow2 = client._hostIdNow || "";
-    const isHostSender = (fromId === hostIdNow2);
+    const isHostSender = (fromId === (FB.uid || "")); // vì host handler đang chạy trên máy host
 
     const isAnnoAction =
       action?.type === "annoAdd" ||
@@ -5727,6 +5586,7 @@ async function startHostAuthority(roomId){
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
+
       const st2 = client.host.state;
       st2.annos = Array.isArray(st2.annos) ? st2.annos : [];
 
@@ -5734,7 +5594,7 @@ async function startHostAuthority(roomId){
         const p = action.payload;
         if (p && p.id){
           st2.annos.push(p);
-          if (!(await guardedWriteState(intentRef))) return;
+          await guardedWriteState(intentRef);
         }
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
@@ -5744,7 +5604,7 @@ async function startHostAuthority(roomId){
         const a = st2.annos.find(x => x && x.id === action.id);
         if (a && action.patch && typeof action.patch === "object"){
           Object.assign(a, action.patch);
-          if (!(await guardedWriteState(intentRef))) return;
+          await guardedWriteState(intentRef);
         }
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
@@ -5752,27 +5612,27 @@ async function startHostAuthority(roomId){
 
       if (action.type === "annoDelete"){
         st2.annos = st2.annos.filter(x => x && x.id !== action.id);
-        if (!(await guardedWriteState(intentRef))) return;
+        await guardedWriteState(intentRef);
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
     }
 
-    // gameplay intents
+    // --- gameplay intents ---
     const r = client.host.applyIntent(fromId, action);
 
     if (!r?.ok){
-      // takeover: ack im lặng, tránh spam
+      // takeover/unknown: ack im lặng
       try{ await t.ackIntent(intentRef); }catch(e){}
       return;
     }
 
-    if (!(await guardedWriteState(intentRef))) return;
+    await guardedWriteState(intentRef);
     try{ await t.ackIntent(intentRef); }catch(e){}
   });
 
   _stopHostIntents = (typeof unsub === "function") ? unsub : null;
-  console.log("[host] authority started");
+  console.log("[host] authority started (seat0)");
 }
 
 function stopHostAuthority(){
@@ -5785,14 +5645,12 @@ function stopHostAuthority(){
     const roomId = client.roomId;
     if (roomId && _hostGuardCb){
       const roomRef = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
-      roomRef.child("meta").off("value", _hostGuardCb); // ✅ off meta (không phải meta/hostId)
+      roomRef.child("seatClaims/play/0").off("value", _hostGuardCb);
     }
   }catch(e){}
   _hostGuardCb = null;
 
-  client._hostIdNow = "";
-  client._hostEpochNow = 0;
-
+  client._seat0Uid = "";
   console.log("[host] authority stopped");
 }
   
@@ -5819,15 +5677,18 @@ async function releaseMySeatClaim(roomId, seat){
 
     let s = seat;
 
-    // fallback: nếu không truyền seat thì đọc từ users
+    // fallback: nếu không truyền seat thì đọc từ users.playSeat
     if (!Number.isInteger(s)){
       const usersSnap = await roomRef.child(`users/${FB.uid}`).get();
       const u = usersSnap.val();
-      s = u?.seat;
+      s = u?.playSeat;
     }
 
     if (Number.isInteger(s)){
-      await roomRef.child(`seatClaims/${s}`).remove();
+      await roomRef.child(`seatClaims/play/${s}`).transaction(cur=>{
+        if (cur === (FB.uid||"")) return null;
+        return; // abort
+      });
     }
   }catch(e){
     console.warn("releaseMySeatClaim error", e);
@@ -5867,7 +5728,7 @@ async function leaveRoom(){
     if (roomId){
       const rr = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
       if (_presenceCb) rr.child("presence").off("value", _presenceCb);
-      if (_hostIdCb) rr.child("meta/hostId").off("value", _hostIdCb);
+      if (_hostIdCb) rr.child("seatClaims/play/0").off("value", _hostIdCb);
     }
   }catch(e){}
 
@@ -5928,53 +5789,69 @@ function installFirebaseRoomCleanup(roomId, roomNo){
 }
 
 function installHostPresenceReconcile(roomId){
-  const roomRef  = FB.db.ref(`AllRoom/${roomId}`);
+  const roomRef  = FB.db.ref(`AllRoom/${String(roomId).toLowerCase()}`);
   const presRef  = roomRef.child("presence");
   const usersRef = roomRef.child("users");
+  const seatRef  = roomRef.child("seatClaims/play");
 
   let _busy = false;
 
+  // host = seatClaims/play/0
+  const stillHostSeat0 = ()=>{
+    const seat0 = client._seat0Uid || (client.lobby?.seatClaimsPlay?.[0]) || "";
+    return seat0 && seat0 === (FB.uid || "");
+  };
+
   presRef.on("value", async (snap)=>{
-    if (!client.isHost || !client.host?.state) return;
     if (_busy) return;
     _busy = true;
 
     try{
+      if (!stillHostSeat0() || !client.host?.state) return;
+
       const pres = snap.val() || {};
-      const online = new Set(Object.keys(pres)); // uid đang online
+      const online = new Set(Object.keys(pres)); // uid online
 
-      let changed = false;
-
-      // 1) Dọn users/<uid> không còn online
+      // ===== 1) dọn users/<uid> offline =====
       const usersSnap = await usersRef.get();
       const users = usersSnap.val() || {};
-      const updates = {};
+      const uUpdates = {};
       for (const uid in users){
         if (!online.has(uid)){
-          updates[uid] = null;
+          uUpdates[uid] = null;
         }
       }
-      if (Object.keys(updates).length){
-        await usersRef.update(updates);
-        changed = true;
+      if (Object.keys(uUpdates).length){
+        await usersRef.update(uUpdates).catch(()=>{});
       }
 
-      // 2) Dọn state.players theo slot (không filter)
-      const st = client.host.state;
-      st.players = st.players || [];
-      for (let i=0; i<4; i++){
-        const p = st.players[i];
-        if (p && !online.has(p.id)){
-          st.players[i] = null;
-          changed = true;
+      // ===== 2) dọn seatClaims/play/<seat> nếu occupant offline (tránh kẹt ghế) =====
+      const seatSnap = await seatRef.get();
+      const seats = seatSnap.val() || {};
+      const seatUpdates = {};
+      for (let seat=0; seat<4; seat++){
+        const occ = seats?.[seat] || seats?.[String(seat)] || null;
+        if (occ && !online.has(occ)){
+          seatUpdates[String(seat)] = null;
         }
       }
-
-      // ✅ chỉ writeState nếu có thay đổi
-      if (changed){
-        if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
-        await client.transport.writeState(st);
+      if (Object.keys(seatUpdates).length){
+        await seatRef.update(seatUpdates).catch(()=>{});
       }
+
+      // re-check: có thể seat0 vừa đổi trong lúc dọn
+      if (!stillHostSeat0()) return;
+
+      // ===== 3) rebuild players đúng 1 lần (KHÔNG tự null players) =====
+      await hostRebuildPlayersFromLobby(roomRef).catch(()=>{});
+
+      // sync hostId trong state theo seat0
+      client.host.state.hostId = (FB.uid || "");
+
+      // ===== 4) writeState 1 lần =====
+      if (typeof client.host.bumpVersion === "function") client.host.bumpVersion();
+      await client.transport.writeState(client.host.state).catch(()=>{});
+
     }catch(e){
       // ignore
     }finally{
@@ -6005,6 +5882,11 @@ const DECKUI = {
   saveBtn: document.getElementById("saveSetBtn"),
 };
 
+function isSeat0Host(){
+  const seat0 = client.lobby?.seatClaimsPlay?.[0] || client.lobby?.seatClaimsPlay?.["0"] || "";
+  return seat0 && seat0 === (FB.uid || "");
+}
+  
 let deckSetsCache = {};
 let deckCurrentSetId = null;
 
@@ -6224,7 +6106,7 @@ function getChatUserInfo(s, uid){
   const u = client.lobby?.users?.[uid];
   if (u){
     return {
-      name: u.name || "Player",
+      name: u.username || "Player",
       color: "rgba(255,255,255,.35)", // spectator = xám
       seat: Number.isInteger(u.playSeat) ? u.playSeat : null,
       isPlayer: false,
