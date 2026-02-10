@@ -7006,14 +7006,30 @@ function pointInRect(p, r){
   
 /* ========= (5) HIT-TEST (screen) ========= */
 function hitAnnoAtScreen(s, sp){
-  const annos = ensureAnnos(s);
+  const annos = Array.isArray(s.annos) ? s.annos : [];
+  // duyệt từ cuối -> đầu để ưu tiên object vẽ sau (top-most trong anno)
   for (let i = annos.length - 1; i >= 0; i--){
     const a = annos[i];
     if (!a) continue;
+
     const r = annoWorldToScreenRect(a);
-    if (sp.x >= r.x && sp.x <= r.x + r.w && sp.y >= r.y && sp.y <= r.y + r.h){
-      return a;
+
+    // hit bbox trước
+    const inBox = (sp.x >= r.x && sp.x <= r.x + r.w && sp.y >= r.y && sp.y <= r.y + r.h);
+    if (!inBox) continue;
+
+    // ellipse: hit theo hình elip (chuẩn hơn bbox)
+    if (a.kind === "ellipse"){
+      const cx = r.x + r.w/2, cy = r.y + r.h/2;
+      const rx = Math.max(1, r.w/2), ry = Math.max(1, r.h/2);
+      const nx = (sp.x - cx) / rx;
+      const ny = (sp.y - cy) / ry;
+      if ((nx*nx + ny*ny) <= 1) return a;
+      continue;
     }
+
+    // rect/text/image: bbox là đủ
+    return a;
   }
   return null;
 }
@@ -7320,7 +7336,15 @@ requestAnimationFrame(draw);
           }
     
           if (pointInRect(sp, rh)){
-            ANNO.dragging = { id: cur.id, mode:"resize", p0: wp, ow: cur.w, oh: cur.h };
+            ANNO.dragging = {
+              id: cur.id,
+              mode: "resize",
+              p0: wp,
+              ow: cur.w,
+              oh: cur.h,
+              baseFontSize: cur.fontSize || 24,
+              baseH: cur.h || 30               
+            };
             return;
           }
         }
@@ -7415,7 +7439,7 @@ requestAnimationFrame(draw);
     if (!ANNO.enabled) return;
     const s = getState();
     if (!s) return;
-    if (!ANNO.creating && !ANNO.dragging) return;
+
 
     ev.preventDefault();
     ev.stopPropagation();
@@ -7428,7 +7452,9 @@ requestAnimationFrame(draw);
       ANNO.marquee.p1 = sp;
       return;
     }
-
+    
+    if (!ANNO.creating && !ANNO.dragging) return;
+    
     if (ANNO.creating){
       const p0 = ANNO.creating.p0;
       sendUpdate(ANNO.creating.id, {
@@ -7466,10 +7492,19 @@ requestAnimationFrame(draw);
       }
 
       if (d.mode === "resize"){
-        sendUpdate(d.id, {
+        const patch = {
           w: Math.max(10 / camera.scale, d.ow + (wp.x - d.p0.x)),
           h: Math.max(10 / camera.scale, d.oh + (wp.y - d.p0.y)),
-        });
+        };
+        
+        const sNow = getState();
+        const aNow = sNow ? (sNow.annos || []).find(x => x && x.id === d.id) : null;
+        if (aNow && aNow.kind === "text"){
+          const scale = Math.max(0.25, patch.h / Math.max(1, d.baseH));
+          patch.fontSize = Math.round(d.baseFontSize * scale);
+        }
+        
+        sendUpdate(d.id, patch);
         return;
       }
     }
