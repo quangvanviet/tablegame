@@ -5573,6 +5573,11 @@ async function startHostAuthority(roomId){
   if (st && typeof st === "object"){
     client.host.state = st;
   }
+  
+  // ✅ đảm bảo fields tồn tại để router chạy ổn định
+  client.host.state.annos = Array.isArray(client.host.state.annos) ? client.host.state.annos : [];
+  client.host.state.game = client.host.state.game || { phase:"waiting" };
+  client.host.state.assets = client.host.state.assets || { backUrl:"" };
 
   // 4) sync hostId trong state theo meta.hostId (để quyền host-only trong applyIntent hoạt động)
   client.host.state.hostId = FB.uid;
@@ -5658,13 +5663,75 @@ async function startHostAuthority(roomId){
       return;
     }
 
-    // --- D) apply gameplay intents (move/flip/draw/...) ---
-    const r = client.host.applyIntent(fromId, action);
-    if (!r.ok && fromId === (FB.uid || "")) toast("Action fail: " + r.reason);
-
-    if (r.ok){
-      await t.writeState(client.host.state);
+    // =========================
+    // D) ROUTER: ANNO + GAMEPLAY
+    // =========================
+    
+    // ✅ chỉ host được phép thao tác anno (và mọi action host-only nếu bạn muốn)
+    const hostIdNow2 = client._hostIdNow || "";
+    const isHostSender = (fromId === hostIdNow2);
+    
+    // 1) ANNO intents: xử lý trực tiếp, KHÔNG qua applyIntent
+    const isAnnoAction =
+      action?.type === "annoAdd" ||
+      action?.type === "annoUpdate" ||
+      action?.type === "annoDelete";
+    
+    if (isAnnoAction){
+      // chỉ host mới được thao tác
+      if (!isHostSender){
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+    
+      const st = client.host.state;
+      st.annos = Array.isArray(st.annos) ? st.annos : [];
+    
+      if (action.type === "annoAdd"){
+        const p = action.payload;
+        if (p && p.id){
+          st.annos.push(p);
+          client.host.bumpVersion?.();
+          await t.writeState(st);
+        }
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+    
+      if (action.type === "annoUpdate"){
+        const a = st.annos.find(x => x && x.id === action.id);
+        if (a && action.patch && typeof action.patch === "object"){
+          Object.assign(a, action.patch);
+          client.host.bumpVersion?.();
+          await t.writeState(st);
+        }
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
+    
+      if (action.type === "annoDelete"){
+        st.annos = st.annos.filter(x => x && x.id !== action.id);
+        client.host.bumpVersion?.();
+        await t.writeState(st);
+        try{ await t.ackIntent(intentRef); }catch(e){}
+        return;
+      }
     }
+    
+    // 2) Gameplay intents: dùng applyIntent như cũ
+    const r = client.host.applyIntent(fromId, action);
+    
+    // ✅ Unknown action: ACK im lặng để không spam toast (đặc biệt khi takeover)
+    if (!r?.ok){
+      // chỉ toast khi chính host bấm và muốn debug
+      if (fromId === (FB.uid || "") && r.reason && r.reason !== "Unknown action"){
+        toast("Action fail: " + r.reason);
+      }
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
+    }
+    
+    await t.writeState(client.host.state);
 
     try{ await t.ackIntent(intentRef); }catch(e){}
   });
