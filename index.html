@@ -3282,6 +3282,7 @@ function redactStateForViewer(state, viewerId){
   // ✅ clone nông để tránh mutate trực tiếp state gốc
   const s = { ...base };
   s.annos = Array.isArray(base.annos) ? base.annos : [];
+  s.chat  = Array.isArray(base.chat)  ? base.chat  : [];
 
   // ✅ normalize players về đúng 4 ghế (0..3), dù Firebase trả array hay object
   const srcP = base.players;
