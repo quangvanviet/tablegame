@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>2D Tabletop Card Sandbox (4P) — Canvas + Realtime</title>
+  <title>Table game - Văn Việt</title>
   <style>
     :root{
       --bg:#0b1020;
@@ -1488,8 +1488,8 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       <div class="brand">
         <div class="brand-logo"></div>
         <div class="brand-text">
-          <div class="brand-title">CARD ARENA</div>
-          <div class="brand-sub">Sandbox Tabletop • 4 Players</div>
+          <div class="brand-title">TABLE GAME</div>
+          <div id="namePlayer" class="brand-sub">Sandbox Tabletop • 4 Players</div>
         </div>
       </div>
 
@@ -1889,9 +1889,8 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       </div>
     
       <div class="dock-right">
-        <button class="secondary" id="dockCopyBtn">Copy link</button>
-        <button class="danger" id="dockResetBtn">Reset</button>
-        <button id="dockJoinBtn">Join</button>
+
+        
       </div>
     </div>
   </div>
@@ -2436,7 +2435,6 @@ const UI = {
   roomInput: document.getElementById("roomInput"),
   createBtn: document.getElementById("createBtn"),
   joinBtn: document.getElementById("joinBtn"),
-  copyLinkBtn: document.getElementById("copyLinkBtn"),
   resetBtn: document.getElementById("resetBtn"),
   netBadge: document.getElementById("netBadge"),
   roomBadge: document.getElementById("roomBadge"),
@@ -8050,21 +8048,6 @@ if (UI.resetBtn){
   });
 }
 
-// Copy link phòng (Firebase-only)
-if (UI.copyLinkBtn){
-  UI.copyLinkBtn.addEventListener("click", async ()=>{
-    readInputs();
-    const url = new URL(location.href);
-    url.searchParams.set("room", client.roomCode);
-    try{
-      await navigator.clipboard.writeText(url.toString());
-      toast("Đã copy link phòng.");
-    }catch(e){
-      toast("Copy failed (trình duyệt chặn).");
-    }
-  });
-}
-
 // collapse panels (+/-)
 document.querySelectorAll(".collapse-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -8374,11 +8357,6 @@ if (leaveMatchBtn){
   const dockBrowserBtn = byId("dockBrowserBtn");
   const dockDeckBtn = byId("dockDeckBtn");
 
-  const dockCopyBtn = byId("dockCopyBtn");
-  const dockResetBtn = byId("dockResetBtn");
-  const dockJoinBtn = byId("dockJoinBtn");
-
-  const copyLinkBtn = byId("copyLinkBtn");
   const resetBtn = byId("resetBtn");
   const joinBtn = byId("joinBtn");
   const openDeckBtn = byId("openDeckBtn");
@@ -8393,10 +8371,6 @@ if (leaveMatchBtn){
   dockRoomBtn?.addEventListener("click", ()=> showTab("tabRoom"));
   dockBrowserBtn?.addEventListener("click", ()=> showTab("tabRoomBrowser"));
   dockDeckBtn?.addEventListener("click", ()=> openDeckBtn?.click());
-  
-  dockCopyBtn?.addEventListener("click", ()=> copyLinkBtn?.click());
-  dockResetBtn?.addEventListener("click", ()=> resetBtn?.click());
-  dockJoinBtn?.addEventListener("click", ()=> joinBtn?.click());
 
   const hint = byId("dockHint");
   if(hint){
