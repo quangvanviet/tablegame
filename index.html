@@ -1521,11 +1521,11 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           padding: 5px 5px;
           gap: 5px;
           flex-direction: column;">
-          <button class="nav-item active" data-tab="tabRoom">
-            <span class="nav-ico">🏠</span><span class="nav-txt">Tạo / Tìm phòng</span>
+          <button class="nav-item active" data-tab="tabNotifications">
+            <span class="nav-ico">🔔</span><span class="nav-txt">Thông báo</span>
           </button>
-          <button class="nav-item" data-tab="tabCustomize">
-            <span class="nav-ico">🎛️</span><span class="nav-txt">Tùy chỉnh</span>
+          <button class="nav-item" data-tab="tabRoom">
+            <span class="nav-ico">🏠</span><span class="nav-txt">Tạo / Tìm phòng</span>
           </button>
           <button class="nav-item" data-tab="tabInventory">
             <span class="nav-ico">🧰</span><span class="nav-txt">Tủ đồ</span>
@@ -1533,16 +1533,12 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
           <button class="nav-item" data-tab="tabShop">
             <span class="nav-ico">🛒</span><span class="nav-txt">Cửa hàng</span>
           </button>
-          <button class="nav-item" data-tab="tabNotifications">
-            <span class="nav-ico">🔔</span><span class="nav-txt">Thông báo</span>
+          <button class="nav-item" data-tab="tabCustomize">
+            <span class="nav-ico">🎛️</span><span class="nav-txt">Tùy chỉnh</span>
           </button>
-  
           <div class="sidebar-divider"></div>
   
           <!-- Mục sáng tạo thêm -->
-          <button class="nav-item" data-tab="tabQuickPlay">
-            <span class="nav-ico">⚡</span><span class="nav-txt">Quick Play</span>
-          </button>
           <button class="nav-item" data-tab="tabTutorial">
             <span class="nav-ico">📘</span><span class="nav-txt">Hướng dẫn</span>
           </button>
@@ -1555,7 +1551,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
       <!-- Main content -->
       <main class="lobby-main">
         <!-- TAB: Room -->
-        <section class="tab panel active" id="tabRoom">
+        <section class="tab panel" id="tabRoom">
           <div class="panel collapsible" id="roomPanel">
             <header>
               <div class="title">PHÒNG CHƠI</div>
@@ -1797,7 +1793,7 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
         </section>
 
         <!-- TAB: Notifications -->
-        <section class="tab" id="tabNotifications">
+        <section class="tab active" id="tabNotifications">
           <div class="panel soft">
             <header class="soft-header">
               <div class="title">THÔNG BÁO</div>
@@ -1829,33 +1825,6 @@ body{ overflow: hidden; } /* lobby full-screen: tránh scroll toàn trang */
               <div class="row" style="justify-content:flex-end">
                 <button class="danger" id="clearNotifBtn">Xóa hết</button>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- TAB: Quick Play (sáng tạo) -->
-        <section class="tab" id="tabQuickPlay">
-          <div class="panel soft">
-            <header class="soft-header">
-              <div class="title">QUICK PLAY</div>
-              <div class="sub">Tạo phòng nhanh với cấu hình phổ biến</div>
-            </header>
-            <div class="content">
-              <div class="quick-grid">
-                <button class="quick-card" data-quick="draft">
-                  <div class="q-title">Draft</div>
-                  <div class="q-sub">Deck preset: Draft 60</div>
-                </button>
-                <button class="quick-card" data-quick="poker">
-                  <div class="q-title">Poker</div>
-                  <div class="q-sub">Preset: 52 + Jokers</div>
-                </button>
-                <button class="quick-card" data-quick="tcg">
-                  <div class="q-title">TCG</div>
-                  <div class="q-sub">Preset: 40 • rarity fx</div>
-                </button>
-              </div>
-              <div class="hint">Quick Play chỉ “điền sẵn” setCard/preset và tạo phòng host.</div>
             </div>
           </div>
         </section>
