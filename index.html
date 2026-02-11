@@ -3525,9 +3525,8 @@ class HostController {
     // chỉ allow nếu đã join (trừ action join)
     const player = (st.players || []).find(p => p && p.id === fromId);
     const isHost = (fromId === (st.hostId || ""));
-    if (!player && !isHost && action?.type !== "join") return { ok:false, reason:"Not in room" };
-
-
+    if (!player && !isHost && action?.type !== "join" && action?.type !== "chat") return { ok:false, reason:"Not in room" };
+    
     const rects = zoneRects();
 
     // ✅ 4 hand zones mapping đúng 4 người
@@ -4956,15 +4955,27 @@ async function createRoomAsHost_Firebase(){
       action?.type === "annoAdd" ||
       action?.type === "annoUpdate" ||
       action?.type === "annoDelete";
-
-
-    // ✅ waiting: cho phép seat actions + anno actions; còn lại chỉ host
-    if (gs === "waiting" && !isSeatAction && !isAnnoAction){
+    
+    const isPublicAction =
+      isSeatAction ||
+      isAnnoAction ||
+      action?.type === "chat"; //ai cũng chat được (kể cả spectator)
+    
+    // ✅ waiting: cho phép public actions; còn lại chỉ host
+    if (gs === "waiting" && !isPublicAction){
       if (fromId !== seat0Uid){
         await t.ackIntent(intentRef);
         return;
       }
     }
+
+    // ✅ waiting: cho phép seat actions + anno actions; còn lại chỉ host
+    //if (gs === "waiting" && !isSeatAction && !isAnnoAction){
+      //if (fromId !== seat0Uid){
+        //await t.ackIntent(intentRef);
+       // return;
+     // }
+    //}
 
 
     // ✅ start game (host only)
@@ -5633,6 +5644,20 @@ async function startHostAuthority(roomId){
         try{ await t.ackIntent(intentRef); }catch(e){}
         return;
       }
+    }
+
+    // CHAT: ai cũng được (player + spectator)
+    if (action?.type === "chat"){
+      const st2 = client.host.state;
+      st2.chat = Array.isArray(st2.chat) ? st2.chat : [];
+      const text = (action.text || "").toString().slice(0, 300);
+      if (text.trim()){
+        st2.chat.push({ id: uid(), at: now(), fromId, text });
+        if (st2.chat.length > 120) st2.chat.splice(0, st2.chat.length - 120);
+        if (!(await guardedWriteState(intentRef))) return;
+      }
+      try{ await t.ackIntent(intentRef); }catch(e){}
+      return;
     }
 
     // --- gameplay intents ---
