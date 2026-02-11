@@ -4969,15 +4969,6 @@ async function createRoomAsHost_Firebase(){
       }
     }
 
-    // ✅ waiting: cho phép seat actions + anno actions; còn lại chỉ host
-    //if (gs === "waiting" && !isSeatAction && !isAnnoAction){
-      //if (fromId !== seat0Uid){
-        //await t.ackIntent(intentRef);
-       // return;
-     // }
-    //}
-
-
     // ✅ start game (host only)
     if (action?.type === "startGame"){
       if (fromId !== seat0Uid){
@@ -5018,8 +5009,9 @@ async function createRoomAsHost_Firebase(){
       return;
     }
 
-    // ✅ playing => chỉ người đã ngồi ghế (playSeat) mới được thao tác
-    if (gs === "playing"){
+    // playing => chỉ người đã ngồi ghế (playSeat) mới được thao tác
+    // TRỪ chat: spectator cũng chat được
+    if (gs === "playing" && action?.type !== "chat"){
       const u = client.lobby?.users?.[fromId] || null;
       if (!u || !Number.isInteger(u.playSeat)){
         await t.ackIntent(intentRef);
